@@ -1,1 +1,0 @@
-# RotiQ-POS
