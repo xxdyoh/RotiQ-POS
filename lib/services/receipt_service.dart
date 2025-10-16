@@ -48,6 +48,10 @@ class ReceiptService {
     final logoImage = await _loadLogo();
     final igIcon = await _loadInstagramIcon();
 
+    // ✅ HITUNG UNTUK PDF JUGA
+    final subtotal = order.items.fold(0.0, (sum, item) => sum + item.total); // sudah termasuk diskon item
+    final globalDiscountAmount = subtotal * (order.globalDiscount / 100);
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.roll80,
@@ -225,21 +229,24 @@ class ReceiptService {
                 children: [
                   pw.Text('Sub Total', style: const pw.TextStyle(fontSize: 11)),
                   pw.Text(
-                    currencyFormat.format(order.items.fold(0.0, (sum, item) => sum + item.subtotal)),
+                    currencyFormat.format(subtotal),
                     style: const pw.TextStyle(fontSize: 11),
                   ),
                 ],
               ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Disc', style: const pw.TextStyle(fontSize: 11)),
-                  pw.Text(
-                    currencyFormat.format(order.items.fold(0.0, (sum, item) => sum + item.discountAmount)),
-                    style: const pw.TextStyle(fontSize: 11),
-                  ),
-                ],
-              ),
+              if (order.globalDiscount > 0)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Disc', style: const pw.TextStyle(fontSize: 11)),
+                    pw.Text(
+                      '-${currencyFormat.format(globalDiscountAmount)}',
+                      style: const pw.TextStyle(fontSize: 11),
+                    ),
+                  ],
+                ),
+
+              // Grand Total
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -325,7 +332,6 @@ class ReceiptService {
   // Print to thermal printer
   static Future<bool> printThermalReceipt(Order order, String orderId) async {
     try {
-      // Convert order items to format needed by printer service
       final items = order.items.map((item) {
         return {
           'product_name': item.product.name,
@@ -336,10 +342,17 @@ class ReceiptService {
         };
       }).toList();
 
+      // ✅ HITUNG AMOUNT DARI ORDER (jika perlu)
+      final subtotal = order.items.fold(0.0, (sum, item) => sum + item.subtotal);
+      final itemDiscounts = order.items.fold(0.0, (sum, item) => sum + item.discountAmount);
+      final orderDiscountAmount = order.globalDiscountAmount; // dari Order model
+
       final success = await _printerService.printReceipt(
         orderId: orderId,
         customerName: order.customer.name,
         items: items,
+        subtotal: subtotal,
+        orderDiscountAmount: orderDiscountAmount,
         grandTotal: order.grandTotal,
         paidAmount: order.paidAmount,
         change: order.change,

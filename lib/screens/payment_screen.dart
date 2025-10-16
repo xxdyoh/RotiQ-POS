@@ -29,13 +29,37 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
   bool _isProcessing = false;
   bool _showOrderSummary = false;
 
+  double _orderDiscount = 0.0;
+  final TextEditingController _discountController = TextEditingController();
+
   final PrinterService _printerService = PrinterService();
   bool _isThermalPrintAvailable = false;
+
+  bool _isSharing = false;
+  bool _isPrinting = false;
 
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
 
-  double get _grandTotal => widget.orderItems.fold(0, (sum, item) => sum + item.total);
+  double _roundToNearest(double value) {
+    return (value).roundToDouble();
+  }
+
+  double get _subtotal {
+    final raw = widget.orderItems.fold(0.0, (sum, item) => sum + (item.product.price * item.quantity));
+    return _roundToNearest(raw);
+  }
+
+  double get _itemDiscounts {
+    final raw = widget.orderItems.fold(0.0, (sum, item) => sum + item.discountAmount);
+    return _roundToNearest(raw);
+  }
+
+  double get _totalAfterItemDiscounts => _roundToNearest(_subtotal - _itemDiscounts);
+
+  double get _orderDiscountAmount => _roundToNearest(_totalAfterItemDiscounts * (_orderDiscount / 100));
+
+  double get _grandTotal => _roundToNearest(_totalAfterItemDiscounts - _orderDiscountAmount);
 
   double get _paidAmount {
     final text = _paidController.text.replaceAll('.', '').replaceAll(',', '').replaceAll('Rp ', '').trim();
@@ -80,11 +104,94 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
     _animationController.dispose();
     _paidController.removeListener(_updatePaidAmount);
     _paidController.dispose();
+    _discountController.dispose(); // ✅ DISPOSE DISCOUNT CONTROLLER
     super.dispose();
   }
 
   void _updatePaidAmount() {
     setState(() {});
+  }
+
+  // GANTI METHOD _showOrderDiscountDialog dengan ini:
+  void _showOrderDiscountDialog() {
+    final discountController = TextEditingController(text: _orderDiscount.toStringAsFixed(0));
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.discount, color: Color(0xFFF6A918)),
+            SizedBox(width: 8),
+            Text('Diskon Faktur'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Masukkan persentase diskon'),
+            SizedBox(height: 16),
+            TextField(
+              controller: discountController,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                labelText: 'Diskon (%)',
+                hintText: '0 - 100',
+                prefixIcon: Icon(Icons.percent),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              onChanged: (value) {
+                final newDiscount = double.tryParse(value) ?? 0;
+                setState(() {
+                  _orderDiscount = newDiscount.clamp(0, 100).toDouble();
+                });
+              },
+            ),
+            SizedBox(height: 12),
+            // Quick percentage buttons
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [0, 5, 10, 15, 20, 25, 50]
+                  .map((value) => ActionChip(
+                label: Text('$value%'),
+                backgroundColor: value == _orderDiscount
+                    ? Color(0xFFF6A918)
+                    : Colors.grey[200],
+                labelStyle: TextStyle(
+                  color: value == _orderDiscount ? Colors.white : Colors.grey[700],
+                  fontWeight: value == _orderDiscount ? FontWeight.bold : FontWeight.normal,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _orderDiscount = value.toDouble();
+                  });
+                  discountController.text = value.toString();
+                },
+              ))
+                  .toList(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color(0xFFF6A918),
+            ),
+            child: Text('Simpan'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _addAmount(double amount) {
@@ -134,14 +241,27 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
     try {
       final currentUser = SessionManager.getCurrentUser();
 
+      // ✅ DEBUG: CEK NILAI SEBELUM BUAT ORDER
+      print('DEBUG - Grand Total: $_grandTotal');
+      print('DEBUG - Paid Amount: $_paidAmount');
+      print('DEBUG - Payment Method: $_paymentMethod');
+
+      // ✅ PASTIKAN PAID AMOUNT BENAR
+      final paidAmount = _paymentMethod == 'transfer' ? _grandTotal : _paidAmount;
+
       final order = Order(
         customer: widget.customer,
         items: widget.orderItems,
         paymentMethod: _paymentMethod,
-        paidAmount: _paidAmount,
+        paidAmount: paidAmount, // ✅ GUNAKAN VARIABLE YANG SUDAH DICEK
         userName: currentUser?.name ?? 'ADMIN',
         userId: currentUser?.id ?? '01',
+        globalDiscount: _orderDiscount,
       );
+
+      // ✅ DEBUG: CEK ORDER OBJECT
+      print('DEBUG - Order Paid Amount: ${order.paidAmount}');
+      print('DEBUG - Order Grand Total: ${order.grandTotal}');
 
       final result = await ApiService.submitOrder(order);
 
@@ -176,17 +296,23 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
           'product_name': item.product.name,
           'quantity': item.quantity,
           'price': item.product.price,
-          'total': item.total,
+          'total': item.total, // ✅ 5810 (bukan 7000)
           'discount': item.discountAmount,
-          'notes': item.notes,
         };
       }).toList();
+
+      // ✅ SUBTOTAL = TOTAL SETELAH DISKON ITEM
+      final subtotal = _totalAfterItemDiscounts; // dari getter di payment_screen
+      final orderDiscountAmount = _orderDiscountAmount; // diskon global
+      final grandTotal = _grandTotal;
 
       await PrinterService().printReceipt(
         orderId: orderId,
         customerName: customerName,
         items: items,
-        grandTotal: order.grandTotal,
+        subtotal: subtotal, // ✅ SUDAH SETELAH DISKON ITEM
+        orderDiscountAmount: orderDiscountAmount, // diskon global
+        grandTotal: grandTotal,
         paidAmount: order.paidAmount,
         change: order.change,
         paymentMethod: order.paymentMethod,
@@ -234,6 +360,11 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
 
   void _showSuccessDialog(Order order, String orderId) {
     final changeAmount = _paidAmount - _grandTotal;
+
+    final actualPaidAmount = _paymentMethod == 'transfer' ? _grandTotal : _paidAmount;
+    final actualChange = _paymentMethod == 'cash' ? (_paidAmount - _grandTotal) : 0;
+
+    print('DEBUG Success Dialog - Paid: $actualPaidAmount, Change: $actualChange');
 
     showDialog(
       context: context,
@@ -332,7 +463,7 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      currencyFormat.format(_grandTotal),
+                      currencyFormat.format(actualPaidAmount),
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -364,7 +495,7 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                         ),
                       ),
                       Text(
-                        currencyFormat.format(changeAmount),
+                        currencyFormat.format(actualChange),
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -399,7 +530,7 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.print, size: 18),
+                          Icon(Icons.print, size: 18, color: Colors.white,),
                           const SizedBox(width: 8),
                           Text(
                             _isThermalPrintAvailable ? 'Cetak Struk' : 'Print PDF',
@@ -558,84 +689,149 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              SizedBox(height: 16),
-              Text(
-                'Pilih Format Struk',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Pilih format file untuk share struk',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
-                ),
-              ),
-              SizedBox(height: 24),
-              _buildShareOption(
-                icon: Icons.picture_as_pdf,
-                title: 'PDF Document',
-                color: Colors.red,
-                onTap: () async {
-                  Navigator.pop(context);
-                  try {
-                    await ReceiptService.shareReceipt(order, orderId, asImage: false);
-                  } catch (e) {
-                    _showErrorSnackbar('Error: ${e.toString()}');
-                  }
-                },
-              ),
-              SizedBox(height: 12),
-              _buildShareOption(
-                icon: Icons.image,
-                title: 'JPG (Gambar)',
-                color: Colors.blue,
-                onTap: () async {
-                  Navigator.pop(context);
-                  try {
-                    await ReceiptService.shareReceipt(order, orderId, asImage: true);
-                  } catch (e) {
-                    _showErrorSnackbar('Error: ${e.toString()}');
-                  }
-                },
-              ),
-              SizedBox(height: 16),
-              OutlinedButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('Batal'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey[600],
-                  side: BorderSide(color: Colors.grey[300]!),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Pilih Format Struk',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Pilih format file untuk share struk',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                  ),
+                  SizedBox(height: 24),
+
+                  // PDF Option dengan loading state
+                  _buildShareOption(
+                    icon: Icons.picture_as_pdf,
+                    title: 'PDF Document',
+                    color: Colors.red,
+                    isLoading: _isSharing,
+                    onTap: () async {
+                      if (_isSharing) return; // ✅ JIKA SEDANG LOADING, JANGAN EXECUTE
+
+                      setModalState(() {
+                        _isSharing = true;
+                      });
+
+                      try {
+                        await ReceiptService.shareReceipt(order, orderId, asImage: false);
+                      } catch (e) {
+                        _showErrorSnackbar('Error: ${e.toString()}');
+                      } finally {
+                        if (mounted) {
+                          setModalState(() {
+                            _isSharing = false;
+                          });
+                          Navigator.pop(context);
+                        }
+                      }
+                    },
+                  ),
+
+                  SizedBox(height: 12),
+
+                  // JPG Option dengan loading state
+                  _buildShareOption(
+                    icon: Icons.image,
+                    title: 'JPG (Gambar)',
+                    color: Colors.blue,
+                    isLoading: _isSharing,
+                    onTap: () async {
+                      if (_isSharing) return; // ✅ JIKA SEDANG LOADING, JANGAN EXECUTE
+
+                      setModalState(() {
+                        _isSharing = true;
+                      });
+
+                      try {
+                        await ReceiptService.shareReceipt(order, orderId, asImage: true);
+                      } catch (e) {
+                        _showErrorSnackbar('Error: ${e.toString()}');
+                      } finally {
+                        if (mounted) {
+                          setModalState(() {
+                            _isSharing = false;
+                          });
+                          Navigator.pop(context);
+                        }
+                      }
+                    },
+                  ),
+
+                  SizedBox(height: 16),
+
+                  // Loading indicator ketika sedang proses
+                  if (_isSharing) ...[
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF6A918)),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Text(
+                            'Mempersiapkan file...',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  OutlinedButton(
+                    onPressed: _isSharing ? null : () => Navigator.pop(context), // ✅ DISABLE JIKA LOADING
+                    child: Text('Batal'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey[600],
+                      side: BorderSide(color: Colors.grey[300]!),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -645,6 +841,7 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
     required String title,
     String? subtitle,
     required Color color,
+    required bool isLoading, // ✅ TAMBAH PARAMETER LOADING
     required VoidCallback onTap,
   }) {
     return Card(
@@ -657,7 +854,16 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
             color: color.withOpacity(0.1),
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, color: color, size: 24),
+          child: isLoading
+              ? SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          )
+              : Icon(icon, color: color, size: 24),
         ),
         title: Text(
           title,
@@ -666,8 +872,10 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
         subtitle: subtitle != null
             ? Text(subtitle, style: TextStyle(fontSize: 12))
             : null,
-        trailing: Icon(Icons.chevron_right, color: Colors.grey),
-        onTap: onTap,
+        trailing: isLoading
+            ? SizedBox(width: 24, height: 24)
+            : Icon(Icons.chevron_right, color: Colors.grey),
+        onTap: isLoading ? null : onTap, // ✅ DISABLE TAP JIKA LOADING
       ),
     );
   }
@@ -750,6 +958,10 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                   _buildCustomerOrderCard(),
                   SizedBox(height: 16),
 
+                  // ✅ TAMBAH CARD DISKON ORDER
+                  _buildOrderDiscountCard(),
+                  SizedBox(height: 16),
+
                   // Grand Total Card
                   _buildGrandTotalCard(),
                   SizedBox(height: 16),
@@ -769,6 +981,238 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
           _buildProcessButton(),
         ],
       ),
+    );
+  }
+
+  // GANTI _buildOrderDiscountCard dengan ini:
+  Widget _buildOrderDiscountCard() {
+    final discountController = TextEditingController();
+    bool isExpanded = false;
+    double tempDiscount = 0.0; // ✅ STATE SEMENTARA
+
+    return StatefulBuilder(
+      builder: (context, setLocalState) {
+        return Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // Header yang bisa di-tap
+                InkWell(
+                  onTap: () {
+                    setLocalState(() {
+                      isExpanded = !isExpanded;
+                      if (isExpanded) {
+                        // ✅ INIT DENGAN NILAI SEKARANG, BUKAN TEMP
+                        discountController.text = _orderDiscount.toStringAsFixed(0);
+                        tempDiscount = _orderDiscount; // ✅ SYNC TEMP DENGAN NILAI SEKARANG
+                      }
+                    });
+                  },
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: _orderDiscount > 0 ? Colors.orange[50] : Colors.grey[100],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.discount,
+                          color: _orderDiscount > 0 ? Colors.orange : Colors.grey[600],
+                          size: 22,
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Diskon',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (_orderDiscount > 0)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(height: 4),
+                                  Text(
+                                    '${_orderDiscount.toStringAsFixed(0)}% dari ${currencyFormat.format(_totalAfterItemDiscounts)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange[700],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    '= ${currencyFormat.format(_orderDiscountAmount)}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.orange[700],
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else
+                              Text(
+                                'Ketuk untuk tambah diskon',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        isExpanded ? Icons.expand_less : Icons.expand_more,
+                        color: Color(0xFFF6A918),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Input Section (Expandable)
+                if (isExpanded) ...[
+                  SizedBox(height: 16),
+                  Divider(height: 1),
+                  SizedBox(height: 16),
+
+                  // Input Field - HANYA UPDATE TEMP, TIDAK SETSTATE
+                  TextField(
+                    controller: discountController,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    decoration: InputDecoration(
+                      labelText: 'Masukkan Diskon (%)',
+                      hintText: '0 - 100',
+                      prefixIcon: Icon(Icons.percent),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                    onChanged: (value) {
+                      final newDiscount = double.tryParse(value) ?? 0;
+                      // ✅ HANYA UPDATE TEMP, TIDAK SETSTATE → TIDAK REBUILD
+                      setLocalState(() {
+                        tempDiscount = newDiscount.clamp(0, 100).toDouble();
+                      });
+                    },
+                  ),
+
+                  SizedBox(height: 12),
+
+                  // Preview jumlah diskon (HANYA DISPLAY, TIDAK REAL)
+                  if (tempDiscount > 0)
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange[50],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Diskon:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange[800],
+                            ),
+                          ),
+                          Text(
+                            '${currencyFormat.format(_totalAfterItemDiscounts * tempDiscount / 100)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  SizedBox(height: 12),
+
+                  // Quick Percentage Buttons - HANYA UPDATE TEMP
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [0, 5, 10, 15, 20, 25, 50].map((value) {
+                      return ActionChip(
+                        label: Text('$value%'),
+                        backgroundColor: value == tempDiscount // ✅ COMPARE DENGAN TEMP
+                            ? Color(0xFFF6A918)
+                            : Colors.grey[200],
+                        labelStyle: TextStyle(
+                          color: value == tempDiscount ? Colors.white : Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                        onPressed: () {
+                          setLocalState(() {
+                            tempDiscount = value.toDouble();
+                            discountController.text = value.toString();
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+
+                  SizedBox(height: 12),
+
+                  // Action Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            setLocalState(() {
+                              tempDiscount = 0;
+                              discountController.text = '0';
+                            });
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: BorderSide(color: Colors.red),
+                          ),
+                          child: Text('Reset'),
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            // ✅ BARU SEKARANG APPLY KE STATE REAL
+                            setState(() {
+                              _orderDiscount = tempDiscount;
+                            });
+                            setLocalState(() => isExpanded = false);
+
+                            // ✅ UPDATE PAID AMOUNT JIKA TRANSFER
+                            if (_paymentMethod == 'transfer') {
+                              _paidController.text = _grandTotal.toStringAsFixed(0);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Color(0xFFF6A918),
+                          ),
+                          child: Text('Selesai'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -920,6 +1364,24 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                                     fontStyle: FontStyle.italic,
                                   ),
                                 ),
+                              // ✅ TAMPILKAN DISKON ITEM JIKA ADA
+                              if (item.discount > 0)
+                                Container(
+                                  margin: EdgeInsets.only(top: 2),
+                                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red[50],
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'Disc ${item.discount}%',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.red[700],
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -984,6 +1446,60 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
               letterSpacing: -0.5,
             ),
           ),
+
+          // ✅ TAMPILKAN BREAKDOWN PERHITUNGAN
+          if (_itemDiscounts > 0 || _orderDiscount > 0) ...[
+            SizedBox(height: 8),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  // Subtotal
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Subtotal:', style: TextStyle(fontSize: 11, color: Colors.white)),
+                      Text(currencyFormat.format(_subtotal), style: TextStyle(fontSize: 11, color: Colors.white)),
+                    ],
+                  ),
+
+                  // Diskon Item
+                  if (_itemDiscounts > 0)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Diskon Item:', style: TextStyle(fontSize: 11, color: Colors.white)),
+                        Text('-${currencyFormat.format(_itemDiscounts)}', style: TextStyle(fontSize: 11, color: Colors.white)),
+                      ],
+                    ),
+
+                  // Total setelah diskon item
+                  if (_itemDiscounts > 0)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Setelah Disc Item:', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w500)),
+                        Text(currencyFormat.format(_totalAfterItemDiscounts), style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+
+                  // Diskon Order
+                  if (_orderDiscount > 0)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Diskon ${_orderDiscount.toStringAsFixed(0)}%:', style: TextStyle(fontSize: 11, color: Colors.white)),
+                        Text('-${currencyFormat.format(_orderDiscountAmount)}', style: TextStyle(fontSize: 11, color: Colors.white)),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -1,10 +1,12 @@
-// lib/services/api_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/customer.dart';
 import '../models/product.dart';
 import '../models/order.dart';
 import '../models/user.dart';
+import 'package:intl/intl.dart';
+import 'dart:typed_data';
+import 'cache_service.dart';
 
 class ApiService {
   // Ganti dengan URL backend Anda
@@ -31,8 +33,7 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'pin': pin}),
       );
-      print("===DEBUG");
-      print(response.body);
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['token'] != null) {
@@ -161,18 +162,163 @@ class ApiService {
       throw Exception('Error: ${e.toString()}');
     }
   }
-}
 
-// pubspec.yaml dependencies yang dibutuhkan:
-/*
-dependencies:
-  flutter:
-    sdk: flutter
-  http: ^1.1.0
-  pdf: ^3.10.4
-  printing: ^5.11.0
-  path_provider: ^2.1.1
-  share_plus: ^7.2.1
-  intl: ^0.18.1
-  flutter_barcode_scanner: ^2.1.0 (optional untuk scan barcode)
-*/
+  static Future<Map<String, dynamic>> getOrdersByDate({
+    required DateTime startDate,
+    required DateTime endDate,
+    required String userId,
+  }) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/orders?'
+            'start_date=${DateFormat('yyyy-MM-dd').format(startDate)}'
+            '&end_date=${DateFormat('yyyy-MM-dd').format(endDate)}'
+            '&user_id=$userId'),
+        headers: _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'data': data['data'],
+          'total_orders': data['total_orders'],
+          'total_sales': data['total_sales'],
+        };
+      } else {
+        final errorData = jsonDecode(response.body);
+        return {
+          'success': false,
+          'message': errorData['message'] ?? 'Gagal mengambil data orders',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
+
+  static Future<List<Product>> getProductsMinimal({String? search}) async {
+    try {
+      String url = '$baseUrl/products-minimal';
+      if (search != null && search.isNotEmpty) {
+        url += '?search=$search';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        List<Product> products = (data['data'] as List)
+            .map((json) => Product.fromJsonMinimal(json)) // Pakai factory baru
+            .toList();
+        return products;
+      } else {
+        throw Exception('Gagal mengambil data produk');
+      }
+    } catch (e) {
+      throw Exception('Error: ${e.toString()}');
+    }
+  }
+
+  static Future<Uint8List?> getProductImage(String productId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/products/$productId/image'),
+        headers: _getHeaders(),
+      );
+
+      print('🔄 Image API Response for $productId: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('📦 Image API Success: ${data['success']}');
+
+        if (data['success'] == true && data['data'] != null) {
+          final imageData = data['data'];
+
+          // Handle Buffer format: {"type":"Buffer","data":[255,216,255,224,...]}
+          if (imageData['image'] is Map<String, dynamic>) {
+            final bufferData = imageData['image'];
+            if (bufferData['type'] == 'Buffer' && bufferData['data'] is List) {
+              // Convert List<dynamic> to List<int> then to Uint8List
+              final List<dynamic> dynamicList = bufferData['data'];
+              final List<int> intList = dynamicList.cast<int>().toList();
+              final Uint8List imageBytes = Uint8List.fromList(intList);
+
+              print('✅ Image loaded as Buffer: ${imageBytes.length} bytes');
+              return imageBytes;
+            }
+          }
+
+          // Fallback: handle jika format berbeda
+          if (imageData['image'] is String) {
+            // Base64 string
+            return base64Decode(imageData['image']);
+          }
+        }
+      } else {
+        print('❌ Image API error: ${response.statusCode}');
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error loading image for $productId: $e');
+      return null;
+    }
+  }
+
+  static Future<List<Product>> getProductsOptimized({String? search, bool useCache = true}) async {
+    try {
+      // Jika search kosong, coba dari cache dulu
+      if (useCache && (search == null || search.isEmpty)) {
+        try {
+          final cachedProducts = await CacheService.getCachedProducts();
+          if (cachedProducts != null && cachedProducts.isNotEmpty) {
+            final products = cachedProducts.map((json) => Product.fromJsonMinimal(json)).toList();
+            print('✅ Loaded from cache: ${products.length} items');
+            return products;
+          }
+        } catch (cacheError) {
+          print('⚠️ Cache error, falling back to API: $cacheError');
+          // Continue to API call
+        }
+      }
+
+      // Jika tidak ada cache atau cache error, ambil dari API
+      print('🌐 Fetching from API...');
+      final products = await getProductsMinimal(search: search);
+
+      // Cache data untuk下次使用 (jika bukan search)
+      if (search == null || search.isEmpty) {
+        try {
+          final productsJson = products.map((p) => p.toJson()).toList();
+          await CacheService.cacheProducts(productsJson);
+          print('💾 Cached ${productsJson.length} items');
+        } catch (cacheError) {
+          print('⚠️ Error caching products: $cacheError');
+        }
+      }
+
+      return products;
+    } catch (e) {
+      print('❌ Error in getProductsOptimized: $e');
+
+      // Fallback strategy
+      try {
+        print('🔄 Fallback: trying without cache...');
+        return await getProductsMinimal(search: search);
+      } catch (fallbackError) {
+        print('❌ Fallback also failed: $fallbackError');
+
+        // Last resort: return empty list
+        print('🔄 Returning empty list as last resort');
+        return [];
+      }
+    }
+  }
+}

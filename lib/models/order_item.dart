@@ -13,11 +13,15 @@ class OrderItem {
     this.notes = '',
   });
 
-  double get subtotal => product.price * quantity;
+  double get subtotal => _roundToNearest(product.price * quantity);
 
-  double get discountAmount => subtotal * (discount / 100);
+  double get discountAmount => _roundToNearest(subtotal * (discount / 100));
 
-  double get total => subtotal - discountAmount;
+  double get total => _roundToNearest(subtotal - discountAmount);
+
+  double _roundToNearest(double value) {
+    return (value).roundToDouble();
+  }
 
   Map<String, dynamic> toJson() {
     return {

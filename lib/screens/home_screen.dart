@@ -10,6 +10,8 @@ import 'payment_screen.dart';
 import 'login_screen.dart';
 import 'package:intl/intl.dart';
 import 'printer_settings_screen.dart';
+import 'history_tab.dart';
+import '../services/cache_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -18,12 +20,14 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   Customer? _selectedCustomer;
   final List<OrderItem> _orderItems = [];
   final currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
 
   double get _grandTotal => _orderItems.fold(0, (sum, item) => sum + item.total);
+
+  late TabController _tabController;
 
   // Hardcode customer list
   final List<Customer> _customers = [
@@ -36,6 +40,29 @@ class _HomeScreenState extends State<HomeScreen> {
     Customer(id: 'ROSO TRESNO', name: 'ROSO TRESNO', phone: '-'),
     Customer(id: 'RESERVASI', name: 'RESERVASI', phone: '-'),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _setDefaultCustomer();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _setDefaultCustomer() {
+    final defaultCustomer = _customers.firstWhere(
+          (customer) => customer.name == 'Umum',
+      orElse: () => _customers.first,
+    );
+    setState(() {
+      _selectedCustomer = defaultCustomer;
+    });
+  }
 
   void _showCustomerDropdown() {
     showModalBottomSheet(
@@ -136,7 +163,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _addMultipleProductsToOrder(Map<String, int> productQuantities) async {
     try {
-      final allProducts = await ApiService.getProducts();
+      // GUNAKAN METHOD OPTIMIZED (tanpa gambar) atau ambil dari cache
+      final allProducts = await ApiService.getProductsOptimized(); // <- PAKAI INI
 
       setState(() {
         int addedCount = 0;
@@ -259,6 +287,49 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _clearCache() async {
+    try {
+      await CacheService.clearCache();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Cache berhasil dihapus'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+      }
+
+      print('🧹 Cache cleared from HomeScreen');
+    } catch (e) {
+      print('❌ Error clearing cache: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Gagal menghapus cache'),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+      }
+    }
+  }
+
   void _proceedToPayment() {
     if (_selectedCustomer == null) {
       _showErrorSnackbar('Pilih customer terlebih dahulu');
@@ -280,7 +351,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ).then((_) {
       setState(() {
-        _selectedCustomer = null;
         _orderItems.clear();
       });
     });
@@ -306,7 +376,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ElevatedButton(
             onPressed: () {
               setState(() {
-                _selectedCustomer = null;
+                // ✅ JANGAN RESET CUSTOMER, TETAP DEFAULT KE "UMUM"
+                // _selectedCustomer = null; // HAPUS BARIS INI
                 _orderItems.clear();
               });
               Navigator.pop(context);
@@ -390,6 +461,24 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          indicatorWeight: 3,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white.withOpacity(0.7),
+          labelStyle: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+          tabs: [
+            Tab(
+              icon: Icon(Icons.shopping_cart, size: 20),
+              text: 'ORDER',
+            ),
+            Tab(
+              icon: Icon(Icons.history, size: 20),
+              text: 'HISTORY',
+            ),
+          ],
+        ),
         actions: [
           if (currentUser != null)
             PopupMenuButton<String>(
@@ -421,6 +510,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   _logout();
                 } else if (value == 'printer_settings') {
                   _openPrinterSettings();
+                } else if (value == 'clear_cache') { // <-- TAMBAH INI
+                  _clearCache();
                 }
               },
               itemBuilder: (BuildContext context) => [
@@ -458,6 +549,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
+                PopupMenuItem<String>( // <-- TAMBAH MENU CLEAR CACHE
+                  value: 'clear_cache',
+                  child: Row(
+                    children: [
+                      Icon(Icons.cached, color: Colors.blue, size: 20),
+                      SizedBox(width: 8),
+                      Text('Clear Cache', style: TextStyle(color: Colors.black87)),
+                    ],
+                  ),
+                ),
                 PopupMenuDivider(),
                 PopupMenuItem<String>(
                   value: 'logout',
@@ -480,34 +581,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
-      body: Column(
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          Container(
-            padding: EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                _buildCustomerSection(),
-              ],
-            ),
-          ),
+          // TAB 1: ORDER AKTIF (EXISTING)
+          _buildOrderActiveTab(),
 
-          Expanded(
-            child: _orderItems.isEmpty
-                ? _buildEmptyState()
-                : _buildOrderList(),
+          // TAB 2: HISTORY (NEW)
+          HistoryTab(
+            currentUser: currentUser,
+            currencyFormat: currencyFormat,
           ),
-
-          _buildBottomBar(),
         ],
       ),
     );
@@ -637,6 +721,38 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildOrderActiveTab() {
+    return Column(
+      children: [
+        // EXISTING CUSTOMER SECTION & ORDER LIST
+        Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              _buildCustomerSection(),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _orderItems.isEmpty
+              ? _buildEmptyState()
+              : _buildOrderList(),
+        ),
+        _buildBottomBar(),
+      ],
     );
   }
 

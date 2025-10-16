@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/product.dart';
 import '../services/api_service.dart';
 import 'package:intl/intl.dart';
+import '../services/cache_service.dart';
+import 'dart:typed_data';
 
 class ProductSelectScreen extends StatefulWidget {
   const ProductSelectScreen({Key? key}) : super(key: key);
@@ -21,6 +23,7 @@ class _ProductSelectScreenState extends State<ProductSelectScreen> {
 
   // State untuk multi-select
   final Map<String, int> _selectedProducts = {}; // productId -> quantity
+  final Map<String, bool> _imageLoadingStates = {};
   bool get _selectionMode => _selectedProducts.isNotEmpty;
 
   @override
@@ -42,13 +45,15 @@ class _ProductSelectScreenState extends State<ProductSelectScreen> {
     });
 
     try {
-      final products = await ApiService.getProducts();
+      // PAKAI METHOD OPTIMIZED DENGAN CACHE
+      final products = await ApiService.getProductsOptimized();
+
       setState(() {
         _products = products;
         _filteredProducts = products;
         _isLoading = false;
 
-        // Extract unique categories
+        // Extract categories
         final categorySet = <String>{'Semua'};
         for (var product in products) {
           if (product.category != null && product.category!.isNotEmpty) {
@@ -57,6 +62,10 @@ class _ProductSelectScreenState extends State<ProductSelectScreen> {
         }
         _categories = categorySet.toList();
       });
+
+      // Preload images untuk product yang visible
+      _preloadVisibleImages();
+
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -65,6 +74,105 @@ class _ProductSelectScreenState extends State<ProductSelectScreen> {
         _showErrorSnackbar('Gagal memuat item: ${e.toString()}');
       }
     }
+  }
+
+  void _preloadVisibleImages() {
+    // Preload images secara bertahap untuk avoid overload
+    final productsToPreload = _products.take(8).where((p) => p.hasImage).toList();
+
+    print('🔄 Preloading ${productsToPreload.length} images...');
+
+    for (final product in productsToPreload) {
+      _loadProductImage(product);
+    }
+
+    // Preload batch berikutnya setelah delay
+    if (productsToPreload.length < _products.length) {
+      Future.delayed(Duration(milliseconds: 500), () {
+        final nextBatch = _products.skip(8).take(8).where((p) => p.hasImage).toList();
+        for (final product in nextBatch) {
+          _loadProductImage(product);
+        }
+      });
+    }
+  }
+
+  void _preloadTopImages() {
+    // Preload max 10 images pertama untuk smoother experience
+    final productsToPreload = _products.take(10).where((p) => p.hasImage).toList();
+
+    for (final product in productsToPreload) {
+      _loadProductImage(product);
+    }
+  }
+
+  Future<void> _loadProductImage(Product product) async {
+    // Skip jika tidak ada gambar, sudah ada image, atau sedang loading
+    if (!product.hasImage ||
+        (product.image != null && product.image!.isNotEmpty) ||
+        _imageLoadingStates[product.id] == true) {
+      return;
+    }
+
+    // Set loading state
+    _imageLoadingStates[product.id] = true;
+    if (mounted) setState(() {});
+
+    try {
+      // 1. Cek cache dulu
+      final cachedImage = await CacheService.getCachedImage(product.id, product.imageHash!);
+      if (cachedImage != null && mounted) {
+        _updateProductImage(product.id, cachedImage);
+        return;
+      }
+
+      // 2. Jika tidak ada di cache, load dari API
+      final imageData = await ApiService.getProductImage(product.id);
+      if (imageData != null && mounted) {
+        _updateProductImage(product.id, imageData);
+        await CacheService.cacheImage(product.id, product.imageHash!, imageData);
+      }
+    } catch (e) {
+      print('Error loading image for ${product.id}: $e');
+    } finally {
+      // Clear loading state
+      _imageLoadingStates[product.id] = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _updateProductImage(String productId, Uint8List imageData) {
+    setState(() {
+      // Update di _products
+      final index = _products.indexWhere((p) => p.id == productId);
+      if (index != -1) {
+        _products[index] = Product(
+          id: _products[index].id,
+          name: _products[index].name,
+          price: _products[index].price,
+          stock: _products[index].stock,
+          category: _products[index].category,
+          image: imageData,
+          discount: _products[index].discount,
+          imageHash: _products[index].imageHash,
+        );
+      }
+
+      // Update di _filteredProducts
+      final filteredIndex = _filteredProducts.indexWhere((p) => p.id == productId);
+      if (filteredIndex != -1) {
+        _filteredProducts[filteredIndex] = Product(
+          id: _filteredProducts[filteredIndex].id,
+          name: _filteredProducts[filteredIndex].name,
+          price: _filteredProducts[filteredIndex].price,
+          stock: _filteredProducts[filteredIndex].stock,
+          category: _filteredProducts[filteredIndex].category,
+          image: imageData,
+          discount: _filteredProducts[filteredIndex].discount,
+          imageHash: _filteredProducts[filteredIndex].imageHash,
+        );
+      }
+    });
   }
 
   void _filterProducts() {
@@ -717,7 +825,7 @@ class _ProductSelectScreenState extends State<ProductSelectScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.add, size: 14),
+            Icon(Icons.add, size: 14, color: Colors.white,),
             SizedBox(width: 2),
             Text(
               'Tambah',
@@ -733,6 +841,9 @@ class _ProductSelectScreenState extends State<ProductSelectScreen> {
   }
 
   Widget _buildProductImage(Product product) {
+    final bool isLoading = _imageLoadingStates[product.id] == true;
+
+    // Jika product punya gambar dan image sudah di-load, tampilkan
     if (product.image != null && product.image!.isNotEmpty) {
       return Image.memory(
         product.image!,
@@ -743,9 +854,102 @@ class _ProductSelectScreenState extends State<ProductSelectScreen> {
           return _buildPlaceholderImage();
         },
       );
-    } else {
+    }
+
+    // Jika sedang loading, tampilkan loading indicator
+    if (isLoading) {
+      return _buildImageLoadingPlaceholder();
+    }
+
+    // Jika product punya gambar tapi belum di-load, trigger load
+    if (product.hasImage && (product.image == null || product.image!.isEmpty)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadProductImage(product);
+      });
+
+      // Tampilkan placeholder sementara
       return _buildPlaceholderImage();
     }
+
+    // Product tanpa gambar
+    return _buildPlaceholderImage();
+  }
+
+  Widget _buildImageLoadingPlaceholder() {
+    return Container(
+      color: Colors.grey[100],
+      child: Stack(
+        children: [
+          // Background placeholder (same as normal placeholder)
+          Container(
+            color: Colors.grey[100],
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.inventory_2_outlined,
+                    size: 28,
+                    color: Colors.grey[400],
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'No Image',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Loading overlay
+          Container(
+            color: Colors.black.withOpacity(0.4),
+            child: Center(
+              child: Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF6A918)),
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Loading...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildPlaceholderImage() {
