@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../models/order.dart';
 import 'package:image/image.dart' as img;
 import 'printer_service.dart';
+import 'universal_printer_service.dart';
 
 
 class ReceiptService {
@@ -18,37 +19,32 @@ class ReceiptService {
     decimalDigits: 0,
   );
 
-  static final PrinterService _printerService = PrinterService();
+  // static final PrinterService _printerService = PrinterService();
+  static final UniversalPrinterService _printerService = UniversalPrinterService();
 
   static final dateFormat = DateFormat('dd MMM yyyy', 'id_ID');
   static final timeFormat = DateFormat('HH:mm:ss');
 
-  // Cache logo untuk performance
   static pw.MemoryImage? _cachedLogo;
 
-  // Load logo dari assets (optional)
   static Future<pw.MemoryImage?> _loadLogo() async {
     if (_cachedLogo != null) return _cachedLogo;
 
     try {
-      // Jika ada logo di assets, uncomment ini:
       final logo = await rootBundle.load('assets/logo.png');
       _cachedLogo = pw.MemoryImage(logo.buffer.asUint8List());
       return _cachedLogo;
     } catch (e) {
-      // Jika tidak ada logo, return null
       print('Logo not found: $e');
       return null;
     }
   }
 
-  // Generate PDF Receipt
   static Future<pw.Document> generateReceiptPDF(Order order, String orderId) async {
     final pdf = pw.Document();
     final logoImage = await _loadLogo();
     final igIcon = await _loadInstagramIcon();
 
-    // ✅ HITUNG UNTUK PDF JUGA
     final subtotal = order.items.fold(0.0, (sum, item) => sum + item.total); // sudah termasuk diskon item
     final globalDiscountAmount = subtotal * (order.globalDiscount / 100);
 
@@ -60,11 +56,9 @@ class ReceiptService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              // Header - Logo/Nama Toko
               pw.Center(
                 child: pw.Column(
                   children: [
-                    // Logo (jika ada)
                     if (logoImage != null) ...[
                       pw.Image(
                         logoImage,
@@ -144,7 +138,11 @@ class ReceiptService {
 
               // Items
               ...order.items.map((item) {
-                final hasDiscount = item.discount > 0;
+                // final hasDiscount = item.discount > 0;
+                final hasDiscount = item.discountAmount > 0;
+                final isRpDiscount = item.discountType == 'rp' && item.discountRp > 0;
+                final isPercentDiscount = item.discountType == 'percent' && item.discount > 0;
+
                 return pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
@@ -329,8 +327,7 @@ class ReceiptService {
     return pdf;
   }
 
-  // Print to thermal printer
-  static Future<bool> printThermalReceipt(Order order, String orderId) async {
+  static Future<bool> printThermalReceipt(Order order, String orderId, {List<Map<String, dynamic>> paymentMethods = const []}) async {
     try {
       final items = order.items.map((item) {
         return {
@@ -339,13 +336,17 @@ class ReceiptService {
           'price': item.product.price,
           'total': item.total,
           'discount': item.discountAmount,
+          'discount_type': item.discountType,
+          'discount_percent': item.discount,
+          'discount_rp': item.discountRp,
         };
       }).toList();
 
-      // ✅ HITUNG AMOUNT DARI ORDER (jika perlu)
       final subtotal = order.items.fold(0.0, (sum, item) => sum + item.subtotal);
       final itemDiscounts = order.items.fold(0.0, (sum, item) => sum + item.discountAmount);
-      final orderDiscountAmount = order.globalDiscountAmount; // dari Order model
+      final orderDiscountAmount = order.globalDiscountAmount;
+
+      final change = (order.paidAmount - order.grandTotal).clamp(0.0, double.infinity);
 
       final success = await _printerService.printReceipt(
         orderId: orderId,
@@ -355,10 +356,10 @@ class ReceiptService {
         orderDiscountAmount: orderDiscountAmount,
         grandTotal: order.grandTotal,
         paidAmount: order.paidAmount,
-        change: order.change,
-        paymentMethod: order.paymentMethod,
+        change: change,
         cashierName: order.userName ?? 'ADMIN',
         createdAt: order.createdAt,
+        paymentMethods: paymentMethods,
       );
 
       return success;
@@ -368,19 +369,16 @@ class ReceiptService {
     }
   }
 
-  // Print Receipt
   static Future<void> printReceipt(Order order, String orderId, {bool useThermal = false}) async {
     if (useThermal) {
       final success = await printThermalReceipt(order, orderId);
       if (!success) {
-        // Fallback to PDF printing if thermal fails
         await Printing.layoutPdf(
           onLayout: (format) async => (await generateReceiptPDF(order, orderId)).save(),
           name: 'struk_$orderId.pdf',
         );
       }
     } else {
-      // Use PDF printing
       await Printing.layoutPdf(
         onLayout: (format) async => (await generateReceiptPDF(order, orderId)).save(),
         name: 'struk_$orderId.pdf',
@@ -388,10 +386,16 @@ class ReceiptService {
     }
   }
 
-  // di ReceiptService
   static Future<pw.MemoryImage> _loadInstagramIcon() async {
     final data = await rootBundle.load('assets/instagram.png');
     return pw.MemoryImage(data.buffer.asUint8List());
+  }
+
+  static String _formatCurrency(double amount) {
+    return amount.toStringAsFixed(0).replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]}.',
+    );
   }
 
   // Generate and Share Receipt dengan pilihan format
@@ -429,41 +433,30 @@ class ReceiptService {
   static Future<void> _shareAsImage(
       pw.Document pdf, Order order, String orderId) async {
     try {
-      // Simpan PDF ke bytes
       final pdfBytes = await pdf.save();
-
-      // Rasterize jadi stream halaman
       final pages = Printing.raster(pdfBytes, dpi: 300);
 
-      // Ambil halaman pertama
-      final firstPage = await pages.first; // Future<PdfRaster>
+      final firstPage = await pages.first;
       final pngBytes = await firstPage.toPng();
 
-      // Decode image dan tambahkan background putih
       final image = img.decodeImage(pngBytes);
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/struk_$orderId.jpg');
 
       if (image != null) {
-        // Buat canvas putih
         final whiteBackground = img.Image(
           width: image.width,
           height: image.height,
         );
         img.fill(whiteBackground, color: img.ColorRgb8(255, 255, 255));
-
-        // Tempel hasil raster di atas background putih
         img.compositeImage(whiteBackground, image);
 
-        // Encode ke JPEG
         final jpgBytes = img.encodeJpg(whiteBackground, quality: 90);
         await file.writeAsBytes(jpgBytes);
       } else {
-        // fallback kalau decode gagal
         await file.writeAsBytes(pngBytes);
       }
 
-      // Share file
       await Share.shareXFiles(
         [XFile(file.path)],
         text:
@@ -475,29 +468,50 @@ class ReceiptService {
     }
   }
 
-  // Generate and Share Receipt (DEPRECATED - gunakan shareReceipt)
+  static Future<bool> printStrukTutupKasir(Map<String, dynamic> strukData) async {
+    try {
+      if (!_printerService.isConnected) {
+        return false;
+      }
+
+      final mainData = strukData['main'] ?? {};
+      final payments = strukData['payments'] ?? [];
+      final biaya = strukData['biaya'] ?? [];
+      final pendapatan = strukData['pendapatan'] ?? [];
+      final uangMuka = strukData['uangMuka'] ?? [];
+
+      final success = await _printerService.printStrukTutupKasir(
+        mainData: mainData,
+        payments: payments,
+        biaya: biaya,
+        pendapatan: pendapatan,
+        uangMuka: uangMuka,
+      );
+
+      return success;
+    } catch (e) {
+      print('🔴 Error di printStrukTutupKasir: $e');
+      return false;
+    }
+  }
+
   @deprecated
   static Future<void> generateAndShareReceipt(Order order, String orderId) async {
     await shareReceipt(order, orderId, asImage: false);
   }
 
-  // Generate Receipt as Image (JPG)
   static Future<File> generateReceiptImage(Order order, String orderId) async {
     try {
-      // 1. Generate dokumen PDF
       final pdf = await generateReceiptPDF(order, orderId);
 
-      // 2. Convert PDF ke stream raster (halaman-halaman)
       final pages = Printing.raster(
         await pdf.save(),
         dpi: 300,
       );
 
-      // 3. Ambil halaman pertama dari stream
-      final firstPage = await pages.first; // Future<PdfRaster>
-      final imageBytes = await firstPage.toPng(); // Uint8List
+      final firstPage = await pages.first;
+      final imageBytes = await firstPage.toPng();
 
-      // 4. Simpan ke file sementara
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/struk_$orderId.jpg');
       await file.writeAsBytes(imageBytes);
@@ -508,7 +522,6 @@ class ReceiptService {
     }
   }
 
-  // Share Receipt as Image to WhatsApp (DEPRECATED)
   @deprecated
   static Future<void> shareReceiptToWhatsApp(Order order, String orderId) async {
     await shareReceipt(order, orderId, asImage: true);

@@ -4,24 +4,31 @@ class OrderItem {
   final Product product;
   int quantity;
   double discount;
+  double discountRp;
+  String discountType;
   String notes;
 
   OrderItem({
     required this.product,
-    this.quantity = 1,
+    required this.quantity,
     this.discount = 0,
+    this.discountRp = 0,
+    this.discountType = 'none',
     this.notes = '',
   });
 
-  double get subtotal => _roundToNearest(product.price * quantity);
+  double get subtotal => product.price * quantity;
 
-  double get discountAmount => _roundToNearest(subtotal * (discount / 100));
-
-  double get total => _roundToNearest(subtotal - discountAmount);
-
-  double _roundToNearest(double value) {
-    return (value).roundToDouble();
+  double get discountAmount {
+    if (discountType == 'rp') {
+      return discountRp * quantity;
+    } else if (discountType == 'percent') {
+      return subtotal * (discount / 100);
+    }
+    return 0;
   }
+
+  double get total => subtotal - discountAmount;
 
   Map<String, dynamic> toJson() {
     return {
@@ -30,10 +37,12 @@ class OrderItem {
       'price': product.price,
       'quantity': quantity,
       'discount': discount,
+      'discount_rp': discountRp,
+      'disc_type': discountType,
       'notes': notes,
       'subtotal': subtotal,
-      'discount_amount': discountAmount,
       'total': total,
+      'discount_amount': discountAmount,
     };
   }
 }

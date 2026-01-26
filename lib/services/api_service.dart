@@ -7,47 +7,94 @@ import '../models/user.dart';
 import 'package:intl/intl.dart';
 import 'dart:typed_data';
 import 'cache_service.dart';
+import '../models/cabang_model.dart';
+import 'session_manager.dart';
 
 class ApiService {
-  // Ganti dengan URL backend Anda
-  static const String baseUrl = 'http://103.103.22.7:8099';
+  static const String baseUrl = 'http://103.103.22.7:8094';
 
   static String? _token;
+  static Cabang? _currentCabang;  
 
   static void setToken(String token) {
     _token = token;
+  }
+
+  static void clearToken() {
+    _token = null;
+    _currentCabang = null;
+  }
+
+  static void setCurrentCabang(Cabang cabang) {
+    _currentCabang = cabang;
+  }
+
+  static Cabang? getCurrentCabang() {
+    return _currentCabang;
   }
 
   static Map<String, String> _getHeaders() {
     return {
       'Content-Type': 'application/json',
       if (_token != null) 'Authorization': 'Bearer $_token',
+      if (_currentCabang != null) 'X-Cabang-Kode': _currentCabang!.kode,
     };
   }
 
-  // Login dengan PIN
-  static Future<Map<String, dynamic>> login(String pin) async {
+  static Future<Map<String, String>> _getHeadersWithCabang() async {
+    final token = await ApiService.getToken();
+    final cabang = SessionManager.getCurrentCabang();
+
+    final headers = {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+
+    if (cabang != null) {
+      headers['X-Cabang-Kode'] = cabang.kode;
+      headers['X-Cabang-Nama'] = cabang.nama;
+    }
+
+    return headers;
+  }
+
+  static Future<Map<String, dynamic>> login(String cbgKode, String pin) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'pin': pin}),
+        body: jsonEncode({
+          'cbg_kode': cbgKode,
+          'pin': pin,
+        }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['token'] != null) {
-          setToken(data['token']);
+
+        if (data['success'] == true) {
+          final user = User.fromJson(Map<String, dynamic>.from(data['data']['user']));
+          setToken(data['data']['token']);
+
+          if (user.cabang != null) {
+            setCurrentCabang(user.cabang!);
+          }
+
+          return {
+            'success': true,
+            'token': data['data']['token'],
+            'user': user,
+          };
+        } else {
+          return {
+            'success': false,
+            'message': data['message'] ?? 'Login gagal',
+          };
         }
-        return {
-          'success': true,
-          'token': data['token'],
-          'user':  User.fromJson(data['user']),
-        };
       } else {
         return {
           'success': false,
-          'message': jsonDecode(response.body)['message'] ?? 'Login gagal',
+          'message': 'HTTP ${response.statusCode}: ${response.body}',
         };
       }
     } catch (e) {
@@ -58,7 +105,76 @@ class ApiService {
     }
   }
 
-  // Get daftar customers
+  static Future<Map<String, dynamic>> loginWithData(Map<String, dynamic> loginData) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(loginData),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['success'] == true) {
+          final user = User.fromJson(Map<String, dynamic>.from(data['data']['user']));
+          setToken(data['data']['token']);
+
+          if (user.cabang != null) {
+            setCurrentCabang(user.cabang!);
+          }
+
+          return {
+            'success': true,
+            'token': data['data']['token'],
+            'user': user,
+          };
+        } else {
+          return {
+            'success': false,
+            'message': data['message'] ?? 'Login gagal',
+          };
+        }
+      } else {
+        return {
+          'success': false,
+          'message': 'HTTP ${response.statusCode}: ${response.body}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
+
+  static Future<List<Cabang>> getCabangList() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/cabang'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          List<Cabang> cabangList = (data['data'] as List)
+              .map((json) => Cabang.fromJson(json))
+              .toList();
+          return cabangList;
+        } else {
+          throw Exception(data['message'] ?? 'Gagal mengambil data cabang');
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      print('❌ Error fetching cabang: $e');
+      rethrow;
+    }
+  }
+
   static Future<List<Customer>> getCustomers({String? search}) async {
     try {
       String url = '$baseUrl/customers';
@@ -85,7 +201,6 @@ class ApiService {
     }
   }
 
-  // Get daftar products
   static Future<List<Product>> getProducts({String? search}) async {
     try {
       String url = '$baseUrl/products';
@@ -112,15 +227,12 @@ class ApiService {
     }
   }
 
-  // Submit order
-  static Future<Map<String, dynamic>> submitOrder(Order order) async {
-    print("======DEBUG=====");
-    print(jsonEncode(order.toJson()));
+  static Future<Map<String, dynamic>> submitOrder(Map<String, dynamic> orderData) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/orders'),
         headers: _getHeaders(),
-        body: jsonEncode(order.toJson()),
+        body: jsonEncode(orderData),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -144,7 +256,6 @@ class ApiService {
     }
   }
 
-  // Get order detail (untuk generate struk)
   static Future<Order?> getOrderDetail(String orderId) async {
     try {
       final response = await http.get(
@@ -233,32 +344,24 @@ class ApiService {
         headers: _getHeaders(),
       );
 
-      print('🔄 Image API Response for $productId: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('📦 Image API Success: ${data['success']}');
 
         if (data['success'] == true && data['data'] != null) {
           final imageData = data['data'];
 
-          // Handle Buffer format: {"type":"Buffer","data":[255,216,255,224,...]}
           if (imageData['image'] is Map<String, dynamic>) {
             final bufferData = imageData['image'];
             if (bufferData['type'] == 'Buffer' && bufferData['data'] is List) {
-              // Convert List<dynamic> to List<int> then to Uint8List
               final List<dynamic> dynamicList = bufferData['data'];
               final List<int> intList = dynamicList.cast<int>().toList();
               final Uint8List imageBytes = Uint8List.fromList(intList);
 
-              print('✅ Image loaded as Buffer: ${imageBytes.length} bytes');
               return imageBytes;
             }
           }
 
-          // Fallback: handle jika format berbeda
           if (imageData['image'] is String) {
-            // Base64 string
             return base64Decode(imageData['image']);
           }
         }
@@ -274,31 +377,24 @@ class ApiService {
 
   static Future<List<Product>> getProductsOptimized({String? search, bool useCache = true}) async {
     try {
-      // Jika search kosong, coba dari cache dulu
       if (useCache && (search == null || search.isEmpty)) {
         try {
           final cachedProducts = await CacheService.getCachedProducts();
           if (cachedProducts != null && cachedProducts.isNotEmpty) {
             final products = cachedProducts.map((json) => Product.fromJsonMinimal(json)).toList();
-            print('✅ Loaded from cache: ${products.length} items');
             return products;
           }
         } catch (cacheError) {
           print('⚠️ Cache error, falling back to API: $cacheError');
-          // Continue to API call
         }
       }
 
-      // Jika tidak ada cache atau cache error, ambil dari API
-      print('🌐 Fetching from API...');
       final products = await getProductsMinimal(search: search);
 
-      // Cache data untuk下次使用 (jika bukan search)
       if (search == null || search.isEmpty) {
         try {
           final productsJson = products.map((p) => p.toJson()).toList();
           await CacheService.cacheProducts(productsJson);
-          print('💾 Cached ${productsJson.length} items');
         } catch (cacheError) {
           print('⚠️ Error caching products: $cacheError');
         }
@@ -308,17 +404,18 @@ class ApiService {
     } catch (e) {
       print('❌ Error in getProductsOptimized: $e');
 
-      // Fallback strategy
       try {
-        print('🔄 Fallback: trying without cache...');
         return await getProductsMinimal(search: search);
       } catch (fallbackError) {
         print('❌ Fallback also failed: $fallbackError');
-
-        // Last resort: return empty list
-        print('🔄 Returning empty list as last resort');
         return [];
       }
     }
+  }
+
+
+
+  static Future<String?> getToken() async {
+    return _token;
   }
 }

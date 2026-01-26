@@ -22,7 +22,6 @@ class Product {
     this.imageHash,
   });
 
-  // Factory untuk data minimal (dengan null safety)
   factory Product.fromJsonMinimal(Map<String, dynamic> json) {
     return Product(
       id: _parseString(json['id']),
@@ -36,7 +35,6 @@ class Product {
     );
   }
 
-  // Factory existing (dengan null safety)
   factory Product.fromJson(Map<String, dynamic> json) {
     final foto = json['foto'];
     Uint8List? imageBytes;
@@ -63,7 +61,6 @@ class Product {
     );
   }
 
-  // Helper methods untuk null safety
   static String _parseString(dynamic value) {
     if (value == null) return '';
     return value.toString();

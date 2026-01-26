@@ -1,62 +1,45 @@
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
-import 'dart:convert';
+import '../models/cabang_model.dart';
+import '../services/api_service.dart';
 
 class SessionManager {
-  static const String _keyIsLoggedIn = 'is_logged_in';
-  static const String _keyToken = 'token';
-  static const String _keyUser = 'user';
-
   static User? _currentUser;
+  static String? _token;
+  static Cabang? _currentCabang;
 
-  // Save session setelah login
-  static Future<void> saveSession(String token, User user) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyIsLoggedIn, true);
-    await prefs.setString(_keyToken, token);
-    await prefs.setString(_keyUser, jsonEncode(user.toJson()));
+  static Future<void> saveSession(String token, User user, Cabang cabang) async {
     _currentUser = user;
+    _token = token;
+    _currentCabang = cabang;
+
+    ApiService.setToken(token);
+    ApiService.setCurrentCabang(cabang);
   }
 
-  // Get current user
+  static Future<bool> loadSession() async {
+    return false;
+  }
+
   static User? getCurrentUser() {
     return _currentUser;
   }
 
-  // Load session saat app start
-  static Future<bool> loadSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final isLoggedIn = prefs.getBool(_keyIsLoggedIn) ?? false;
-
-    if (isLoggedIn) {
-      final token = prefs.getString(_keyToken);
-      final userJson = prefs.getString(_keyUser);
-
-      if (token != null && userJson != null) {
-        _currentUser = User.fromJson(jsonDecode(userJson));
-        // Set token ke API service
-        return true;
-      }
-    }
-    return false;
+  static Cabang? getCurrentCabang() {
+    return _currentCabang;
   }
 
-  // Get token
-  static Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyToken);
+  static String? getToken() {
+    return _token;
   }
 
-  // Check if logged in
-  static Future<bool> isLoggedIn() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyIsLoggedIn) ?? false;
+  static bool isLoggedIn() {
+    return _currentUser != null && _token != null && _currentCabang != null;
   }
 
-  // Logout
   static Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
     _currentUser = null;
+    _token = null;
+    _currentCabang = null;
+    ApiService.clearToken();
   }
 }

@@ -14,12 +14,10 @@ class BluetoothService {
   bool get isConnected => _isConnected;
   blue_plus.BluetoothDevice? get connectedDevice => _connectedDevice;
 
-  // Check if Bluetooth is available
   Future<bool> isBluetoothAvailable() async {
     return await blue_plus.FlutterBluePlus.isOn;
   }
 
-  // Enable Bluetooth
   Future<bool> enableBluetooth() async {
     try {
       await blue_plus.FlutterBluePlus.turnOn();
@@ -30,24 +28,20 @@ class BluetoothService {
     }
   }
 
-  // Start discovering devices
   Stream<List<blue_plus.BluetoothDevice>> startDiscovery() {
     blue_plus.FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
     return blue_plus.FlutterBluePlus.scanResults.map((results) =>
         results.map((r) => r.device).toList());
   }
 
-  // Stop discovery
   Future<void> stopDiscovery() async {
     await blue_plus.FlutterBluePlus.stopScan();
   }
 
-  // Get bonded devices
   Future<List<blue_plus.BluetoothDevice>> getBondedDevices() async {
     return blue_plus.FlutterBluePlus.bondedDevices;
   }
 
-  // Connect to a device
   Future<bool> connectToDevice(blue_plus.BluetoothDevice device) async {
     try {
       if (_connectedDevice != null) {
@@ -58,7 +52,6 @@ class BluetoothService {
       _connectedDevice = device;
       _isConnected = true;
 
-      // Discover services and find the write characteristic
       List<blue_plus.BluetoothService> services = await device.discoverServices();
       for (blue_plus.BluetoothService service in services) {
         for (blue_plus.BluetoothCharacteristic characteristic in service.characteristics) {
@@ -78,7 +71,6 @@ class BluetoothService {
     }
   }
 
-  // Disconnect from current device
   Future<void> disconnect() async {
     try {
       if (_connectedDevice != null) {
@@ -92,14 +84,12 @@ class BluetoothService {
     }
   }
 
-  // Send data to printer
   Future<bool> sendData(Uint8List data) async {
     if (_writeCharacteristic == null || !_isConnected) {
       return false;
     }
 
     try {
-      // Split data into chunks to avoid MTU limitations
       const int maxChunkSize = 200;
       int offset = 0;
 
@@ -110,16 +100,13 @@ class BluetoothService {
 
         Uint8List chunk = data.sublist(offset, offset + chunkSize);
 
-        // Try without response first (faster for thermal printers)
         try {
           await _writeCharacteristic!.write(chunk, withoutResponse: true);
         } catch (e) {
-          // If without response fails, try with response
           print('Without response failed, trying with response: $e');
           await _writeCharacteristic!.write(chunk, withoutResponse: false);
         }
 
-        // Small delay between chunks to avoid overwhelming the printer
         await Future.delayed(const Duration(milliseconds: 10));
 
         offset += chunkSize;
@@ -132,12 +119,15 @@ class BluetoothService {
     }
   }
 
-  // Listen to connection state
   Stream<bool> get connectionState {
     if (_connectedDevice != null) {
       return _connectedDevice!.connectionState.map((state) =>
       state == blue_plus.BluetoothConnectionState.connected);
     }
     return Stream.value(false);
+  }
+
+  Future<bool> isDeviceConnected() async {
+    return _isConnected;
   }
 }

@@ -110,9 +110,24 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     });
 
     if (connected) {
-      _showSnackBar('Connected to ${device.platformName.isNotEmpty ? device.platformName : device.remoteId.toString()}');
+      await PrinterConfigService.saveConnectedDevice(
+        deviceId: device.remoteId.toString(),
+        deviceName: device.platformName.isNotEmpty
+            ? device.platformName
+            : device.remoteId.toString(),
+        paperSize: 58, // SELALU 58mm
+      );
+
+      final configService = PrinterConfigService();
+      await configService.loadConfigurations();
+      configService.updateDefaultTo58mm();
+
+      _showSnackBar('Connected & saved for auto-connect');
+
+      // Kembali ke POS dengan status sukses
+      Navigator.pop(context, true);
     } else {
-      _showSnackBar('Failed to connect to ${device.platformName.isNotEmpty ? device.platformName : device.remoteId.toString()}');
+      _showSnackBar('Failed to connect');
     }
   }
 

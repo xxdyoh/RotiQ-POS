@@ -11,9 +11,9 @@ class Order {
   final DateTime createdAt;
   final String? userName;
   final String? userId;
-  final double globalDiscount;        // persentase diskon order
-  final double globalDiscountAmount;  // nominal diskon order ✅ BARU
-  final double subtotalBeforeDiscount; // sebelum diskon order ✅ BARU
+  final double globalDiscount;
+  final double globalDiscountAmount;
+  final double subtotalBeforeDiscount;
 
   Order({
     this.id,
@@ -25,12 +25,10 @@ class Order {
     this.userName,
     this.userId,
     this.globalDiscount = 0,
-    this.globalDiscountAmount = 0,    // ✅ DEFAULT
-    this.subtotalBeforeDiscount = 0,  // ✅ DEFAULT
+    this.globalDiscountAmount = 0,
+    this.subtotalBeforeDiscount = 0,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  // ✅ PERHITUNGAN YANG BENAR:
-  // 1. Hitung subtotal (harga asli item × quantity)
   double get subtotal {
     final raw = items.fold(0.0, (sum, item) => sum + (item.product.price * item.quantity));
     return _roundToNearest(raw);
@@ -65,7 +63,7 @@ class Order {
   }
 
   double _roundToNearest(double value) {
-    return (value).roundToDouble(); // Round to nearest integer
+    return (value).roundToDouble();
   }
   Map<String, dynamic> toJson() {
     return {
@@ -85,7 +83,6 @@ class Order {
   factory Order.fromJson(Map<String, dynamic> json) {
     final itemsData = json['items'] as List;
 
-    // Handle customer data
     Customer customer;
     if (json['customer'] is Map) {
       final customerData = json['customer'] as Map<String, dynamic>;
@@ -123,7 +120,6 @@ class Order {
       createdAt: DateTime.parse(json['created_at']?.toString() ?? DateTime.now().toIso8601String()),
       userName: json['user_name']?.toString() ?? 'Unknown',
       userId: json['user_id']?.toString() ?? 'Unknown',
-      // ✅ DATA BARU DARI API
       globalDiscount: double.tryParse(json['global_discount']?.toString() ?? '0') ?? 0,
       globalDiscountAmount: double.tryParse(json['global_discount_amount']?.toString() ?? '0') ?? 0,
       subtotalBeforeDiscount: double.tryParse(json['subtotal_before_discount']?.toString() ?? '0') ?? 0,

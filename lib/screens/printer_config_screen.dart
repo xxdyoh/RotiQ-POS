@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/printer_config_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PrinterConfigScreen extends StatefulWidget {
   const PrinterConfigScreen({super.key});
@@ -18,6 +19,13 @@ class _PrinterConfigScreenState extends State<PrinterConfigScreen> {
   void initState() {
     super.initState();
     _loadConfigurations();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final paperSize = await PrinterConfigService.getDefaultPaperSize();
+      if (paperSize != '58mm') {
+        await PrinterConfigService.setDefault58mm();
+      }
+    });
   }
 
   Future<void> _loadConfigurations() async {
