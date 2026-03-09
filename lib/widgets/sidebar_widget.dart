@@ -19,24 +19,25 @@ class SidebarWidget extends StatefulWidget {
 }
 
 class _SidebarWidgetState extends State<SidebarWidget> {
-  static final Map<String, bool> _expandedGroups = {
+  final Map<String, bool> _expandedGroups = {
     'master': true,
     'transaction': true,
     'report': false,
     'utility': false,
   };
 
-  User? _currentUser;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCurrentUser();
-  }
-
-  void _loadCurrentUser() {
-    _currentUser = SessionManager.getCurrentUser();
-  }
+  // Warna dari POS Screen
+  final Color _primaryDark = const Color(0xFF2C3E50);
+  final Color _primaryLight = const Color(0xFF34495E);
+  final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _accentCoral = const Color(0xFFFF6B6B);
+  final Color _accentSky = const Color(0xFF4CC9F0);
+  final Color _bgLight = const Color(0xFFFAFAFA);
+  final Color _bgCard = const Color(0xFFFFFFFF);
+  final Color _textPrimary = const Color(0xFF1A202C);
+  final Color _textSecondary = const Color(0xFF718096);
+  final Color _borderColor = const Color(0xFFE2E8F0);
 
   void _toggleGroup(String groupName) {
     setState(() {
@@ -45,177 +46,217 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   }
 
   void _navigateTo(String routeName) {
-    Navigator.pushNamed(
-      context,
-      routeName,
-    );
+    Navigator.pushNamed(context, routeName);
   }
 
   void _logout() {
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.login,
-          (route) => false,
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        child: Container(
+          width: 280,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _accentCoral.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.logout_rounded, size: 24, color: _accentCoral),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Keluar Aplikasi?',
+                style: GoogleFonts.montserrat(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: _textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Anda akan keluar dari sistem',
+                style: GoogleFonts.montserrat(
+                  fontSize: 11,
+                  color: _textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _textSecondary,
+                        side: BorderSide(color: _borderColor),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 11)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamedAndRemoveUntil(
+                          context,
+                          AppRoutes.login,
+                              (route) => false,
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _accentCoral,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      child: Text('Keluar', style: GoogleFonts.montserrat(fontSize: 11, color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final width = widget.isLargeTablet ? 240.0 : 200.0;
     final user = SessionManager.getCurrentUser();
     final isAdmin = user?.kduser?.toLowerCase() == 'admin';
 
     if (!isAdmin) {
       return Container(
-        width: 200,
-        color: Colors.white,
+        color: _bgCard,
         child: Center(
-          child: Text(
-            'Hanya Admin\nBisa Akses Menu',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline, size: 32, color: _textSecondary),
+              const SizedBox(height: 8),
+              Text(
+                'Admin Only',
+                style: GoogleFonts.montserrat(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: _textSecondary,
+                ),
+              ),
+            ],
           ),
         ),
       );
     }
 
-    return Container(
-      width: width,
-      color: Colors.white,
-      child: Column(
-        children: [
-          // Store Info - KEMBALIKAN KE VERSI ASLI
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF6A918).withOpacity(0.05),
-              border: Border(
-                bottom: BorderSide(
-                  color: Colors.grey.shade200,
-                  width: 1,
-                ),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF6A918).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.storefront_rounded,
-                    color: const Color(0xFFF6A918),
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'ROTI-Q',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _currentUser?.kduser ?? 'Kasir',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+    return Column(
+      children: [
+        Container(
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [_primaryDark, _primaryLight],
             ),
           ),
-
-          // Navigation Menu - KEMBALIKAN KE VERSI ASLI
-          Expanded(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Column(
-                  children: [
-                    // DASHBOARD
-                    _buildMenuItem(
-                      icon: Icons.dashboard_rounded,
-                      label: 'Dashboard',
-                      routeName: AppRoutes.dashboard,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // MASTER GROUP
-                    _buildExpandableGroup(
-                      groupName: 'master',
-                      title: 'MASTER',
-                      icon: Icons.layers_rounded,
-                      children: _buildMasterChildren(),
-                    ),
-
-                    // TRANSACTION GROUP
-                    _buildExpandableGroup(
-                      groupName: 'transaction',
-                      title: 'TRANSACTION',
-                      icon: Icons.swap_horiz_rounded,
-                      children: _buildTransactionChildren(),
-                    ),
-
-                    // REPORT GROUP
-                    _buildExpandableGroup(
-                      groupName: 'report',
-                      title: 'REPORT',
-                      icon: Icons.analytics_rounded,
-                      children: _buildReportChildren(),
-                    ),
-
-                    // UTILITY GROUP
-                    _buildExpandableGroup(
-                      groupName: 'utility',
-                      title: 'UTILITY',
-                      icon: Icons.settings_rounded,
-                      children: _buildUtilityChildren(),
-                    ),
-
-                    // LOGOUT
-                    const SizedBox(height: 16),
-                    Material(
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: _bgCard,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  Icons.point_of_sale_rounded,
+                  color: _primaryDark,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'ROTI-Q',
+                style: GoogleFonts.montserrat(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                children: [
+                  _buildMenuItem(
+                    icon: Icons.dashboard_rounded,
+                    label: 'Dashboard',
+                    routeName: AppRoutes.dashboard,
+                  ),
+                  const Divider(height: 16, thickness: 1, indent: 12, endIndent: 12, color: Color(0xFFE2E8F0)),
+                  _buildExpandableGroup(
+                    groupName: 'master',
+                    title: 'MASTER',
+                    children: _buildMasterChildren(),
+                  ),
+                  _buildExpandableGroup(
+                    groupName: 'transaction',
+                    title: 'TRANSAKSI',
+                    children: _buildTransactionChildren(),
+                  ),
+                  _buildExpandableGroup(
+                    groupName: 'report',
+                    title: 'LAPORAN',
+                    children: _buildReportChildren(),
+                  ),
+                  _buildExpandableGroup(
+                    groupName: 'utility',
+                    title: 'UTILITAS',
+                    children: _buildUtilityChildren(),
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
                         onTap: _logout,
+                        borderRadius: BorderRadius.circular(6),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 10,
-                            horizontal: 12,
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: _borderColor),
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
                           child: Row(
                             children: [
-                              Icon(
-                                Icons.logout_rounded,
-                                size: 16,
-                                color: Colors.red.shade600,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  'Logout',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.red.shade600,
-                                  ),
+                              Icon(Icons.logout_rounded, size: 14, color: _accentCoral),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Logout',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: _accentCoral,
                                 ),
                               ),
                             ],
@@ -223,13 +264,13 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -241,52 +282,62 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   }) {
     final isActive = widget.currentRoute == routeName;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
           onTap: () => _navigateTo(routeName),
           child: Container(
             padding: EdgeInsets.symmetric(
-              vertical: 10,
-              horizontal: indent ? 20 : 12,
+              vertical: 6,
+              horizontal: indent ? 28 : 10,
             ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              color: isActive
-                  ? const Color(0xFFF6A918).withOpacity(0.1)
-                  : Colors.transparent,
-              border: isActive
-                  ? Border.all(
-                color: const Color(0xFFF6A918).withOpacity(0.3),
-                width: 1,
-              )
-                  : null,
-            ),
+            decoration: isActive
+                ? BoxDecoration(  // Ganti dengan opsi yang dipilih
+              borderRadius: BorderRadius.circular(6),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [_primaryDark, _primaryLight],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: _primaryDark.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            )
+                : null,
             child: Row(
               children: [
                 Icon(
                   icon,
-                  size: 16,
-                  color: isActive
-                      ? const Color(0xFFF6A918)
-                      : Colors.grey.shade700,
+                  size: 14,
+                  color: isActive ? Colors.white : _textSecondary,
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     label,
                     style: GoogleFonts.montserrat(
-                      fontSize: 12.5,
+                      fontSize: 11,
                       fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                      color: isActive
-                          ? const Color(0xFFF6A918)
-                          : Colors.grey.shade800,
+                      color: isActive ? Colors.white : _textSecondary,
                     ),
                   ),
                 ),
+                if (isActive && !indent)
+                  Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -298,7 +349,6 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   Widget _buildExpandableGroup({
     required String groupName,
     required String title,
-    required IconData icon,
     required List<Widget> children,
   }) {
     final isExpanded = _expandedGroups[groupName] ?? false;
@@ -306,61 +356,43 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Group Header
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _toggleGroup(groupName),
-            borderRadius: BorderRadius.circular(6),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              child: Row(
-                children: [
-                  Icon(
-                    icon,
-                    size: 14,
-                    color: isExpanded
-                        ? const Color(0xFFF6A918)
-                        : Colors.grey.shade600,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _toggleGroup(groupName),
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  color: isExpanded ? _primaryDark.withOpacity(0.04) : Colors.transparent,
+                ),
+                child: Row(
+                  children: [
+                    Text(
                       title,
                       style: GoogleFonts.montserrat(
-                        fontSize: 11,
+                        fontSize: 10,
                         fontWeight: FontWeight.w600,
-                        color: isExpanded
-                            ? const Color(0xFFF6A918)
-                            : Colors.grey.shade700,
-                        letterSpacing: 0.5,
+                        color: isExpanded ? _primaryDark : _textSecondary,
+                        letterSpacing: 0.3,
                       ),
                     ),
-                  ),
-                  AnimatedRotation(
-                    duration: const Duration(milliseconds: 300),
-                    turns: isExpanded ? 0.5 : 0,
-                    child: Icon(
-                      Icons.expand_more,
-                      size: 16,
-                      color: isExpanded
-                          ? const Color(0xFFF6A918)
-                          : Colors.grey.shade500,
+                    const Spacer(),
+                    Icon(
+                      isExpanded ? Icons.expand_less : Icons.expand_more,
+                      size: 14,
+                      color: isExpanded ? _primaryDark : _textSecondary,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
-
-        // Group Content
-        if (isExpanded) ...[
-          const SizedBox(height: 4),
-          ...children,
-          const SizedBox(height: 4),
-        ],
+        if (isExpanded) ...children,
       ],
     );
   }
@@ -368,7 +400,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   List<Widget> _buildMasterChildren() {
     return [
       _buildMenuItem(
-        icon: Icons.construction_rounded,
+        icon: Icons.precision_manufacturing_rounded,
         label: 'Item St. Jadi',
         routeName: AppRoutes.setengahJadiList,
         indent: true,
@@ -398,7 +430,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     return [
       _buildMenuItem(
         icon: Icons.shopping_basket_outlined,
-        label: 'Point of Sale',
+        label: 'POS',
         routeName: AppRoutes.pos,
         indent: true,
       ),
@@ -433,9 +465,33 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         indent: true,
       ),
       _buildMenuItem(
+        icon: Icons.inbox_rounded,
+        label: 'Permintaan Barang',
+        routeName: AppRoutes.mintaList,
+        indent: true,
+      ),
+      _buildMenuItem(
         icon: Icons.receipt_long_rounded,
         label: 'Biaya Lain',
         routeName: AppRoutes.biayaLain,
+        indent: true,
+      ),
+      _buildMenuItem(
+        icon: Icons.inventory_rounded,
+        label: 'Serah Terima BJ',
+        routeName: AppRoutes.serahTerimaList,
+        indent: true,
+      ),
+      _buildMenuItem(
+        icon: Icons.assignment_rounded,
+        label: 'SPK',
+        routeName: AppRoutes.spkList,
+        indent: true,
+      ),
+      _buildMenuItem(
+        icon: Icons.local_shipping_rounded,
+        label: 'Pengiriman (DO)',
+        routeName: AppRoutes.doList,
         indent: true,
       ),
     ];
@@ -457,7 +513,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       ),
       _buildMenuItem(
         icon: Icons.list_alt_rounded,
-        label: 'List Sales Order',
+        label: 'List SO',
         routeName: AppRoutes.salesOrderList,
         indent: true,
       ),
@@ -469,7 +525,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       ),
       _buildMenuItem(
         icon: Icons.block,
-        label: 'List Void',
+        label: 'Void',
         routeName: AppRoutes.voidList,
         indent: true,
       ),
@@ -486,7 +542,13 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         indent: true,
       ),
       _buildMenuItem(
-        icon: Icons.construction_rounded,
+        icon: Icons.pie_chart_outline,
+        label: 'Lap. Permintaan',
+        routeName: '/minta-report',
+        indent: true,
+      ),
+      _buildMenuItem(
+        icon: Icons.precision_manufacturing_rounded,
         label: 'Stock St. Jadi',
         routeName: AppRoutes.stockSetengahJadi,
         indent: true,

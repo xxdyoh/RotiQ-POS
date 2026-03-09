@@ -24,6 +24,13 @@ import '../screens/setengahjadi_stock_report_screen.dart';
 import '../screens/printer_settings_screen.dart';
 import '../screens/printer_config_screen.dart';
 import '../screens/pos_screen.dart';
+import '../screens/minta_list_screen.dart';
+import '../screens/minta_form_screen.dart';
+import '../screens/minta_report_screen.dart';
+import '../screens/serah_terima_list_screen.dart';
+import '../screens/spk_list_screen.dart';
+import '../screens/do_form_screen.dart';
+import '../screens/do_list_screen.dart';
 
 class AppRoutes {
   static const String dashboard = '/dashboard';
@@ -51,6 +58,9 @@ class AppRoutes {
   static const String lapStock = '/reports/lap-stock';
   static const String stockSetengahJadi = '/reports/stock-setengah-jadi';
 
+  static const String mintaList = '/minta-list';
+  static const String mintaForm = '/minta-form';
+
   static const String connectPrinter = '/utility/connect-printer';
   static const String settingPrinter = '/utility/setting-printer';
 
@@ -64,6 +74,15 @@ class AppRoutes {
   static const String uangMukaForm = '/uang-muka/form';
   static const String returnProductionForm = '/return-production/form';
   static const String biayaLainForm = '/biaya-lain/form';
+  static const String mintaReport = '/minta-report';
+
+  static const String serahTerimaList = '/serah-terima';
+  static const String serahTerimaForm = '/serah-terima/form';
+
+  static const String doList = '/do';
+  static const String doForm = '/do/form';
+
+  static const String spkList = '/spk';
 
   static Map<String, WidgetBuilder> get routes {
     return {
@@ -84,6 +103,17 @@ class AppRoutes {
       uangMukaList: (context) => UangMukaListScreen(),
       returnProduction: (context) => ReturnListScreen(),
       biayaLain: (context) => JurnalListScreen(),
+      mintaList: (context) => const MintaListScreen(),
+      mintaForm: (context) => MintaFormScreen(
+        onMintaSaved: () {},
+      ),
+
+      doList: (context) => DoListScreen(),
+      doForm: (context) => DoFormScreen(
+        onDoSaved: () {},
+      ),
+
+      spkList: (context) => SpkListScreen(),
 
       // Laporan
       salesByItem: (context) => SalesByItemScreen(),
@@ -94,6 +124,12 @@ class AppRoutes {
       setoran: (context) => SalesDepositScreen(),
       lapStock: (context) => StockReportScreen(),
       stockSetengahJadi: (context) => SetengahJadiStockReportScreen(),
+      mintaReport: (context) => MintaReportScreen(),
+
+      serahTerimaList: (context) => SerahTerimaListScreen(),
+      // serahTerimaForm: (context) => SerahTerimaFormScreen(
+      //   onSerahTerimaSaved: () {},
+      // ),
 
       // Utility
       connectPrinter: (context) => PrinterSettingsScreen(),

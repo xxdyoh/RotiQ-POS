@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import '../services/sales_order_service.dart';
 import '../models/sales_order.dart';
 import '../widgets/base_layout.dart';
@@ -18,14 +19,9 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
 
   bool _isLoading = false;
   List<SalesOrder> _orders = [];
-  List<SalesOrder> _filteredOrders = [];
 
-  // Search & Sorting
-  final TextEditingController _searchController = TextEditingController();
-  String _sortBy = 'date_desc';
-
-  // Expanded cards
-  final Set<String> _expandedOrders = {};
+  final DataGridController _dataGridController = DataGridController();
+  late OrderDataSource _dataSource;
 
   // Order summary
   OrderSummary _orderSummary = OrderSummary(
@@ -35,6 +31,9 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     totalBelum: 0,
     totalSudah: 0,
   );
+
+  final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+  final NumberFormat _numberFormat = NumberFormat('#,##0');
 
   @override
   void initState() {
@@ -60,10 +59,13 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       setState(() {
         _orders = data.map((json) => SalesOrder.fromJson(json)).toList();
         _orderSummary = OrderSummary.fromJson(response['summary'] ?? {});
-        _expandedOrders.clear();
+        _dataSource = OrderDataSource(
+          orders: _orders,
+          currencyFormat: _currencyFormat,
+          numberFormat: _numberFormat,
+          onTap: _showOrderDetailBottomSheet,
+        );
       });
-
-      _applyFilters();
     } catch (e) {
       _showSnackbar('Error: $e', Colors.red);
     } finally {
@@ -73,62 +75,264 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     }
   }
 
-  void _applyFilters() {
-    List<SalesOrder> filtered = _orders;
+  void _showOrderDetailBottomSheet(SalesOrder order) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF6A918).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.shopping_cart, color: Color(0xFFF6A918), size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            order.nomor,
+                            style: GoogleFonts.montserrat(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF2C3E50),
+                            ),
+                          ),
+                          Text(
+                            _formatDate(order.tanggal),
+                            style: GoogleFonts.montserrat(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: Colors.grey.shade600),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
 
-    if (_searchController.text.isNotEmpty) {
-      filtered = filtered.where((order) {
-        final searchLower = _searchController.text.toLowerCase();
-        return order.nomor.toLowerCase().contains(searchLower) ||
-            order.atasNama.toLowerCase().contains(searchLower) ||
-            order.noHp.toLowerCase().contains(searchLower);
-      }).toList();
-    }
+            // Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Customer Info
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildInfoItem('Customer', order.atasNama.isNotEmpty ? order.atasNama : '-'),
+                              ),
+                              Expanded(
+                                child: _buildInfoItem('No. HP', order.noHp.isNotEmpty ? order.noHp : '-'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildInfoItem('Status', order.status),
+                              ),
+                              Expanded(
+                                child: _buildInfoItem('DP', order.dp > 0 ? _currencyFormat.format(order.dp) : '-'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildInfoItem('Tgl. Ambil', order.hasAmbilDate ? _formatDate(order.tglAmbil) : '-'),
+                              ),
+                              Expanded(
+                                child: _buildInfoItem('Tgl. Bayar', order.hasBayarDate ? _formatDate(order.tglBayar) : '-'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
 
-    filtered = _applySorting(filtered);
+                    const SizedBox(height: 16),
 
-    setState(() {
-      _filteredOrders = filtered;
-    });
+                    // Items
+                    Text(
+                      'Detail Items (${order.details.length})',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF2C3E50),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
+                            columnSpacing: 12,
+                            horizontalMargin: 12,
+                            headingRowHeight: 36,
+                            dataRowHeight: 32,
+                            headingRowColor: MaterialStateProperty.all(Colors.grey.shade100),
+                            columns: const [
+                              DataColumn(label: Text('No', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Nama Item', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Varian', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Price', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Disc %', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Net Price', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Served', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                            ],
+                            rows: order.details.asMap().entries.map((entry) {
+                              final index = entry.key + 1;
+                              final item = entry.value;
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text(index.toString(), style: const TextStyle(fontSize: 10))),
+                                  DataCell(Text(item.nama, style: const TextStyle(fontSize: 10))),
+                                  DataCell(Text(item.varian.isNotEmpty ? item.varian : '-', style: const TextStyle(fontSize: 10))),
+                                  DataCell(Text(item.salesType, style: const TextStyle(fontSize: 10))),
+                                  DataCell(Text(item.qty.toString(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600))),
+                                  DataCell(Text(_currencyFormat.format(item.price), style: const TextStyle(fontSize: 10))),
+                                  DataCell(Text(item.disc > 0 ? '${item.disc.toStringAsFixed(0)}%' : '-',
+                                      style: TextStyle(fontSize: 10, color: item.disc > 0 ? Colors.red : Colors.black87))),
+                                  DataCell(Text(_currencyFormat.format(item.netPrice),
+                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFFF6A918)))),
+                                  DataCell(Text(item.served.isNotEmpty ? item.served : '-', style: const TextStyle(fontSize: 10))),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Summary
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        children: [
+                          _buildSummaryRow('Nilai Order', order.nilai),
+                          if (order.dp > 0) _buildSummaryRow('DP Dibayar', order.dp, isDp: true),
+                          const Divider(height: 16),
+                          _buildSummaryRow('Sisa', order.nilai - order.dp, isTotal: true),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  List<SalesOrder> _applySorting(List<SalesOrder> data) {
-    switch (_sortBy) {
-      case 'date_desc':
-        return data..sort((a, b) => b.tanggal.compareTo(a.tanggal));
-      case 'date_asc':
-        return data..sort((a, b) => a.tanggal.compareTo(b.tanggal));
-      case 'order_asc':
-        return data..sort((a, b) => a.nomor.compareTo(b.nomor));
-      case 'order_desc':
-        return data..sort((a, b) => b.nomor.compareTo(a.nomor));
-      case 'customer_asc':
-        return data..sort((a, b) => a.atasNama.compareTo(b.atasNama));
-      case 'customer_desc':
-        return data..sort((a, b) => b.atasNama.compareTo(a.atasNama));
-      case 'nilai_desc':
-        return data..sort((a, b) => b.nilai.compareTo(a.nilai));
-      case 'nilai_asc':
-        return data..sort((a, b) => a.nilai.compareTo(b.nilai));
-      case 'dp_desc':
-        return data..sort((a, b) => b.dp.compareTo(a.dp));
-      case 'dp_asc':
-        return data..sort((a, b) => a.dp.compareTo(b.dp));
-      case 'status':
-        return data..sort((a, b) => b.status.compareTo(a.status));
-      default:
-        return data;
-    }
+  Widget _buildInfoItem(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.montserrat(
+            fontSize: 10,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: GoogleFonts.montserrat(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
   }
 
-  void _toggleExpand(String orderNo) {
-    setState(() {
-      if (_expandedOrders.contains(orderNo)) {
-        _expandedOrders.remove(orderNo);
-      } else {
-        _expandedOrders.add(orderNo);
-      }
-    });
+  Widget _buildSummaryRow(String label, double value, {bool isTotal = false, bool isDp = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.montserrat(
+              fontSize: isTotal ? 12 : 11,
+              fontWeight: isTotal ? FontWeight.w700 : FontWeight.normal,
+            ),
+          ),
+          Text(
+            _currencyFormat.format(value),
+            style: GoogleFonts.montserrat(
+              fontSize: isTotal ? 13 : 11,
+              fontWeight: isTotal ? FontWeight.w800 : FontWeight.w600,
+              color: isTotal
+                  ? const Color(0xFFF6A918)
+                  : (isDp ? Colors.green.shade700 : Colors.black87),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSnackbar(String message, Color color) {
@@ -142,7 +346,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
               size: 16,
             ),
             const SizedBox(width: 6),
-            Text(message, style: GoogleFonts.montserrat(fontSize: 12)),
+            Expanded(child: Text(message, style: GoogleFonts.montserrat(fontSize: 12))),
           ],
         ),
         backgroundColor: color,
@@ -209,11 +413,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
 
   String _formatCurrency(dynamic amount) {
     final num value = amount is int ? amount : (amount ?? 0);
-    return NumberFormat.currency(
-      locale: 'id_ID',
-      symbol: 'Rp ',
-      decimalDigits: 0,
-    ).format(value);
+    return _currencyFormat.format(value);
   }
 
   String _formatDate(String dateString) {
@@ -223,23 +423,6 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       return DateFormat('dd/MM/yy').format(date);
     } catch (e) {
       return dateString;
-    }
-  }
-
-  String _getSortLabel() {
-    switch (_sortBy) {
-      case 'date_desc': return 'Terbaru';
-      case 'date_asc': return 'Terlama';
-      case 'order_asc': return 'A-Z';
-      case 'order_desc': return 'Z-A';
-      case 'customer_asc': return 'Cust A-Z';
-      case 'customer_desc': return 'Cust Z-A';
-      case 'nilai_desc': return 'Nilai ↑';
-      case 'nilai_asc': return 'Nilai ↓';
-      case 'dp_desc': return 'DP ↑';
-      case 'dp_asc': return 'DP ↓';
-      case 'status': return 'Status';
-      default: return 'Urut';
     }
   }
 
@@ -256,7 +439,7 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
 
           return Column(
             children: [
-              // ========== COMPACT FILTER SECTION - 1 ROW ==========
+              // Filter Section - Satu baris dengan tanggal dan tombol load
               Container(
                 margin: EdgeInsets.all(isTablet ? 12 : 10),
                 padding: EdgeInsets.all(isTablet ? 14 : 12),
@@ -273,185 +456,322 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
                 ),
                 child: Row(
                   children: [
-                    // From Date
+                    // Dari Tanggal
                     Expanded(
+                      flex: 2,
                       child: _buildDateField(
                         label: 'Dari Tanggal',
                         date: _startDate,
                         onTap: () => _selectStartDate(context),
                       ),
                     ),
-                    SizedBox(width: isTablet ? 12 : 8),
+                    const SizedBox(width: 8),
 
-                    // To Date
+                    // Sampai Tanggal
                     Expanded(
+                      flex: 2,
                       child: _buildDateField(
                         label: 'Sampai Tanggal',
                         date: _endDate,
                         onTap: () => _selectEndDate(context),
                       ),
                     ),
-                    SizedBox(width: isTablet ? 12 : 8),
+                    const SizedBox(width: 8),
 
-                    // Load Button
-                    SizedBox(
-                      width: isTablet ? 100 : 80,
-                      child: _buildLoadButton(),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ========== SEARCH & SORT SECTION ==========
-              Container(
-                margin: EdgeInsets.symmetric(horizontal: isTablet ? 12 : 10, vertical: 6),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
-                      blurRadius: 3,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
+                    // Tombol Load
                     Expanded(
-                      child: Container(
-                        height: 36,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade300, width: 1),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.search, size: 16, color: Colors.grey.shade500),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: _searchController,
-                                decoration: InputDecoration(
-                                  hintText: 'Cari order, customer, atau no HP...',
-                                  hintStyle: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                  border: InputBorder.none,
-                                  isDense: true,
+                      flex: 1,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 13),
+                          Container(
+                            height: 36,
+                            child: ElevatedButton.icon(
+                              onPressed: _isLoading ? null : _loadReportData,
+                              icon: _isLoading
+                                  ? SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white
                                 ),
-                                style: const TextStyle(fontSize: 12),
-                                onChanged: (value) => _applyFilters(),
+                              )
+                                  : Icon(Icons.refresh, size: 14, color: Colors.white),
+                              label: Text(
+                                'Load',
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFF6A918),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6)
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                                minimumSize: const Size(70, 36),
                               ),
                             ),
-                            if (_searchController.text.isNotEmpty)
-                              IconButton(
-                                icon: Icon(Icons.clear, size: 14, color: Colors.grey.shade500),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  _applyFilters();
-                                },
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 24),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      height: 36,
-                      child: PopupMenuButton<String>(
-                        onSelected: (value) {
-                          setState(() {
-                            _sortBy = value;
-                          });
-                          _applyFilters();
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(value: 'date_desc', child: Text('Tanggal Terbaru')),
-                          const PopupMenuItem(value: 'date_asc', child: Text('Tanggal Terlama')),
-                          const PopupMenuItem(value: 'order_asc', child: Text('A-Z Order')),
-                          const PopupMenuItem(value: 'order_desc', child: Text('Z-A Order')),
-                          const PopupMenuItem(value: 'customer_asc', child: Text('A-Z Customer')),
-                          const PopupMenuItem(value: 'customer_desc', child: Text('Z-A Customer')),
-                          const PopupMenuItem(value: 'nilai_desc', child: Text('Nilai Tertinggi')),
-                          const PopupMenuItem(value: 'nilai_asc', child: Text('Nilai Terendah')),
-                          const PopupMenuItem(value: 'dp_desc', child: Text('DP Tertinggi')),
-                          const PopupMenuItem(value: 'dp_asc', child: Text('DP Terendah')),
-                          const PopupMenuItem(value: 'status', child: Text('Status (Sudah→Belum)')),
+                          ),
                         ],
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.sort, size: 16, color: Colors.grey.shade600),
-                              const SizedBox(width: 6),
-                              Text(
-                                _getSortLabel(),
-                                style: const TextStyle(fontSize: 12, color: Colors.black87),
-                              ),
-                              Icon(Icons.arrow_drop_down, size: 16, color: Colors.grey.shade600),
-                            ],
-                          ),
-                        ),
                       ),
                     ),
                   ],
                 ),
               ),
 
-              // ========== REPORT DATA ==========
+              // Data Grid
               Expanded(
                 child: _isLoading
                     ? Center(
                   child: CircularProgressIndicator(color: const Color(0xFFF6A918)),
                 )
-                    : _filteredOrders.isEmpty
+                    : _orders.isEmpty
                     ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.list_alt,
-                        size: 48,
-                        color: Colors.grey.shade400,
-                      ),
+                      Icon(Icons.shopping_cart, size: 48, color: Colors.grey.shade400),
                       const SizedBox(height: 12),
                       Text(
-                        _searchController.text.isEmpty
-                            ? 'Tidak ada data order'
-                            : 'Order tidak ditemukan',
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 14,
+                        'Tidak ada data order',
+                        style: GoogleFonts.montserrat(
+                            color: Colors.grey.shade500,
+                            fontSize: 13
                         ),
                       ),
                     ],
                   ),
                 )
                     : Container(
-                  margin: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 12),
-                  child: ListView.separated(
-                    itemCount: _filteredOrders.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 6),
-                    itemBuilder: (context, index) {
-                      return _buildOrderCard(_filteredOrders[index], index);
-                    },
+                  margin: EdgeInsets.all(isTablet ? 12 : 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SfDataGrid(
+                      controller: _dataGridController,
+                      source: _dataSource,
+                      allowColumnsResizing: true,
+                      columnResizeMode: ColumnResizeMode.onResize,
+                      columnWidthMode: ColumnWidthMode.auto,
+                      headerRowHeight: 32,
+                      rowHeight: 30,
+                      allowSorting: true,
+                      allowFiltering: true,
+                      gridLinesVisibility: GridLinesVisibility.both,
+                      headerGridLinesVisibility: GridLinesVisibility.both,
+                      selectionMode: SelectionMode.single,
+
+                      onCellTap: (details) {
+                        if (details.rowColumnIndex.rowIndex > 0) {
+                          final rowIndex = details.rowColumnIndex.rowIndex - 2;
+                          if (rowIndex >= 0 && rowIndex < _orders.length) {
+                            final order = _orders[rowIndex];
+                            _showOrderDetailBottomSheet(order);
+                          }
+                        }
+                      },
+
+                      stackedHeaderRows: [
+                        StackedHeaderRow(
+                          cells: [
+                            StackedHeaderCell(
+                              columnNames: [
+                                'no', 'nomor', 'tanggal', 'customer', 'no_hp',
+                                'status', 'nilai', 'dp', 'tgl_ambil', 'tgl_bayar'
+                              ],
+                              child: Container(
+                                height: 12,
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 4),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Icon(Icons.filter_list, size: 10, color: Colors.grey[500]),
+                                    const SizedBox(width: 2),
+                                    Icon(Icons.unfold_more, size: 10, color: Colors.grey[500]),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      tableSummaryRows: [
+                        GridTableSummaryRow(
+                          showSummaryInRow: false,
+                          title: 'TOTAL',
+                          titleColumnSpan: 5,
+                          columns: [
+                            GridSummaryColumn(
+                              name: 'TotalNilai',
+                              columnName: 'nilai',
+                              summaryType: GridSummaryType.sum,
+                            ),
+                            GridSummaryColumn(
+                              name: 'TotalDp',
+                              columnName: 'dp',
+                              summaryType: GridSummaryType.sum,
+                            ),
+                          ],
+                          position: GridTableSummaryRowPosition.bottom,
+                        ),
+                      ],
+
+                      columns: [
+                        GridColumn(
+                          columnName: 'no',
+                          minimumWidth: 50,
+                          maximumWidth: 60,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'No',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'nomor',
+                          minimumWidth: 120,
+                          maximumWidth: 140,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Nomor',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'tanggal',
+                          minimumWidth: 80,
+                          maximumWidth: 100,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Tanggal',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'customer',
+                          minimumWidth: 120,
+                          maximumWidth: 150,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Customer',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'no_hp',
+                          minimumWidth: 100,
+                          maximumWidth: 120,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'No. HP',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'status',
+                          minimumWidth: 70,
+                          maximumWidth: 90,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Status',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'nilai',
+                          minimumWidth: 100,
+                          maximumWidth: 120,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Nilai',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'dp',
+                          minimumWidth: 90,
+                          maximumWidth: 110,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'DP',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'tgl_ambil',
+                          minimumWidth: 90,
+                          maximumWidth: 110,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Tgl. Ambil',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'tgl_bayar',
+                          minimumWidth: 90,
+                          maximumWidth: 110,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Tgl. Bayar',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
 
-              // ========== BOTTOM TOTAL BAR ==========
+              // Bottom Total Bar
               _buildBottomTotalBar(isTablet),
             ],
           );
@@ -459,8 +779,6 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
       ),
     );
   }
-
-  // ========== WIDGET COMPONENTS ==========
 
   Widget _buildDateField({
     required String label,
@@ -510,306 +828,6 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
     );
   }
 
-  Widget _buildLoadButton() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 13),
-        SizedBox(
-          height: 36,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _loadReportData,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF6A918),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(70, 36),
-            ),
-            child: _isLoading
-                ? SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-                : Icon(Icons.refresh, size: 16, color: Colors.white),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOrderCard(SalesOrder order, int index) {
-    final isExpanded = _expandedOrders.contains(order.nomor);
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => _toggleExpand(order.nomor),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: [
-                // Header
-                Row(
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: order.isPaid ? Colors.green.shade50 : Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(
-                        order.isPaid ? Icons.check_circle : Icons.pending,
-                        size: 14,
-                        color: order.isPaid ? Colors.green.shade700 : Colors.orange.shade700,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                order.nomor,
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF0066CC),
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _formatDate(order.tanggal),
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 9,
-                                  color: Colors.grey.shade500,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            order.customerDisplay,
-                            style: GoogleFonts.montserrat(
-                              fontSize: 10,
-                              color: Colors.grey.shade700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: order.isPaid ? Colors.green.shade100 : Colors.orange.shade100,
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                                child: Text(
-                                  order.status,
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 7,
-                                    fontWeight: FontWeight.w500,
-                                    color: order.isPaid ? Colors.green.shade800 : Colors.orange.shade800,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              if (order.hasAmbilDate)
-                                Text(
-                                  'Ambil: ${_formatDate(order.tglAmbil)}',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 8,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          _formatCurrency(order.nilai),
-                          style: GoogleFonts.montserrat(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFFF6A918),
-                          ),
-                        ),
-                        if (order.dp > 0)
-                          Text(
-                            'DP: ${_formatCurrency(order.dp)}',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 8,
-                              color: Colors.green.shade700,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        const SizedBox(height: 2),
-                        Icon(
-                          isExpanded ? Icons.expand_less : Icons.expand_more,
-                          size: 14,
-                          color: Colors.grey.shade500,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                // Expanded Details
-                if (isExpanded && order.details.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Divider(height: 1),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Items (${order.details.length})',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (order.hasBayarDate)
-                          Text(
-                            'Bayar: ${_formatDate(order.tglBayar)}',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 9,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...order.details.map((detail) => _buildDetailItem(detail)).toList(),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailItem(OrderDetail detail) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  detail.nama,
-                  style: GoogleFonts.montserrat(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Text(
-                      'Qty: ${detail.qty}',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 8,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (detail.disc > 0)
-                      Text(
-                        'Disc: ${detail.disc}%',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 8,
-                          color: Colors.red.shade600,
-                        ),
-                      ),
-                    const SizedBox(width: 8),
-                    if (detail.salesType.isNotEmpty)
-                      Text(
-                        detail.salesType,
-                        style: GoogleFonts.montserrat(
-                          fontSize: 8,
-                          color: Colors.blue.shade600,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (detail.disc > 0)
-                Text(
-                  _formatCurrency(detail.price),
-                  style: GoogleFonts.montserrat(
-                    fontSize: 8,
-                    color: Colors.grey.shade500,
-                    decoration: TextDecoration.lineThrough,
-                  ),
-                ),
-              Text(
-                _formatCurrency(detail.netPrice),
-                style: GoogleFonts.montserrat(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFFF6A918),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildBottomTotalBar(bool isTablet) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 12, vertical: 10),
@@ -819,89 +837,246 @@ class _SalesOrderScreenState extends State<SalesOrderScreen> {
           top: BorderSide(color: Colors.grey.shade200, width: 1),
         ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Text(
+                'Total Order',
+                style: GoogleFonts.montserrat(
+                  fontSize: 11,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Row(
                 children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   Text(
-                    'Total Order',
+                    '${_orderSummary.totalSudah} Sudah',
                     style: GoogleFonts.montserrat(
-                      fontSize: 11,
+                      fontSize: 9,
                       color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: Colors.green,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_orderSummary.totalSudah} Sudah',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 9,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: Colors.orange,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_orderSummary.totalBelum} Belum',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 9,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
+                  const SizedBox(width: 4),
                   Text(
-                    _formatCurrency(_orderSummary.totalNilai),
+                    '${_orderSummary.totalBelum} Belum',
                     style: GoogleFonts.montserrat(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFFF6A918),
+                      fontSize: 9,
+                      color: Colors.grey.shade600,
                     ),
                   ),
-                  if (_orderSummary.totalDp > 0)
-                    Text(
-                      'DP: ${_formatCurrency(_orderSummary.totalDp)}',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 9,
-                        color: Colors.green.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
                 ],
               ),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _currencyFormat.format(_orderSummary.totalNilai),
+                style: GoogleFonts.montserrat(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFFF6A918),
+                ),
+              ),
+              if (_orderSummary.totalDp > 0)
+                Text(
+                  'DP: ${_currencyFormat.format(_orderSummary.totalDp)}',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 9,
+                    color: Colors.green.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
             ],
           ),
         ],
       ),
     );
+  }
+}
+
+class OrderDataSource extends DataGridSource {
+  OrderDataSource({
+    required List<SalesOrder> orders,
+    required NumberFormat currencyFormat,
+    required NumberFormat numberFormat,
+    required Function(SalesOrder) onTap,
+  }) {
+    _currencyFormat = currencyFormat;
+    _numberFormat = numberFormat;
+    _onTap = onTap;
+    _orders = orders;
+
+    _totalNilai = orders.fold<double>(0, (sum, order) => sum + order.nilai);
+    _totalDp = orders.fold<double>(0, (sum, order) => sum + order.dp);
+
+    _data = orders.asMap().entries.map((entry) {
+      final index = entry.key + 1;
+      final order = entry.value;
+
+      return DataGridRow(cells: [
+        DataGridCell<int>(columnName: 'no', value: index),
+        DataGridCell<String>(columnName: 'nomor', value: order.nomor),
+        DataGridCell<String>(columnName: 'tanggal', value: _formatDate(order.tanggal)),
+        DataGridCell<String>(columnName: 'customer', value: order.atasNama.isNotEmpty ? order.atasNama : '-'),
+        DataGridCell<String>(columnName: 'no_hp', value: order.noHp.isNotEmpty ? order.noHp : '-'),
+        DataGridCell<String>(columnName: 'status', value: order.status),
+        DataGridCell<double>(columnName: 'nilai', value: order.nilai),
+        DataGridCell<double>(columnName: 'dp', value: order.dp),
+        DataGridCell<String>(columnName: 'tgl_ambil', value: order.hasAmbilDate ? _formatDate(order.tglAmbil) : '-'),
+        DataGridCell<String>(columnName: 'tgl_bayar', value: order.hasBayarDate ? _formatDate(order.tglBayar) : '-'),
+      ]);
+    }).toList();
+  }
+
+  String _formatDate(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      return DateFormat('dd/MM/yy').format(date);
+    } catch (e) {
+      return dateString;
+    }
+  }
+
+  List<DataGridRow> _data = [];
+  late NumberFormat _currencyFormat;
+  late NumberFormat _numberFormat;
+  late Function(SalesOrder) _onTap;
+  late List<SalesOrder> _orders;
+  late double _totalNilai;
+  late double _totalDp;
+
+  @override
+  List<DataGridRow> get rows => _data;
+
+  @override
+  Widget? buildTableSummaryCellWidget(
+      GridTableSummaryRow summaryRow,
+      GridSummaryColumn? summaryColumn,
+      RowColumnIndex rowColumnIndex,
+      String summaryValue) {
+
+    if (summaryColumn?.name == 'TotalNilai') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        alignment: Alignment.centerRight,
+        child: Text(
+          _currencyFormat.format(_totalNilai),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+            color: Color(0xFFF6A918),
+          ),
+        ),
+      );
+    } else if (summaryColumn?.name == 'TotalDp') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        alignment: Alignment.centerRight,
+        child: Text(
+          _currencyFormat.format(_totalDp),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+            color: Color(0xFFF6A918),
+          ),
+        ),
+      );
+    } else if (summaryColumn == null && summaryRow.title != null && summaryRow.title!.isNotEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        alignment: Alignment.centerLeft,
+        child: Text(
+          summaryRow.title!,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+            color: Color(0xFFF6A918),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: Text(summaryValue),
+    );
+  }
+
+  @override
+  DataGridRowAdapter buildRow(DataGridRow row) {
+    return DataGridRowAdapter(
+      cells: row.getCells().map<Widget>((cell) {
+        final isAmount = cell.columnName == 'nilai' || cell.columnName == 'dp';
+        final isStatus = cell.columnName == 'status';
+
+        Color? textColor;
+        if (isStatus) {
+          final status = cell.value.toString();
+          textColor = status == 'Sudah' ? Colors.green.shade700 : Colors.orange.shade700;
+        }
+
+        return Container(
+          alignment: _getAlignment(cell.columnName),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Text(
+            isAmount
+                ? _currencyFormat.format(cell.value)
+                : cell.value.toString(),
+            textAlign: _getTextAlign(cell.columnName),
+            style: GoogleFonts.montserrat(
+              fontSize: 10,
+              fontWeight: _getFontWeight(cell.columnName),
+              color: textColor ?? (isAmount ? const Color(0xFFF6A918) : Colors.black87),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Alignment _getAlignment(String columnName) {
+    if (columnName == 'nilai' || columnName == 'dp') {
+      return Alignment.centerRight;
+    }
+    return Alignment.centerLeft;
+  }
+
+  TextAlign _getTextAlign(String columnName) {
+    if (columnName == 'nilai' || columnName == 'dp') {
+      return TextAlign.right;
+    }
+    return TextAlign.left;
+  }
+
+  FontWeight _getFontWeight(String columnName) {
+    if (columnName == 'nilai' || columnName == 'dp') {
+      return FontWeight.w600;
+    }
+    return FontWeight.normal;
   }
 }

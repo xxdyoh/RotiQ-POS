@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import '../services/return_produksi_service.dart';
 import '../models/return_produksi.dart';
 import '../widgets/base_layout.dart';
@@ -18,14 +19,9 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
 
   bool _isLoading = false;
   List<ReturnProduksi> _returns = [];
-  List<ReturnProduksi> _filteredReturns = [];
 
-  // Search & Sorting
-  final TextEditingController _searchController = TextEditingController();
-  String _sortBy = 'date_desc';
-
-  // Expanded cards
-  final Set<String> _expandedReturns = {};
+  final DataGridController _dataGridController = DataGridController();
+  late ReturnDataSource _dataSource;
 
   // Return summary
   ReturnSummary _returnSummary = ReturnSummary(
@@ -33,6 +29,9 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
     totalNilaiJual: 0,
     totalItems: 0,
   );
+
+  final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+  final NumberFormat _numberFormat = NumberFormat('#,##0');
 
   @override
   void initState() {
@@ -58,10 +57,13 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
       setState(() {
         _returns = data.map((json) => ReturnProduksi.fromJson(json)).toList();
         _returnSummary = ReturnSummary.fromJson(response['summary'] ?? {});
-        _expandedReturns.clear();
+        _dataSource = ReturnDataSource(
+          returns: _returns,
+          currencyFormat: _currencyFormat,
+          numberFormat: _numberFormat,
+          onTap: _showReturnDetailBottomSheet,
+        );
       });
-
-      _applyFilters();
     } catch (e) {
       _showSnackbar('Error: $e', Colors.red);
     } finally {
@@ -71,51 +73,165 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
     }
   }
 
-  void _applyFilters() {
-    List<ReturnProduksi> filtered = _returns;
+  void _showReturnDetailBottomSheet(ReturnProduksi ret) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.assignment_return, color: Colors.red, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            ret.nomor,
+                            style: GoogleFonts.montserrat(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                          Text(
+                            _formatDate(ret.tanggal),
+                            style: GoogleFonts.montserrat(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: Colors.grey.shade600),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
 
-    if (_searchController.text.isNotEmpty) {
-      filtered = filtered.where((ret) {
-        final searchLower = _searchController.text.toLowerCase();
-        return ret.nomor.toLowerCase().contains(searchLower) ||
-            ret.keterangan.toLowerCase().contains(searchLower);
-      }).toList();
-    }
+            // Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Keterangan
+                    if (ret.keterangan.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.note, size: 14, color: Colors.grey.shade600),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                ret.keterangan,
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
-    filtered = _applySorting(filtered);
+                    const SizedBox(height: 16),
 
-    setState(() {
-      _filteredReturns = filtered;
-    });
-  }
+                    // Items
+                    Text(
+                      'Detail Items (${ret.details.length})',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF2C3E50),
+                      ),
+                    ),
 
-  List<ReturnProduksi> _applySorting(List<ReturnProduksi> data) {
-    switch (_sortBy) {
-      case 'date_desc':
-        return data..sort((a, b) => b.tanggal.compareTo(a.tanggal));
-      case 'date_asc':
-        return data..sort((a, b) => a.tanggal.compareTo(b.tanggal));
-      case 'nomor_asc':
-        return data..sort((a, b) => a.nomor.compareTo(b.nomor));
-      case 'nomor_desc':
-        return data..sort((a, b) => b.nomor.compareTo(a.nomor));
-      case 'nilai_desc':
-        return data..sort((a, b) => b.nilaiJual.compareTo(a.nilaiJual));
-      case 'nilai_asc':
-        return data..sort((a, b) => a.nilaiJual.compareTo(b.nilaiJual));
-      default:
-        return data;
-    }
-  }
+                    const SizedBox(height: 8),
 
-  void _toggleExpand(String returnNo) {
-    setState(() {
-      if (_expandedReturns.contains(returnNo)) {
-        _expandedReturns.remove(returnNo);
-      } else {
-        _expandedReturns.add(returnNo);
-      }
-    });
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
+                            columnSpacing: 12,
+                            horizontalMargin: 12,
+                            headingRowHeight: 36,
+                            dataRowHeight: 32,
+                            headingRowColor: MaterialStateProperty.all(Colors.grey.shade100),
+                            columns: const [
+                              DataColumn(label: Text('No', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Nama Item', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Harga Jual', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              DataColumn(label: Text('Nilai', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                            ],
+                            rows: ret.details.asMap().entries.map((entry) {
+                              final index = entry.key + 1;
+                              final item = entry.value;
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text(index.toString(), style: const TextStyle(fontSize: 10))),
+                                  DataCell(Text(item.nama, style: const TextStyle(fontSize: 10))),
+                                  DataCell(Text(item.qty.toString(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600))),
+                                  DataCell(Text(_currencyFormat.format(item.hargaJual), style: const TextStyle(fontSize: 10))),
+                                  DataCell(Text(_currencyFormat.format(item.nilaiJual),
+                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.red))),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showSnackbar(String message, Color color) {
@@ -129,7 +245,7 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
               size: 16,
             ),
             const SizedBox(width: 6),
-            Text(message, style: GoogleFonts.montserrat(fontSize: 12)),
+            Expanded(child: Text(message, style: GoogleFonts.montserrat(fontSize: 12))),
           ],
         ),
         backgroundColor: color,
@@ -196,11 +312,7 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
 
   String _formatCurrency(dynamic amount) {
     final num value = amount is int ? amount : (amount ?? 0);
-    return NumberFormat.currency(
-      locale: 'id_ID',
-      symbol: 'Rp ',
-      decimalDigits: 0,
-    ).format(value);
+    return _currencyFormat.format(value);
   }
 
   String _formatDate(String dateString) {
@@ -210,18 +322,6 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
       return DateFormat('dd/MM/yy').format(date);
     } catch (e) {
       return dateString;
-    }
-  }
-
-  String _getSortLabel() {
-    switch (_sortBy) {
-      case 'date_desc': return 'Terbaru';
-      case 'date_asc': return 'Terlama';
-      case 'nomor_asc': return 'A-Z';
-      case 'nomor_desc': return 'Z-A';
-      case 'nilai_desc': return 'Nilai ↑';
-      case 'nilai_asc': return 'Nilai ↓';
-      default: return 'Urut';
     }
   }
 
@@ -238,7 +338,7 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
 
           return Column(
             children: [
-              // ========== COMPACT FILTER SECTION - 1 ROW ==========
+              // Filter Section - Satu baris dengan tanggal dan tombol load
               Container(
                 margin: EdgeInsets.all(isTablet ? 12 : 10),
                 padding: EdgeInsets.all(isTablet ? 14 : 12),
@@ -255,180 +355,264 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
                 ),
                 child: Row(
                   children: [
-                    // From Date
+                    // Dari Tanggal
                     Expanded(
+                      flex: 2,
                       child: _buildDateField(
                         label: 'Dari Tanggal',
                         date: _startDate,
                         onTap: () => _selectStartDate(context),
                       ),
                     ),
-                    SizedBox(width: isTablet ? 12 : 8),
+                    const SizedBox(width: 8),
 
-                    // To Date
+                    // Sampai Tanggal
                     Expanded(
+                      flex: 2,
                       child: _buildDateField(
                         label: 'Sampai Tanggal',
                         date: _endDate,
                         onTap: () => _selectEndDate(context),
                       ),
                     ),
-                    SizedBox(width: isTablet ? 12 : 8),
+                    const SizedBox(width: 8),
 
-                    // Load Button
-                    SizedBox(
-                      width: isTablet ? 100 : 80,
-                      child: _buildLoadButton(),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ========== SEARCH & SORT SECTION ==========
-              Container(
-                margin: EdgeInsets.symmetric(horizontal: isTablet ? 12 : 10, vertical: 6),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
-                      blurRadius: 3,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
+                    // Tombol Load
                     Expanded(
-                      child: Container(
-                        height: 36,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade300, width: 1),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.search, size: 16, color: Colors.grey.shade500),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: _searchController,
-                                decoration: InputDecoration(
-                                  hintText: 'Cari nomor atau keterangan...',
-                                  hintStyle: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                  border: InputBorder.none,
-                                  isDense: true,
+                      flex: 1,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 13),
+                          Container(
+                            height: 36,
+                            child: ElevatedButton.icon(
+                              onPressed: _isLoading ? null : _loadReportData,
+                              icon: _isLoading
+                                  ? SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white
                                 ),
-                                style: const TextStyle(fontSize: 12),
-                                onChanged: (value) => _applyFilters(),
+                              )
+                                  : Icon(Icons.refresh, size: 14, color: Colors.white),
+                              label: Text(
+                                'Load',
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFF6A918),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6)
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                                minimumSize: const Size(70, 36),
                               ),
                             ),
-                            if (_searchController.text.isNotEmpty)
-                              IconButton(
-                                icon: Icon(Icons.clear, size: 14, color: Colors.grey.shade500),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  _applyFilters();
-                                },
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 24),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      height: 36,
-                      child: PopupMenuButton<String>(
-                        onSelected: (value) {
-                          setState(() {
-                            _sortBy = value;
-                          });
-                          _applyFilters();
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(value: 'date_desc', child: Text('Tanggal Terbaru')),
-                          const PopupMenuItem(value: 'date_asc', child: Text('Tanggal Terlama')),
-                          const PopupMenuItem(value: 'nomor_asc', child: Text('A-Z Nomor')),
-                          const PopupMenuItem(value: 'nomor_desc', child: Text('Z-A Nomor')),
-                          const PopupMenuItem(value: 'nilai_desc', child: Text('Nilai Tertinggi')),
-                          const PopupMenuItem(value: 'nilai_asc', child: Text('Nilai Terendah')),
+                          ),
                         ],
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.sort, size: 16, color: Colors.grey.shade600),
-                              const SizedBox(width: 6),
-                              Text(
-                                _getSortLabel(),
-                                style: const TextStyle(fontSize: 12, color: Colors.black87),
-                              ),
-                              Icon(Icons.arrow_drop_down, size: 16, color: Colors.grey.shade600),
-                            ],
-                          ),
-                        ),
                       ),
                     ),
                   ],
                 ),
               ),
 
-              // ========== REPORT DATA ==========
+              // Data Grid
               Expanded(
                 child: _isLoading
                     ? Center(
                   child: CircularProgressIndicator(color: const Color(0xFFF6A918)),
                 )
-                    : _filteredReturns.isEmpty
+                    : _returns.isEmpty
                     ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.assignment_return,
-                        size: 48,
-                        color: Colors.grey.shade400,
-                      ),
+                      Icon(Icons.assignment_return, size: 48, color: Colors.grey.shade400),
                       const SizedBox(height: 12),
                       Text(
-                        _searchController.text.isEmpty
-                            ? 'Tidak ada data return'
-                            : 'Return tidak ditemukan',
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 14,
+                        'Tidak ada data return',
+                        style: GoogleFonts.montserrat(
+                            color: Colors.grey.shade500,
+                            fontSize: 13
                         ),
                       ),
                     ],
                   ),
                 )
                     : Container(
-                  margin: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 12),
-                  child: ListView.separated(
-                    itemCount: _filteredReturns.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 6),
-                    itemBuilder: (context, index) {
-                      return _buildReturnCard(_filteredReturns[index], index);
-                    },
+                  margin: EdgeInsets.all(isTablet ? 12 : 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SfDataGrid(
+                      controller: _dataGridController,
+                      source: _dataSource,
+                      allowColumnsResizing: true,
+                      columnResizeMode: ColumnResizeMode.onResize,
+                      columnWidthMode: ColumnWidthMode.auto,
+                      headerRowHeight: 32,
+                      rowHeight: 30,
+                      allowSorting: true,
+                      allowFiltering: true,
+                      gridLinesVisibility: GridLinesVisibility.both,
+                      headerGridLinesVisibility: GridLinesVisibility.both,
+                      selectionMode: SelectionMode.single,
+
+                      onCellTap: (details) {
+                        if (details.rowColumnIndex.rowIndex > 0) {
+                          final rowIndex = details.rowColumnIndex.rowIndex - 2;
+                          if (rowIndex >= 0 && rowIndex < _returns.length) {
+                            final ret = _returns[rowIndex];
+                            _showReturnDetailBottomSheet(ret);
+                          }
+                        }
+                      },
+
+                      stackedHeaderRows: [
+                        StackedHeaderRow(
+                          cells: [
+                            StackedHeaderCell(
+                              columnNames: [
+                                'no', 'nomor', 'tanggal', 'keterangan', 'nilai_jual', 'total_items'
+                              ],
+                              child: Container(
+                                height: 12,
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 4),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Icon(Icons.filter_list, size: 10, color: Colors.grey[500]),
+                                    const SizedBox(width: 2),
+                                    Icon(Icons.unfold_more, size: 10, color: Colors.grey[500]),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      tableSummaryRows: [
+                        GridTableSummaryRow(
+                          showSummaryInRow: false,
+                          title: 'TOTAL',
+                          titleColumnSpan: 4,
+                          columns: [
+                            GridSummaryColumn(
+                              name: 'TotalNilai',
+                              columnName: 'nilai_jual',
+                              summaryType: GridSummaryType.sum,
+                            ),
+                          ],
+                          position: GridTableSummaryRowPosition.bottom,
+                        ),
+                      ],
+
+                      columns: [
+                        GridColumn(
+                          columnName: 'no',
+                          minimumWidth: 50,
+                          maximumWidth: 60,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'No',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'nomor',
+                          minimumWidth: 120,
+                          maximumWidth: 140,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Nomor',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'tanggal',
+                          minimumWidth: 80,
+                          maximumWidth: 100,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Tanggal',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'keterangan',
+                          minimumWidth: 200,
+                          maximumWidth: 300,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Keterangan',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'nilai_jual',
+                          minimumWidth: 120,
+                          maximumWidth: 150,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Nilai Jual',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'total_items',
+                          minimumWidth: 80,
+                          maximumWidth: 100,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Items',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
 
-              // ========== BOTTOM TOTAL BAR ==========
+              // Bottom Total Bar
               _buildBottomTotalBar(isTablet),
             ],
           );
@@ -436,8 +620,6 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
       ),
     );
   }
-
-  // ========== WIDGET COMPONENTS ==========
 
   Widget _buildDateField({
     required String label,
@@ -487,253 +669,6 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
     );
   }
 
-  Widget _buildLoadButton() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 13),
-        SizedBox(
-          height: 36,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _loadReportData,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF6A918),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(70, 36),
-            ),
-            child: _isLoading
-                ? SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-                : Icon(Icons.refresh, size: 16, color: Colors.white),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildReturnCard(ReturnProduksi ret, int index) {
-    final isExpanded = _expandedReturns.contains(ret.nomor);
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => _toggleExpand(ret.nomor),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: [
-                // Header
-                Row(
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(
-                        Icons.assignment_return,
-                        size: 14,
-                        color: Colors.red.shade700,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                ret.nomor,
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.red.shade700,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _formatDate(ret.tanggal),
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 9,
-                                  color: Colors.grey.shade500,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            ret.keterangan.isNotEmpty ? ret.keterangan : 'Return Produksi',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 10,
-                              color: Colors.grey.shade700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${ret.details.length} items',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 9,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          _formatCurrency(ret.nilaiJual),
-                          style: GoogleFonts.montserrat(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.red.shade700,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Icon(
-                          isExpanded ? Icons.expand_less : Icons.expand_more,
-                          size: 14,
-                          color: Colors.grey.shade500,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                // Expanded Details
-                if (isExpanded && ret.details.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Divider(height: 1),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Items (${ret.details.length})',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (ret.nilaiJual > 0)
-                          Text(
-                            'Total: ${_formatCurrency(ret.nilaiJual)}',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 9,
-                              color: Colors.red.shade700,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...ret.details.map((detail) => _buildDetailItem(detail)).toList(),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailItem(ReturnDetail detail) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  detail.nama,
-                  style: GoogleFonts.montserrat(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Qty: ${detail.qty}',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 8,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                _formatCurrency(detail.hargaJual),
-                style: GoogleFonts.montserrat(
-                  fontSize: 9,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-              Text(
-                _formatCurrency(detail.nilaiJual),
-                style: GoogleFonts.montserrat(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.red.shade700,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildBottomTotalBar(bool isTablet) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 12, vertical: 10),
@@ -743,45 +678,176 @@ class _ReturnProduksiScreenState extends State<ReturnProduksiScreen> {
           top: BorderSide(color: Colors.grey.shade200, width: 1),
         ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Total Return',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 11,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${_returnSummary.totalReturns} return • ${_returnSummary.totalItems} items',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 9,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
               Text(
-                _formatCurrency(_returnSummary.totalNilaiJual),
+                'Total Return',
                 style: GoogleFonts.montserrat(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.red.shade700,
+                  fontSize: 11,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${_returnSummary.totalReturns} return • ${_returnSummary.totalItems} items',
+                style: GoogleFonts.montserrat(
+                  fontSize: 9,
+                  color: Colors.grey,
                 ),
               ),
             ],
           ),
+          Text(
+            _currencyFormat.format(_returnSummary.totalNilaiJual),
+            style: GoogleFonts.montserrat(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: Colors.red.shade700,
+            ),
+          ),
         ],
       ),
     );
+  }
+}
+
+class ReturnDataSource extends DataGridSource {
+  ReturnDataSource({
+    required List<ReturnProduksi> returns,
+    required NumberFormat currencyFormat,
+    required NumberFormat numberFormat,
+    required Function(ReturnProduksi) onTap,
+  }) {
+    _currencyFormat = currencyFormat;
+    _numberFormat = numberFormat;
+    _onTap = onTap;
+    _returns = returns;
+
+    _totalNilai = returns.fold<double>(0, (sum, ret) => sum + ret.nilaiJual);
+
+    _data = returns.asMap().entries.map((entry) {
+      final index = entry.key + 1;
+      final ret = entry.value;
+
+      return DataGridRow(cells: [
+        DataGridCell<int>(columnName: 'no', value: index),
+        DataGridCell<String>(columnName: 'nomor', value: ret.nomor),
+        DataGridCell<String>(columnName: 'tanggal', value: _formatDate(ret.tanggal)),
+        DataGridCell<String>(columnName: 'keterangan', value: ret.keterangan.isNotEmpty ? ret.keterangan : '-'),
+        DataGridCell<double>(columnName: 'nilai_jual', value: ret.nilaiJual),
+        DataGridCell<int>(columnName: 'total_items', value: ret.details.length),
+      ]);
+    }).toList();
+  }
+
+  String _formatDate(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      return DateFormat('dd/MM/yy').format(date);
+    } catch (e) {
+      return dateString;
+    }
+  }
+
+  List<DataGridRow> _data = [];
+  late NumberFormat _currencyFormat;
+  late NumberFormat _numberFormat;
+  late Function(ReturnProduksi) _onTap;
+  late List<ReturnProduksi> _returns;
+  late double _totalNilai;
+
+  @override
+  List<DataGridRow> get rows => _data;
+
+  @override
+  Widget? buildTableSummaryCellWidget(
+      GridTableSummaryRow summaryRow,
+      GridSummaryColumn? summaryColumn,
+      RowColumnIndex rowColumnIndex,
+      String summaryValue) {
+
+    if (summaryColumn?.name == 'TotalNilai') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        alignment: Alignment.centerRight,
+        child: Text(
+          _currencyFormat.format(_totalNilai),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+            color: Colors.red,
+          ),
+        ),
+      );
+    } else if (summaryColumn == null && summaryRow.title != null && summaryRow.title!.isNotEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        alignment: Alignment.centerLeft,
+        child: Text(
+          summaryRow.title!,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+            color: Colors.red,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: Text(summaryValue),
+    );
+  }
+
+  @override
+  DataGridRowAdapter buildRow(DataGridRow row) {
+    return DataGridRowAdapter(
+      cells: row.getCells().map<Widget>((cell) {
+        final isAmount = cell.columnName == 'nilai_jual';
+
+        return Container(
+          alignment: _getAlignment(cell.columnName),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Text(
+            isAmount
+                ? _currencyFormat.format(cell.value)
+                : cell.value.toString(),
+            textAlign: _getTextAlign(cell.columnName),
+            style: GoogleFonts.montserrat(
+              fontSize: 10,
+              fontWeight: _getFontWeight(cell.columnName),
+              color: isAmount ? Colors.red : Colors.black87,
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Alignment _getAlignment(String columnName) {
+    if (columnName == 'nilai_jual' || columnName == 'total_items') {
+      return Alignment.centerRight;
+    }
+    return Alignment.centerLeft;
+  }
+
+  TextAlign _getTextAlign(String columnName) {
+    if (columnName == 'nilai_jual' || columnName == 'total_items') {
+      return TextAlign.right;
+    }
+    return TextAlign.left;
+  }
+
+  FontWeight _getFontWeight(String columnName) {
+    if (columnName == 'nilai_jual' || columnName == 'total_items') {
+      return FontWeight.w600;
+    }
+    return FontWeight.normal;
   }
 }

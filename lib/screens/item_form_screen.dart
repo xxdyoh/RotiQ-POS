@@ -211,7 +211,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
         final detailResult = await ItemService.updateItemSetengahJadiDetails(
           itemId: int.parse(itemId),
-          details: details,
+          details: details.map((d) => d.toJson()).toList(),
         );
 
         if (!detailResult['success']) {

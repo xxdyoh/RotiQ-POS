@@ -17,7 +17,6 @@ class SalesItemService {
 
     if (cabang != null) {
       headers['X-Cabang-Kode'] = cabang.kode;
-      headers['X-Cabang-Nama'] = cabang.nama;
     }
 
     return headers;
@@ -74,13 +73,5 @@ class SalesItemService {
 
   static String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-
-  static Future<Map<String, String>> _getHeaders() async {
-    final token = await ApiService.getToken();
-    return {
-      'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
-    };
   }
 }

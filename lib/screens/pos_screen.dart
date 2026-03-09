@@ -1562,70 +1562,195 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   void _showEditQuantityDialog(int index, OrderItem item) {
+    int tempQuantity = item.quantity;
+    final TextEditingController _qtyController = TextEditingController(text: tempQuantity.toString());
+    final FocusNode _qtyFocusNode = FocusNode();
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        titlePadding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-        contentPadding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-        actionsPadding: EdgeInsets.all(8),
-        title: Text(
-          'Edit Quantity',
-          style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w700, color: _textPrimary),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              item.product.name,
-              style: GoogleFonts.montserrat(fontSize: 11, color: _textSecondary),
-              maxLines: 2,
-              textAlign: TextAlign.center,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            titlePadding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+            contentPadding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+            actionsPadding: EdgeInsets.all(8),
+            title: Text(
+              'Edit Quantity',
+              style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w700, color: _textPrimary),
             ),
-            SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  icon: Icon(Icons.remove, size: 16, color: _primaryDark),
-                  onPressed: () => _updateCartItemQuantity(index, item.quantity - 1),
-                  padding: EdgeInsets.all(4),
+                Text(
+                  item.product.name,
+                  style: GoogleFonts.montserrat(fontSize: 11, color: _textSecondary),
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
                 ),
-                Container(
-                  width: 40,
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: _borderColor),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '${item.quantity}',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w700, color: _textPrimary),
-                  ),
+                SizedBox(height: 12),
+
+                // Row dengan tombol - dan + serta TextField di tengah
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Tombol Minus
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: _borderColor),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: IconButton(
+                        icon: Icon(Icons.remove, size: 18, color: _primaryDark),
+                        onPressed: () {
+                          if (tempQuantity > 1) {
+                            setDialogState(() {
+                              tempQuantity--;
+                              _qtyController.text = tempQuantity.toString();
+                            });
+                          }
+                        },
+                        padding: EdgeInsets.all(8),
+                        constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+                      ),
+                    ),
+
+                    SizedBox(width: 8),
+
+                    // TextField untuk input manual
+                    Container(
+                      width: 80,
+                      height: 45,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: _borderColor),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: TextField(
+                        controller: _qtyController,
+                        focusNode: _qtyFocusNode,
+                        textAlign: TextAlign.center,
+                        keyboardType: TextInputType.number,
+                        style: GoogleFonts.montserrat(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: _textPrimary
+                        ),
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                        ),
+                        onChanged: (value) {
+                          // Validasi input angka
+                          if (value.isEmpty) {
+                            setDialogState(() {
+                              tempQuantity = 0;
+                            });
+                          } else {
+                            final newQty = int.tryParse(value);
+                            if (newQty != null && newQty > 0) {
+                              setDialogState(() {
+                                tempQuantity = newQty;
+                              });
+                            }
+                          }
+                        },
+                      ),
+                    ),
+
+                    SizedBox(width: 8),
+
+                    // Tombol Plus
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: _borderColor),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: IconButton(
+                        icon: Icon(Icons.add, size: 18, color: _primaryDark),
+                        onPressed: () {
+                          setDialogState(() {
+                            tempQuantity++;
+                            _qtyController.text = tempQuantity.toString();
+                          });
+                        },
+                        padding: EdgeInsets.all(8),
+                        constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+                      ),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: Icon(Icons.add, size: 16, color: _primaryDark),
-                  onPressed: () => _updateCartItemQuantity(index, item.quantity + 1),
-                  padding: EdgeInsets.all(4),
-                ),
+
+                // SizedBox(height: 8),
+                //
+                // // Tombol shortcut untuk quantity umum (opsional)
+                // Row(
+                //   mainAxisAlignment: MainAxisAlignment.center,
+                //   children: [
+                //     _buildQuickQtyButton('1', setDialogState, _qtyController),
+                //     SizedBox(width: 6),
+                //     _buildQuickQtyButton('2', setDialogState, _qtyController),
+                //     SizedBox(width: 6),
+                //     _buildQuickQtyButton('5', setDialogState, _qtyController),
+                //     SizedBox(width: 6),
+                //     _buildQuickQtyButton('10', setDialogState, _qtyController),
+                //   ],
+                // ),
               ],
             ),
-          ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 11, color: _textSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  // Validasi final sebelum simpan
+                  if (tempQuantity <= 0) {
+                    _removeFromCart(index);
+                  } else {
+                    setState(() {
+                      _cartItems[index].quantity = tempQuantity;
+                    });
+                  }
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryDark,
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                child: Text('Simpan', style: GoogleFonts.montserrat(fontSize: 12, color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+// Fungsi helper untuk tombol quick quantity
+  Widget _buildQuickQtyButton(String qty, StateSetter setDialogState, TextEditingController controller) {
+    return GestureDetector(
+      onTap: () {
+        setDialogState(() {
+          controller.text = qty;
+          // Update tempQuantity juga (tapi tempQuantity ada di luar scope,
+          // perlu di-handle di fungsi utama)
+        });
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: _bgLight,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: _borderColor),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 11, color: _textSecondary)),
+        child: Text(
+          qty,
+          style: GoogleFonts.montserrat(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: _textPrimary,
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _primaryDark,
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            ),
-            child: Text('Simpan', style: GoogleFonts.montserrat(fontSize: 11, color: Colors.white)),
-          ),
-        ],
+        ),
       ),
     );
   }

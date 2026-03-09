@@ -45,36 +45,35 @@ class SalesInvoice {
     final details = List<Map<String, dynamic>>.from(json['details'] ?? []);
 
     return SalesInvoice(
-      nomor: json['nomor'] ?? '',
-      tanggal: json['tanggal'] ?? '',
-      meja: json['meja']?.toString() ?? '', // Handle null
-      customer: json['customer']?.toString() ?? '', // Handle null
-      duration: json['duration'] ?? '',
-      amount: _safeToDouble(json['amount']),
-      serviceCharge: _safeToDouble(json['service_charge']),
-      tax: _safeToDouble(json['tax']),
-      discount: _safeToDouble(json['discount']),
-      cash: _safeToDouble(json['cash']),
-      card: _safeToDouble(json['card']),
-      dp: _safeToDouble(json['dp']),
-      edc: _safeToDouble(json['edc']), // Handle null edc
-      otherValue: _safeToDouble(json['other_value']),
-      other: json['other']?.toString() ?? '', // Handle null
-      statusOrder: json['status_order'] ?? '',
-      promo: json['promo'] ?? '',
-      kasir: json['kasir'] ?? '',
+      nomor: json['Nomor'] ?? json['nomor'] ?? '',
+      tanggal: json['Tanggal'] ?? json['tanggal'] ?? '',
+      meja: json['Meja'] ?? json['meja']?.toString() ?? '',
+      customer: json['Customer'] ?? json['customer']?.toString() ?? '',
+      duration: json['Duration'] ?? json['duration'] ?? '',
+      amount: _safeToDouble(json['Amount'] ?? json['amount']),
+      serviceCharge: _safeToDouble(json['SeviceCharge'] ?? json['service_charge']),
+      tax: _safeToDouble(json['Tax'] ?? json['tax']),
+      discount: _safeToDouble(json['Discount'] ?? json['discount']),
+      cash: _safeToDouble(json['Cash'] ?? json['cash']),
+      card: _safeToDouble(json['Card'] ?? json['card']),
+      dp: _safeToDouble(json['DP'] ?? json['dp']),
+      edc: _safeToDouble(json['EDC'] ?? json['edc']),
+      otherValue: _safeToDouble(json['Other_Value'] ?? json['other_value']),
+      other: json['Other'] ?? json['other']?.toString() ?? '',
+      statusOrder: json['StatusOrder'] ?? json['status_order'] ?? '',
+      promo: json['Promo'] ?? json['promo'] ?? '',
+      kasir: json['Kasir'] ?? json['kasir'] ?? '',
       details: details.map((detail) => InvoiceDetail.fromJson(detail)).toList(),
     );
   }
 
-  // Helper method untuk mendapatkan payment method yang digunakan
   List<String> get paymentMethods {
     final methods = <String>[];
     if (cash > 0) methods.add('Cash');
     if (card > 0) methods.add('Card');
     if (edc > 0) methods.add('EDC');
     if (dp > 0) methods.add('DP');
-    if (otherValue > 0) methods.add('Other');
+    if (otherValue > 0) methods.add(other.isNotEmpty ? other : 'Other');
     return methods;
   }
 
@@ -82,7 +81,6 @@ class SalesInvoice {
     return paymentMethods.join(', ');
   }
 
-  // 🔥 FIX: Safe conversion untuk handle null dan string
   static double _safeToDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is double) return value;
@@ -120,19 +118,18 @@ class InvoiceDetail {
 
   factory InvoiceDetail.fromJson(Map<String, dynamic> json) {
     return InvoiceDetail(
-      nomor: json['nomor'] ?? '',
-      nama: json['nama'] ?? '',
-      varian: json['varian']?.toString() ?? '', // Handle null
-      salesType: json['sales_type'] ?? '',
-      qty: _safeToInt(json['qty']),
-      price: _safeToDouble(json['price']),
-      disc: _safeToDouble(json['disc']),
-      netPrice: _safeToDouble(json['net_price']),
-      served: json['served'] ?? '',
+      nomor: json['Nomor'] ?? json['nomor'] ?? '',
+      nama: json['Nama'] ?? json['nama'] ?? '',
+      varian: json['Varian'] ?? json['varian']?.toString() ?? '',
+      salesType: json['Salestype'] ?? json['sales_type'] ?? '',
+      qty: _safeToInt(json['Qty'] ?? json['qty']),
+      price: _safeToDouble(json['Price'] ?? json['price']),
+      disc: _safeToDouble(json['Disc'] ?? json['disc']),
+      netPrice: _safeToDouble(json['NetPrice'] ?? json['net_price']),
+      served: json['Served'] ?? json['served'] ?? '',
     );
   }
 
-  // 🔥 FIX: Safe conversion untuk qty
   static int _safeToInt(dynamic value) {
     if (value == null) return 0;
     if (value is int) return value;
@@ -144,7 +141,6 @@ class InvoiceDetail {
     return 0;
   }
 
-  // 🔥 FIX: Safe conversion untuk double
   static double _safeToDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is double) return value;
@@ -188,7 +184,6 @@ class PaymentSummary {
     );
   }
 
-  // 🔥 FIX: Safe conversion methods
   static double _safeToDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is double) return value;

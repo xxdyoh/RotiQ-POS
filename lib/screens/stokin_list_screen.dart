@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import '../services/stokin_service.dart';
 import '../widgets/base_layout.dart';
 import '../routes/app_routes.dart';
@@ -17,7 +18,6 @@ class _StokinListScreenState extends State<StokinListScreen> {
   bool _isLoading = false;
   bool _showDateFilter = false;
   List<Map<String, dynamic>> _stokinList = [];
-  List<Map<String, dynamic>> _filteredList = [];
 
   // Filter tanggal
   DateTime _startDate = DateTime.now();
@@ -25,12 +25,16 @@ class _StokinListScreenState extends State<StokinListScreen> {
   final TextEditingController _startDateController = TextEditingController();
   final TextEditingController _endDateController = TextEditingController();
 
+  final DataGridController _dataGridController = DataGridController();
+  late StokinDataSource _dataSource;
+
   @override
   void initState() {
     super.initState();
-    // Set tanggal default: awal bulan hingga hari ini
+    _endDate = DateTime.now();
     _startDate = DateTime(_endDate.year, _endDate.month, 1);
     _updateDateControllers();
+    _dataSource = StokinDataSource(stokinList: [], onEdit: _openEditStokin, onDelete: _deleteStokin);
     _loadStokinData();
   }
 
@@ -51,6 +55,15 @@ class _StokinListScreenState extends State<StokinListScreen> {
     return DateFormat('yyyy-MM-dd').format(date);
   }
 
+  String _formatDate(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      return DateFormat('dd/MM/yy').format(date);
+    } catch (e) {
+      return dateString;
+    }
+  }
+
   Future<void> _loadStokinData() async {
     setState(() => _isLoading = true);
     try {
@@ -61,7 +74,11 @@ class _StokinListScreenState extends State<StokinListScreen> {
       );
       setState(() {
         _stokinList = stokinData;
-        _filteredList = _stokinList;
+        _dataSource = StokinDataSource(
+          stokinList: _stokinList,
+          onEdit: _openEditStokin,
+          onDelete: _deleteStokin,
+        );
       });
     } catch (e) {
       _showSnackbar('Gagal memuat data stock in: ${e.toString()}', Colors.red);
@@ -71,14 +88,7 @@ class _StokinListScreenState extends State<StokinListScreen> {
   }
 
   void _filterStokin(String query) {
-    setState(() {
-      _filteredList = _stokinList.where((stokin) {
-        final nomor = stokin['sti_nomor']?.toString().toLowerCase() ?? '';
-        final keterangan = stokin['sti_keterangan']?.toString().toLowerCase() ?? '';
-        return nomor.contains(query.toLowerCase()) ||
-            keterangan.contains(query.toLowerCase());
-      }).toList();
-    });
+    _loadStokinData();
   }
 
   void _showSnackbar(String message, Color color) {
@@ -127,13 +137,11 @@ class _StokinListScreenState extends State<StokinListScreen> {
       setState(() {
         if (isStartDate) {
           _startDate = picked;
-          // Jika start date > end date, update end date
           if (_startDate.isAfter(_endDate)) {
             _endDate = _startDate;
           }
         } else {
           _endDate = picked;
-          // Jika end date < start date, update start date
           if (_endDate.isBefore(_startDate)) {
             _startDate = _endDate;
           }
@@ -141,7 +149,6 @@ class _StokinListScreenState extends State<StokinListScreen> {
         _updateDateControllers();
       });
 
-      // Reload data setelah ganti tanggal
       _loadStokinData();
     }
   }
@@ -160,15 +167,6 @@ class _StokinListScreenState extends State<StokinListScreen> {
     setState(() {
       _showDateFilter = !_showDateFilter;
     });
-  }
-
-  String _formatDate(String dateString) {
-    try {
-      final date = DateTime.parse(dateString);
-      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-    } catch (e) {
-      return dateString;
-    }
   }
 
   void _openAddStokin() {
@@ -259,42 +257,201 @@ class _StokinListScreenState extends State<StokinListScreen> {
       showBackButton: false,
       showSidebar: true,
       isFormScreen: false,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // ========== FILTER TANGGAL SECTION ==========
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Filter Tanggal',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      _showDateFilter ? Icons.expand_less : Icons.expand_more,
-                      size: 18,
-                      color: const Color(0xFFF6A918),
-                    ),
-                    onPressed: _toggleDateFilter,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 30),
-                  ),
-                ],
-              ),
-            ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isTablet = constraints.maxWidth >= 600;
 
-            if (_showDateFilter) ...[
+          return Column(
+            children: [
+              // ========== FILTER TANGGAL SECTION ==========
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Filter Tanggal',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        _showDateFilter ? Icons.expand_less : Icons.expand_more,
+                        size: 18,
+                        color: const Color(0xFFF6A918),
+                      ),
+                      onPressed: _toggleDateFilter,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 30),
+                    ),
+                  ],
+                ),
+              ),
+
+              if (_showDateFilter) ...[
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 3,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Tanggal Mulai',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(6),
+                                    onTap: () => _selectDate(context, true),
+                                    child: Container(
+                                      height: 36,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade50,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: Colors.grey.shade300, width: 1),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.calendar_today, size: 14, color: Color(0xFFF6A918)),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: TextField(
+                                              controller: _startDateController,
+                                              style: GoogleFonts.montserrat(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.black87,
+                                              ),
+                                              decoration: const InputDecoration(
+                                                border: InputBorder.none,
+                                                isDense: true,
+                                              ),
+                                              enabled: false,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Tanggal Selesai',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(6),
+                                    onTap: () => _selectDate(context, false),
+                                    child: Container(
+                                      height: 36,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade50,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: Colors.grey.shade300, width: 1),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.calendar_today, size: 14, color: Color(0xFFF6A918)),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: TextField(
+                                              controller: _endDateController,
+                                              style: GoogleFonts.montserrat(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.black87,
+                                              ),
+                                              decoration: const InputDecoration(
+                                                border: InputBorder.none,
+                                                isDense: true,
+                                              ),
+                                              enabled: false,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 34,
+                        child: ElevatedButton.icon(
+                          onPressed: _resetDateFilter,
+                          icon: const Icon(Icons.refresh, size: 14, color: Colors.white),
+                          label: Text(
+                            'Reset ke Awal Bulan',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey.shade600,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+
+              // ========== SEARCH SECTION ==========
+              Container(
+                margin: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(10),
@@ -306,537 +463,398 @@ class _StokinListScreenState extends State<StokinListScreen> {
                     ),
                   ],
                 ),
-                child: Column(
+                child: Row(
                   children: [
-                    // Tanggal Mulai
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Tanggal Mulai',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(6),
-                                  onTap: () => _selectDate(context, true),
-                                  child: Container(
-                                    height: 36,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade50,
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: Colors.grey.shade300, width: 1),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.calendar_today, size: 14, color: Color(0xFFF6A918)),
-                                        const SizedBox(width: 6),
-                                        Expanded(
-                                          child: TextField(
-                                            controller: _startDateController,
-                                            style: GoogleFonts.montserrat(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.black87,
-                                            ),
-                                            decoration: const InputDecoration(
-                                              border: InputBorder.none,
-                                              isDense: true,
-                                            ),
-                                            enabled: false,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                    Expanded(
+                      child: Container(
+                        height: 34,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300, width: 1),
                         ),
-                        const SizedBox(width: 10),
-                        // Tanggal Selesai
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Tanggal Selesai',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(6),
-                                  onTap: () => _selectDate(context, false),
-                                  child: Container(
-                                    height: 36,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade50,
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: Colors.grey.shade300, width: 1),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.calendar_today, size: 14, color: Color(0xFFF6A918)),
-                                        const SizedBox(width: 6),
-                                        Expanded(
-                                          child: TextField(
-                                            controller: _endDateController,
-                                            style: GoogleFonts.montserrat(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.black87,
-                                            ),
-                                            decoration: const InputDecoration(
-                                              border: InputBorder.none,
-                                              isDense: true,
-                                            ),
-                                            enabled: false,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.search, size: 14, color: Colors.grey.shade500),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                decoration: InputDecoration(
+                                  hintText: 'Cari nomor/keterangan...',
+                                  hintStyle: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade500,
                                   ),
+                                  border: InputBorder.none,
+                                  isDense: true,
                                 ),
+                                style: GoogleFonts.montserrat(fontSize: 11),
+                                onChanged: _filterStokin,
                               ),
-                            ],
-                          ),
+                            ),
+                            if (_searchController.text.isNotEmpty)
+                              IconButton(
+                                icon: Icon(Icons.clear, size: 12, color: Colors.grey.shade500),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _filterStokin('');
+                                },
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 20),
+                              ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                    const SizedBox(height: 10),
-                    // Tombol Reset Filter
-                    SizedBox(
-                      width: double.infinity,
+                    const SizedBox(width: 10),
+                    Container(
                       height: 34,
                       child: ElevatedButton.icon(
-                        onPressed: _resetDateFilter,
-                        icon: const Icon(Icons.refresh, size: 14, color: Colors.white),
+                        onPressed: _openAddStokin,
+                        icon: const Icon(Icons.add, size: 14, color: Colors.white),
                         label: Text(
-                          'Reset ke Awal Bulan',
+                          'Tambah',
                           style: GoogleFonts.montserrat(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey.shade600,
+                          backgroundColor: const Color(0xFFF6A918),
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
-            ],
 
-            // ========== SEARCH SECTION - COMPACT ==========
-            Container(
-              margin: const EdgeInsets.all(12),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      height: 34,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade300, width: 1),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.search, size: 14, color: Colors.grey.shade500),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: TextField(
-                              controller: _searchController,
-                              decoration: InputDecoration(
-                                hintText: 'Cari nomor/keterangan...',
-                                hintStyle: GoogleFonts.montserrat(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade500,
-                                ),
-                                border: InputBorder.none,
-                                isDense: true,
-                              ),
-                              style: GoogleFonts.montserrat(fontSize: 11),
-                              onChanged: _filterStokin,
-                            ),
-                          ),
-                          if (_searchController.text.isNotEmpty)
-                            IconButton(
-                              icon: Icon(Icons.clear, size: 12, color: Colors.grey.shade500),
-                              onPressed: () {
-                                _searchController.clear();
-                                _filterStokin('');
-                              },
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 20),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Container(
-                    height: 34,
-                    child: ElevatedButton.icon(
-                      onPressed: _openAddStokin,
-                      icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                      label: Text(
-                        'Tambah',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFF6A918),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // ========== SUMMARY - COMPACT ==========
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Total: ${_filteredList.length} stock in',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                      Text(
-                        'Periode: ${DateFormat('dd/MM/yy').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 9,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_isLoading)
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: const Color(0xFFF6A918),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            // ========== STOCK IN LIST ==========
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFF6A918)))
-                  : _filteredList.isEmpty
-                  ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey.shade400),
-                    const SizedBox(height: 8),
-                    Text(
-                      _searchController.text.isEmpty
-                          ? 'Tidak ada data stock in\npada periode yang dipilih'
-                          : 'Stock in tidak ditemukan',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.montserrat(
-                        color: Colors.grey.shade500,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-                  : Container(
+              // ========== SUMMARY ==========
+              Container(
                 margin: const EdgeInsets.symmetric(horizontal: 12),
-                child: ListView.separated(
-                  itemCount: _filteredList.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 6),
-                  itemBuilder: (context, index) => _buildStokinCard(_filteredList[index]),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStokinCard(Map<String, dynamic> stokin) {
-    final nomor = stokin['sti_nomor']?.toString() ?? '-';
-    final tanggal = stokin['sti_tanggal']?.toString() ?? '';
-    final keterangan = stokin['sti_keterangan']?.toString() ?? '-';
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => _openEditStokin(stokin),
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Row(
-              children: [
-                // Icon
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    Icons.inventory_rounded,
-                    size: 14,
-                    color: Colors.orange.shade700,
-                  ),
-                ),
-
-                const SizedBox(width: 10),
-
-                // Details
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        nomor,
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        keterangan,
-                        style: GoogleFonts.montserrat(
-                          fontSize: 9,
-                          color: Colors.grey.shade600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 8),
-
-                // Date & Type Badge
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      _formatDate(tanggal),
-                      style: GoogleFonts.montserrat(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF6A918).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: const Color(0xFFF6A918).withOpacity(0.3),
-                          width: 1,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Total: ${_stokinList.length} stock in',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade700,
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        'STOCK IN',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w700,
+                        Text(
+                          'Periode: ${DateFormat('dd/MM/yy').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 9,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_isLoading)
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
                           color: const Color(0xFFF6A918),
                         ),
                       ),
-                    ),
                   ],
                 ),
+              ),
 
-                const SizedBox(width: 6),
+              const SizedBox(height: 8),
 
-                // ========== POPUP MENU STYLE SAMA ==========
-                PopupMenuButton(
-                  itemBuilder: (context) => [
-                    // Edit Menu dengan InkWell
-                    PopupMenuItem(
-                      value: 'edit',
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(6),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _openEditStokin(stokin);
-                          },
-                          splashColor: Colors.blue.shade100,
-                          highlightColor: Colors.blue.shade50.withOpacity(0.3),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade100,
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: Icon(Icons.edit, size: 12, color: Colors.blue.shade700),
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  'Edit',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey.shade800,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+              // ========== DATA GRID ==========
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator(color: Color(0xFFF6A918)))
+                    : _stokinList.isEmpty
+                    ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey.shade400),
+                      const SizedBox(height: 8),
+                      Text(
+                        _searchController.text.isEmpty
+                            ? 'Tidak ada data stock in\npada periode yang dipilih'
+                            : 'Stock in tidak ditemukan',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.montserrat(
+                          color: Colors.grey.shade500,
+                          fontSize: 12,
                         ),
                       ),
-                    ),
-                    // Hapus Menu dengan InkWell
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(6),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _deleteStokin(stokin);
-                          },
-                          splashColor: Colors.red.shade100,
-                          highlightColor: Colors.red.shade50.withOpacity(0.3),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.shade100,
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: Icon(Icons.delete, size: 12, color: Colors.red.shade700),
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  'Hapus',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey.shade800,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                  onSelected: (value) {
-                    // Aksi sudah ditangani di InkWell onTap
-                  },
-                  icon: Icon(Icons.more_vert, size: 16, color: Colors.grey.shade600),
-                  offset: const Offset(0, 0),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 30),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.grey.shade200, width: 1),
+                    ],
                   ),
-                  elevation: 2,
-                  color: Colors.white,
+                )
+                    : Container(
+                  margin: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SfDataGrid(
+                      controller: _dataGridController,
+                      source: _dataSource,
+                      allowColumnsResizing: true,
+                      columnResizeMode: ColumnResizeMode.onResize,
+                      columnWidthMode: ColumnWidthMode.auto,
+                      headerRowHeight: 32,
+                      rowHeight: 30,
+                      allowSorting: true,
+                      allowFiltering: true,
+                      gridLinesVisibility: GridLinesVisibility.both,
+                      headerGridLinesVisibility: GridLinesVisibility.both,
+                      selectionMode: SelectionMode.single,
+
+                      stackedHeaderRows: [
+                        StackedHeaderRow(
+                          cells: [
+                            StackedHeaderCell(
+                              columnNames: ['no', 'nomor', 'tanggal', 'keterangan', 'aksi'],
+                              child: Container(
+                                height: 12,
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 4),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Icon(Icons.filter_list, size: 10, color: Colors.grey[500]),
+                                    const SizedBox(width: 2),
+                                    Icon(Icons.unfold_more, size: 10, color: Colors.grey[500]),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      columns: [
+                        GridColumn(
+                          columnName: 'no',
+                          minimumWidth: 50,
+                          maximumWidth: 60,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'No',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'nomor',
+                          minimumWidth: 150,
+                          maximumWidth: 180,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Nomor',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'tanggal',
+                          minimumWidth: 80,
+                          maximumWidth: 100,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Tanggal',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'keterangan',
+                          minimumWidth: 250,
+                          maximumWidth: 350,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              'Keterangan',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                        GridColumn(
+                          columnName: 'aksi',
+                          minimumWidth: 80,
+                          maximumWidth: 90,
+                          label: Container(
+                            padding: const EdgeInsets.only(left: 4, top: 4),
+                            alignment: Alignment.center,
+                            child: const Text(
+                              'Aksi',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class StokinDataSource extends DataGridSource {
+  StokinDataSource({
+    required List<Map<String, dynamic>> stokinList,
+    required Function(Map<String, dynamic>) onEdit,
+    required Function(Map<String, dynamic>) onDelete,
+  }) {
+    _onEdit = onEdit;
+    _onDelete = onDelete;
+
+    _data = stokinList.asMap().entries.map((entry) {
+      final index = entry.key + 1;
+      final stokin = entry.value;
+
+      return DataGridRow(cells: [
+        DataGridCell<int>(columnName: 'no', value: index),
+        DataGridCell<String>(columnName: 'nomor', value: stokin['sti_nomor']?.toString() ?? '-'),
+        DataGridCell<String>(columnName: 'tanggal', value: _formatDate(stokin['sti_tanggal'])),
+        DataGridCell<String>(columnName: 'keterangan', value: stokin['sti_keterangan']?.toString() ?? '-'),
+        DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: stokin),
+      ]);
+    }).toList();
+  }
+
+  String _formatDate(String? dateString) {
+    if (dateString == null || dateString.isEmpty) return '-';
+    try {
+      final date = DateTime.parse(dateString);
+      return DateFormat('dd/MM/yy').format(date);
+    } catch (e) {
+      return dateString;
+    }
+  }
+
+  List<DataGridRow> _data = [];
+  late Function(Map<String, dynamic>) _onEdit;
+  late Function(Map<String, dynamic>) _onDelete;
+
+  @override
+  List<DataGridRow> get rows => _data;
+
+  @override
+  DataGridRowAdapter buildRow(DataGridRow row) {
+    return DataGridRowAdapter(
+      cells: row.getCells().map<Widget>((cell) {
+        if (cell.columnName == 'aksi') {
+          final stokin = cell.value as Map<String, dynamic>;
+          return Container(
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Tombol Edit
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: IconButton(
+                    icon: Icon(Icons.edit, size: 12, color: Colors.blue.shade700),
+                    onPressed: () => _onEdit(stokin),
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                // Tombol Delete
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: IconButton(
+                    icon: Icon(Icons.delete, size: 12, color: Colors.red.shade700),
+                    onPressed: () => _onDelete(stokin),
+                    padding: EdgeInsets.zero,
+                  ),
                 ),
               ],
             ),
+          );
+        }
+
+        return Container(
+          alignment: _getAlignment(cell.columnName),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Text(
+            cell.value.toString(),
+            textAlign: _getTextAlign(cell.columnName),
+            style: GoogleFonts.montserrat(
+              fontSize: 10,
+              fontWeight: _getFontWeight(cell.columnName),
+              color: Colors.black87,
+            ),
           ),
-        ),
-      ),
+        );
+      }).toList(),
     );
+  }
+
+  Alignment _getAlignment(String columnName) {
+    switch (columnName) {
+      case 'aksi':
+        return Alignment.center;
+      default:
+        return Alignment.centerLeft;
+    }
+  }
+
+  TextAlign _getTextAlign(String columnName) {
+    switch (columnName) {
+      case 'aksi':
+        return TextAlign.center;
+      default:
+        return TextAlign.left;
+    }
+  }
+
+  FontWeight _getFontWeight(String columnName) {
+    return FontWeight.normal;
   }
 }

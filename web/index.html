@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="RotiQ POS">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="rotiq_pos">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>RotiQ</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- CSP untuk pivot_table -->
+  <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline' data: blob:; frame-src * data: blob:;">
+
+  <script type="application/javascript" src="/assets/packages/flutter_inappwebview_web/assets/web/web_support.js" defer></script>
+
+  <script>
+    // Override keamanan untuk pivot_table (sama seperti sebelumnya)
+    (function() {
+      Object.defineProperty(HTMLIFrameElement.prototype, 'sandbox', {
+        get: function() {
+          return {
+            value: {
+              add: function() {},
+              remove: function() {},
+              supports: function() { return true; },
+              length: 0,
+              item: function() { return null; }
+            }
+          };
+        },
+        set: function(value) {},
+        configurable: true
+      });
+
+      const originalCreateElement = document.createElement;
+      document.createElement = function(tagName, options) {
+        const element = originalCreateElement.call(document, tagName, options);
+
+        if (tagName && tagName.toLowerCase() === 'iframe') {
+          setTimeout(() => {
+            try {
+              if (element.hasAttribute('sandbox')) {
+                element.removeAttribute('sandbox');
+              }
+              element.setAttribute('allow', '*');
+              element.setAttribute('allowfullscreen', 'true');
+            } catch (e) {}
+          }, 0);
+        }
+        return element;
+      };
+
+      console.log('Pivot table patches applied');
+    })();
+  </script>
+</head>
+<body>
+<!-- UNTUK DEBUG: Gunakan script src biasa -->
+<script src="flutter.js" defer></script>
+
+<script>
+  window.addEventListener('load', function(ev) {
+    if (typeof _flutter !== 'undefined' && _flutter.loader) {
+      _flutter.loader.loadEntrypoint({
+        entrypointUrl: 'main.dart.js',
+        onEntrypointLoaded: async function(engineInitializer) {
+          console.log('Initializing engine...');
+          const appRunner = await engineInitializer.initializeEngine();
+          await appRunner.runApp();
+        }
+      });
+    }
+  });
+</script>
+</body>
+</html>

@@ -63,10 +63,19 @@ dependencies:
   provider: ^6.1.2
 
   # WebSocket untuk web
-  web_socket_channel: ^2.4.2
+  web_socket_channel: ^3.0.3
 
   # Platform detection
   universal_io: ^2.2.2
+
+  syncfusion_flutter_datagrid: ^27.1.48
+  syncfusion_flutter_datagrid_export: ^27.1.48
+  syncfusion_flutter_xlsio: ^27.1.48
+  syncfusion_flutter_pdf: ^27.1.48
+  pivot_table:
+    git:
+      url: https://github.com/BoyPhanna/flutter_pivot_table.git
+  open_file: ^3.3.2
 
 dependency_overrides:
   image: ^4.0.17
@@ -93,6 +102,7 @@ flutter:
     - assets/
     - assets/icons/
     - assets/images/
+    - packages/pivot_table/assets/
 
 flutter_launcher_icons:
   android: true

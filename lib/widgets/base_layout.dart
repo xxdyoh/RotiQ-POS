@@ -9,7 +9,6 @@ import '../models/user.dart';
 import '../routes/app_routes.dart';
 import 'sidebar_widget.dart';
 import '../services/fullscreen_service.dart';
-import '../utils/responsive_helper.dart';
 
 class BaseLayout extends StatefulWidget {
   final Widget child;
@@ -38,6 +37,12 @@ class _BaseLayoutState extends State<BaseLayout> {
   String _currentDate = '';
   late Timer _timer;
 
+  final Color _primaryDark = const Color(0xFF2C3E50);
+  final Color _accentGold = const Color(0xFFF6A918);
+  final Color _bgLight = const Color(0xFFFAFAFA);
+  final Color _bgCard = Colors.white;
+  final Color _borderColor = const Color(0xFFE2E8F0);
+
   static const List<String> _mainScreens = [
     AppRoutes.dashboard,
     AppRoutes.setengahJadiList,
@@ -46,6 +51,12 @@ class _BaseLayoutState extends State<BaseLayout> {
     AppRoutes.discountList,
     AppRoutes.salesByItem,
     AppRoutes.salesByInvoice,
+    AppRoutes.salesOrderList,
+    AppRoutes.returnProductionList,
+    AppRoutes.voidList,
+    AppRoutes.setoran,
+    AppRoutes.lapStock,
+    AppRoutes.stockSetengahJadi,
   ];
 
   @override
@@ -89,8 +100,6 @@ class _BaseLayoutState extends State<BaseLayout> {
       return widget.child;
     }
 
-    // Untuk web/desktop: selalu pakai sidebar jika lebar > 768
-    // Untuk mobile: pakai AppBar saja
     final isWideScreen = MediaQuery.of(context).size.width >= 768;
 
     if (isWideScreen && widget.showSidebar) {
@@ -104,12 +113,11 @@ class _BaseLayoutState extends State<BaseLayout> {
     final user = SessionManager.getCurrentUser();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: _bgLight,
       body: SafeArea(
         bottom: false,
         child: Row(
           children: [
-            // SIDEBAR - Lebar tetap 200px
             ValueListenableBuilder<bool>(
               valueListenable: SidebarManager.sidebarVisible,
               builder: (context, isSidebarVisible, child) {
@@ -117,10 +125,10 @@ class _BaseLayoutState extends State<BaseLayout> {
                   duration: const Duration(milliseconds: 300),
                   width: isSidebarVisible ? 200 : 0,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: _bgCard,
                     border: Border(
                       right: BorderSide(
-                        color: Colors.grey.shade200,
+                        color: _borderColor,
                         width: 1,
                       ),
                     ),
@@ -134,15 +142,13 @@ class _BaseLayoutState extends State<BaseLayout> {
                 );
               },
             ),
-
             Expanded(
               child: Column(
                 children: [
                   _buildDesktopHeader(context, user),
-
                   Expanded(
                     child: Container(
-                      color: Colors.white,
+                      color: _bgLight,
                       child: widget.child,
                     ),
                   ),
@@ -160,105 +166,137 @@ class _BaseLayoutState extends State<BaseLayout> {
       valueListenable: SidebarManager.sidebarVisible,
       builder: (context, isSidebarVisible, child) {
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: _bgCard,
             border: Border(
               bottom: BorderSide(
-                color: Colors.grey.shade200,
+                color: _borderColor,
                 width: 1,
               ),
             ),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      isSidebarVisible
-                          ? Icons.menu_open_rounded
-                          : Icons.menu_rounded,
-                      size: 22,
-                      color: Colors.grey.shade700,
-                    ),
-                    onPressed: SidebarManager.toggle,
+              InkWell(
+                onTap: SidebarManager.toggle,
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: _bgLight,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: _borderColor),
                   ),
-                  const SizedBox(width: 8),
-
-                  if (widget.showBackButton && !_isMainScreen)
-                    IconButton(
-                      icon: Icon(
-                          Icons.arrow_back_rounded,
-                          size: 20,
-                          color: Colors.grey.shade600
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-
-                  if (widget.showBackButton && !_isMainScreen)
-                    const SizedBox(width: 8),
-
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.title,
-                        style: GoogleFonts.montserrat(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      if (!widget.isFormScreen) const SizedBox(height: 2),
-                      if (!widget.isFormScreen)
-                        Text(
-                          'Selamat ${_getGreeting()} ${user?.kduser ?? 'Kasir'}',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 11,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.grey.shade200,
-                    width: 1,
+                  child: Icon(
+                    isSidebarVisible ? Icons.menu_open_rounded : Icons.menu_rounded,
+                    size: 16,
+                    color: _primaryDark,
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+              ),
+              if (widget.showBackButton && !_isMainScreen) ...[
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => Navigator.pop(context),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: _bgLight,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: _borderColor),
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back_rounded,
+                      size: 16,
+                      color: Color(0xFF2C3E50),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Row(
                   children: [
-                    // WAKTU REAL-TIME
+                    Text(
+                      widget.title,
+                      style: GoogleFonts.montserrat(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF1A202C),
+                      ),
+                    ),
+                    if (!widget.isFormScreen && user != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 4,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _accentGold.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: _accentGold.withOpacity(0.2)),
+                        ),
+                        child: Text(
+                          '${_getGreeting()}, ${user.kduser}',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: _accentGold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _bgLight,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: _borderColor),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.access_time, size: 12, color: Colors.grey.shade600),
+                    const SizedBox(width: 6),
                     Text(
                       _currentTime,
                       style: GoogleFonts.montserrat(
                         fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.grey.shade800,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF1A202C),
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    // TANGGAL
+                    const SizedBox(width: 6),
+                    Container(width: 1, height: 12, color: Colors.grey.shade300),
+                    const SizedBox(width: 6),
                     Text(
                       _currentDate,
                       style: GoogleFonts.montserrat(
-                        fontSize: 10,
+                        fontSize: 11,
                         color: Colors.grey.shade600,
                       ),
                     ),
                   ],
                 ),
               ),
+              if (widget.actions != null) ...[
+                const SizedBox(width: 8),
+                ...widget.actions!,
+              ],
             ],
           ),
         );
@@ -268,42 +306,29 @@ class _BaseLayoutState extends State<BaseLayout> {
 
   Widget _buildMobileLayout(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      extendBody: true,
-      extendBodyBehindAppBar: true,
-      appBar: _buildMobileAppBar(context),
-      body: Container(
-        color: Colors.white,
-        child: widget.child,
-      ),
-    );
-  }
-
-  AppBar _buildMobileAppBar(BuildContext context) {
-    return AppBar(
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black87,
-      elevation: 0,
-      leading: widget.showBackButton
-          ? IconButton(
-        icon: const Icon(Icons.arrow_back, size: 20),
-        onPressed: () => Navigator.pop(context),
-      )
-          : null,
-      title: Text(
-        widget.title,
-        style: GoogleFonts.montserrat(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: Colors.black87,
+      backgroundColor: _bgLight,
+      appBar: AppBar(
+        backgroundColor: _bgCard,
+        elevation: 0,
+        leading: widget.showBackButton
+            ? IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, size: 18),
+          onPressed: () => Navigator.pop(context),
+          color: _primaryDark,
+        )
+            : null,
+        title: Text(
+          widget.title,
+          style: GoogleFonts.montserrat(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF1A202C),
+          ),
         ),
+        actions: widget.actions,
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
-      actions: widget.actions,
-      systemOverlayStyle: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarBrightness: Brightness.dark,
-        statusBarIconBrightness: Brightness.dark,
-      ),
+      body: widget.child,
     );
   }
 

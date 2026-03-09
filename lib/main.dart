@@ -15,9 +15,12 @@ import 'screens/stokstjin_form_screen.dart';
 import 'screens/uangmuka_form_screen.dart';
 import 'screens/return_form_screen.dart';
 import 'screens/jurnal_form_screen.dart';
+import 'screens/minta_form_screen.dart';
 import 'services/session_manager.dart';
 import 'services/universal_printer_service.dart';
 import 'services/receipt_service.dart';
+import 'screens/serah_terima_form_screen.dart';
+import 'screens/do_form_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -214,6 +217,33 @@ class MyApp extends StatelessWidget {
               builder: (context) => JurnalFormScreen(
                 jurnalHeader: args?['jurnalHeader'],
                 onJurnalSaved: args?['onSaved'],
+              ),
+            );
+
+          case AppRoutes.mintaForm:
+            final args = settings.arguments as Map<String, dynamic>?;
+            return MaterialPageRoute(
+              builder: (context) => MintaFormScreen(
+                mintaHeader: args?['mintaHeader'],
+                onMintaSaved: args?['onSaved'],
+              ),
+            );
+
+          case AppRoutes.serahTerimaForm:
+            final args = settings.arguments as Map<String, dynamic>?;
+            return MaterialPageRoute(
+              builder: (context) => SerahTerimaFormScreen(
+                serahTerimaHeader: args?['serahTerimaHeader'],
+                onSerahTerimaSaved: args?['onSaved'] ?? () {},
+              ),
+            );
+
+          case AppRoutes.doForm:
+            final args = settings.arguments as Map<String, dynamic>?;
+            return MaterialPageRoute(
+              builder: (context) => DoFormScreen(
+                doHeader: args?['doHeader'],
+                onDoSaved: args?['onSaved'] ?? () {},
               ),
             );
 

@@ -199,31 +199,31 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   void _handleDpInput() {
-    final amount = double.tryParse(_dpAmountController.text.replaceAll('.', '').replaceAll(',', '')) ?? 0;
-    final nomor = _dpNumberController.text.trim();
-
-    if (nomor.isEmpty || amount <= 0) return;
-
-    final dpIndex = _paymentItems.indexWhere((p) => p.type == PaymentType.dp);
-    if (dpIndex >= 0) {
-      setState(() {
-        _paymentItems[dpIndex] = PaymentItem(
-          type: PaymentType.dp,
-          subType: 'Uang Muka',
-          amount: amount,
-          reference: nomor,
-        );
-      });
-    } else {
-      setState(() {
-        _paymentItems.add(PaymentItem(
-          type: PaymentType.dp,
-          subType: 'Uang Muka',
-          amount: amount,
-          reference: nomor,
-        ));
-      });
-    }
+    // final amount = double.tryParse(_dpAmountController.text.replaceAll('.', '').replaceAll(',', '')) ?? 0;
+    // final nomor = _dpNumberController.text.trim();
+    //
+    // if (nomor.isEmpty || amount <= 0) return;
+    //
+    // final dpIndex = _paymentItems.indexWhere((p) => p.type == PaymentType.dp);
+    // if (dpIndex >= 0) {
+    //   setState(() {
+    //     _paymentItems[dpIndex] = PaymentItem(
+    //       type: PaymentType.dp,
+    //       subType: 'Uang Muka',
+    //       amount: amount,
+    //       reference: nomor,
+    //     );
+    //   });
+    // } else {
+    //   setState(() {
+    //     _paymentItems.add(PaymentItem(
+    //       type: PaymentType.dp,
+    //       subType: 'Uang Muka',
+    //       amount: amount,
+    //       reference: nomor,
+    //     ));
+    //   });
+    // }
   }
 
   void _handlePiutangInput(String value) {
@@ -260,8 +260,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
         _edcController.clear();
         break;
       case PaymentType.dp:
-        _dpNumberController.clear();
-        _dpAmountController.clear();
+        _dpNumberController.clear(); // Clear nomor DP
+        // Tidak perlu clear _dpAmountController karena sudah tidak digunakan
         break;
       case PaymentType.piutang:
         _piutangController.clear();
@@ -368,14 +368,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         fontWeight: FontWeight.w800,
                         color: Colors.white,
                         letterSpacing: 0.5,
-                      ),
-                    ),
-                    Text(
-                      'Customer: ${widget.customer.name}',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withOpacity(0.85),
                       ),
                     ),
                   ],
@@ -1113,11 +1105,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'Pembayaran Cash',
           style: GoogleFonts.montserrat(fontSize: 18, fontWeight: FontWeight.w700, color: _textPrimary),
         ),
-        SizedBox(height: 4),
-        Text(
-          'Masukkan jumlah cash yang diterima',
-          style: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary),
-        ),
         SizedBox(height: 20),
 
         Container(
@@ -1190,24 +1177,102 @@ class _PaymentScreenState extends State<PaymentScreen> {
         SizedBox(height: 20),
         Text('Quick Amount:', style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w600, color: _textPrimary)),
         SizedBox(height: 12),
-        GridView.count(
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          crossAxisCount: 3,
-          childAspectRatio: 2.2,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          children: [
-            _buildQuickAmountCard(50000),
-            _buildQuickAmountCard(100000),
-            _buildQuickAmountCard(200000),
-            _buildQuickAmountCard(500000),
-            _buildQuickAmountCard(1000000),
-            _buildQuickAmountCard(0, label: '+ CUSTOM'),
-          ],
+
+        _buildClosestAmounts(),
+      ],
+    );
+  }
+
+  List<double> _getClosestDenominations(double amount) {
+    const List<double> denominations = [1000, 2000, 5000, 10000, 20000, 50000, 100000];
+
+    if (amount <= 0) return [10000, 20000, 50000];
+
+    List<double> greaterOrEqual = denominations.where((denom) => denom >= amount).toList();
+
+    if (greaterOrEqual.length < 3) {
+      final sortedDenoms = [...denominations]..sort((a, b) => b.compareTo(a));
+      for (final denom in sortedDenoms) {
+        if (!greaterOrEqual.contains(denom)) {
+          greaterOrEqual.add(denom);
+          if (greaterOrEqual.length >= 3) break;
+        }
+      }
+    }
+
+    greaterOrEqual.sort((a, b) {
+      final diffA = (a - amount).abs();
+      final diffB = (b - amount).abs();
+      return diffA.compareTo(diffB);
+    });
+
+    return greaterOrEqual.take(3).toList();
+  }
+
+  Widget _buildClosestAmounts() {
+    final closestAmounts = _getClosestDenominations(_remainingBalance > 0 ? _remainingBalance : _grandTotal);
+
+    return Row(
+      children: [
+        Expanded(
+          child: _buildClosestAmountCard(closestAmounts[0], 'TERDEKAT'),
+        ),
+        SizedBox(width: 8),
+        Expanded(
+          child: _buildClosestAmountCard(closestAmounts[1], 'DEKAT'),
+        ),
+        SizedBox(width: 8),
+        Expanded(
+          child: _buildClosestAmountCard(closestAmounts[2], 'MENDATANGI'),
         ),
       ],
     );
+  }
+
+  Widget _buildClosestAmountCard(double amount, String label) {
+    return Material(
+      color: _primaryDark.withOpacity(0.05),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: () {
+          final current = double.tryParse(_cashController.text.replaceAll('.', '').replaceAll(',', '')) ?? 0;
+          _cashController.text = (current + amount).toStringAsFixed(0);
+          _handleCashInput((current + amount).toStringAsFixed(0));
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            border: Border.all(color: _accentGold.withOpacity(0.3)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: [
+              Text(
+                currencyFormat.format(amount),
+                style: GoogleFonts.montserrat(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: _primaryDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildDenominationCards() {
+    const commonDenominations = [10000.0, 20000.0, 50000.0, 100000.0, 500000.0, 0.0];
+    const labels = ['10K', '20K', '50K', '100K', '500K', '+ CUSTOM'];
+
+    return List.generate(commonDenominations.length, (index) {
+      return _buildQuickAmountCard(
+        commonDenominations[index],
+        label: labels[index],
+      );
+    });
   }
 
   Widget _buildQuickAmountCard(double amount, {String? label}) {
@@ -1248,11 +1313,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
         Text(
           'Pembayaran EDC',
           style: GoogleFonts.montserrat(fontSize: 18, fontWeight: FontWeight.w700, color: _textPrimary),
-        ),
-        SizedBox(height: 4),
-        Text(
-          'Pilih jenis EDC dan masukkan jumlah',
-          style: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary),
         ),
         SizedBox(height: 20),
 
@@ -1338,6 +1398,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Widget _buildDpInput() {
+    // Cek apakah sudah ada DP di payment items
+    final dpPayment = _paymentItems.firstWhere(
+          (p) => p.type == PaymentType.dp,
+      orElse: () => PaymentItem(type: PaymentType.dp, amount: 0),
+    );
+
+    final hasDp = dpPayment.amount > 0;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1345,80 +1413,144 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'Pembayaran DP (Uang Muka)',
           style: GoogleFonts.montserrat(fontSize: 18, fontWeight: FontWeight.w700, color: _textPrimary),
         ),
-        SizedBox(height: 4),
-        Text(
-          'Gunakan uang muka yang sudah ada',
-          style: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary),
-        ),
         SizedBox(height: 20),
 
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Nomor Uang Muka:', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600, color: _textPrimary)),
-            SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _dpNumberController,
-                    decoration: InputDecoration(
-                      hintText: 'Masukkan nomor uang muka...',
-                      border: OutlineInputBorder(borderSide: BorderSide(color: _borderColor)),
-                      prefixIcon: Icon(Icons.numbers, color: _textSecondary),
-                      focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: _accentPurple)),
+        if (!hasDp) ...[
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Nomor Uang Muka:', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600, color: _textPrimary)),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _dpNumberController,
+                      enabled: false, // Disable karena hanya bisa dipilih dari pencarian
+                      decoration: InputDecoration(
+                        hintText: 'Klik tombol CARI untuk memilih uang muka...',
+                        border: OutlineInputBorder(borderSide: BorderSide(color: _borderColor)),
+                        prefixIcon: Icon(Icons.numbers, color: _textSecondary),
+                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: _accentPurple)),
+                      ),
                     ),
                   ),
-                ),
-                SizedBox(width: 8),
-                Container(
-                  width: 90,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: _accentPurple,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: _showDpSearchModal,
+                  SizedBox(width: 8),
+                  Container(
+                    width: 90,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: _accentPurple,
                       borderRadius: BorderRadius.circular(8),
-                      child: Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.search_rounded, color: Colors.white, size: 16),
-                            SizedBox(width: 4),
-                            Text('CARI', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
-                          ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _showDpSearchModal,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Center(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.search_rounded, color: Colors.white, size: 16),
+                              SizedBox(width: 4),
+                              Text('CARI', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
+                ],
+              ),
+            ],
+          ),
+        ] else ...[
+          // Tampilkan info DP yang sudah dipilih
+          Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _accentPurple.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _accentPurple.withOpacity(0.3)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: _accentPurple,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Icons.payment_rounded, color: Colors.white, size: 20),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            dpPayment.reference ?? 'No Reference',
+                            style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w700, color: _textPrimary),
+                          ),
+                          Text(
+                            'Uang Muka',
+                            style: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          currencyFormat.format(dpPayment.amount),
+                          style: GoogleFonts.montserrat(fontSize: 16, fontWeight: FontWeight.w800, color: _accentPurple),
+                        ),
+                        SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: () => _removePayment(PaymentType.dp),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _accentCoral.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete_outline_rounded, size: 12, color: _accentCoral),
+                                SizedBox(width: 4),
+                                Text('Hapus', style: GoogleFonts.montserrat(fontSize: 10, color: _accentCoral)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-        SizedBox(height: 20),
-
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Jumlah DP:', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600, color: _textPrimary)),
-            SizedBox(height: 8),
-            TextField(
-              controller: _dpAmountController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                prefixText: 'Rp ',
-                border: OutlineInputBorder(borderSide: BorderSide(color: _borderColor)),
-                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: _accentPurple)),
+          ),
+          SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _showDpSearchModal,
+              icon: Icon(Icons.swap_horiz_rounded, size: 14),
+              label: Text('GANTI DP LAIN'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _accentPurple,
+                side: BorderSide(color: _accentPurple),
+                padding: EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              onChanged: (value) => _handleDpInput(),
             ),
-          ],
-        ),
+          ),
+        ],
       ],
     );
   }
@@ -1430,11 +1562,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
         Text(
           'Pembayaran Piutang',
           style: GoogleFonts.montserrat(fontSize: 18, fontWeight: FontWeight.w700, color: _textPrimary),
-        ),
-        SizedBox(height: 4),
-        Text(
-          'Catat sebagai piutang customer',
-          style: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary),
         ),
         SizedBox(height: 20),
 
@@ -1532,14 +1659,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
                       letterSpacing: 0.5,
-                    ),
-                  ),
-                  Text(
-                    'Customer: ${widget.customer.name}',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white.withOpacity(0.85),
                     ),
                   ),
                 ],
@@ -2088,10 +2207,28 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
 
     if (selected != null) {
-      setState(() {
-        _dpNumberController.text = selected.umNomor;
-        _dpAmountController.text = selected.umNilai.toStringAsFixed(0);
-      });
+      _dpNumberController.text = selected.umNomor;
+
+      final dpIndex = _paymentItems.indexWhere((p) => p.type == PaymentType.dp);
+      if (dpIndex >= 0) {
+        setState(() {
+          _paymentItems[dpIndex] = PaymentItem(
+            type: PaymentType.dp,
+            subType: 'Uang Muka',
+            amount: selected.umNilai,
+            reference: selected.umNomor,
+          );
+        });
+      } else {
+        setState(() {
+          _paymentItems.add(PaymentItem(
+            type: PaymentType.dp,
+            subType: 'Uang Muka',
+            amount: selected.umNilai,
+            reference: selected.umNomor,
+          ));
+        });
+      }
     }
   }
 }
