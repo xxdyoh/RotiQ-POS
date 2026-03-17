@@ -14,7 +14,7 @@ class ApiService {
   static const String baseUrl = 'http://103.103.22.7:8094';
 
   static String? _token;
-  static Cabang? _currentCabang;  
+  static Cabang? _currentCabang;
 
   static void setToken(String token) {
     _token = token;
@@ -128,6 +128,7 @@ class ApiService {
             'success': true,
             'token': data['data']['token'],
             'user': user,
+            'permissions': data['data']['permissions'] ?? {},
           };
         } else {
           return {
@@ -326,7 +327,7 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         List<Product> products = (data['data'] as List)
-            .map((json) => Product.fromJsonMinimal(json)) // Pakai factory baru
+            .map((json) => Product.fromJsonMinimal(json))
             .toList();
         return products;
       } else {
@@ -413,7 +414,103 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> getData(String endpoint) async {
+    try {
+      final headers = await _getHeadersWithCabang();
+      final response = await http.get(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: headers,
+      );
 
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {
+          'success': false,
+          'message': 'HTTP ${response.statusCode}: ${response.body}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> post(String endpoint, Map<String, dynamic> data) async {
+    try {
+      final headers = await _getHeadersWithCabang();
+      final response = await http.post(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: headers,
+        body: jsonEncode(data),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body);
+      } else {
+        return {
+          'success': false,
+          'message': 'HTTP ${response.statusCode}: ${response.body}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> put(String endpoint, Map<String, dynamic> data) async {
+    try {
+      final headers = await _getHeadersWithCabang();
+      final response = await http.put(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: headers,
+        body: jsonEncode(data),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {
+          'success': false,
+          'message': 'HTTP ${response.statusCode}: ${response.body}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> delete(String endpoint) async {
+    try {
+      final headers = await _getHeadersWithCabang();
+      final response = await http.delete(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {
+          'success': false,
+          'message': 'HTTP ${response.statusCode}: ${response.body}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
 
   static Future<String?> getToken() async {
     return _token;

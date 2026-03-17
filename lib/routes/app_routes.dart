@@ -31,6 +31,7 @@ import '../screens/serah_terima_list_screen.dart';
 import '../screens/spk_list_screen.dart';
 import '../screens/do_form_screen.dart';
 import '../screens/do_list_screen.dart';
+import '../screens/user_permission_screen.dart';
 
 class AppRoutes {
   static const String dashboard = '/dashboard';
@@ -84,6 +85,8 @@ class AppRoutes {
 
   static const String spkList = '/spk';
 
+  static const String userPermissions = '/user-permissions';
+
   static Map<String, WidgetBuilder> get routes {
     return {
       dashboard: (context) => DashboardScreen(),
@@ -134,6 +137,7 @@ class AppRoutes {
       // Utility
       connectPrinter: (context) => PrinterSettingsScreen(),
       settingPrinter: (context) => PrinterConfigScreen(),
+      userPermissions: (context) => UserPermissionScreen(),
     };
   }
 

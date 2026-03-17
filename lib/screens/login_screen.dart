@@ -427,16 +427,17 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       if (result['success']) {
         final user = result['user'] as User;
         final token = result['token'] as String;
+        final permissions = result['permissions'] as Map<String, dynamic>?;
 
-        SessionManager.saveSession(token, user, _selectedCabang!);
+        SessionManager.saveSession(token, user, _selectedCabang!, permissions: permissions);
 
-        final bool isAdmin = (user.kduser ?? '').toLowerCase() == 'admin';
+        final bool isKasir = (user.nmuser ?? '').toUpperCase().contains('KASIR');
 
         if (mounted) {
-          if (isAdmin) {
-            Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-          } else {
+          if (isKasir) {
             Navigator.pushReplacementNamed(context, AppRoutes.pos);
+          } else {
+            Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
           }
         }
       } else {

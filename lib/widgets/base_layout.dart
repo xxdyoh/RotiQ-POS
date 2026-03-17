@@ -94,9 +94,9 @@ class _BaseLayoutState extends State<BaseLayout> {
   @override
   Widget build(BuildContext context) {
     final user = SessionManager.getCurrentUser();
-    final isAdmin = user?.kduser?.toLowerCase() == 'admin';
+    final bool isKasir = (user?.nmuser ?? '').toUpperCase().contains('KASIR');
 
-    if (!isAdmin && widget.title.toLowerCase().contains('pos')) {
+    if (isKasir && widget.title.toLowerCase().contains('pos')) {
       return widget.child;
     }
 
@@ -249,7 +249,7 @@ class _BaseLayoutState extends State<BaseLayout> {
                           border: Border.all(color: _accentGold.withOpacity(0.2)),
                         ),
                         child: Text(
-                          '${_getGreeting()}, ${user.kduser}',
+                          '${_getGreeting()}, ${user.nmuser}',
                           style: GoogleFonts.montserrat(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,

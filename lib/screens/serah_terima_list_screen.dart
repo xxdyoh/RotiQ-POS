@@ -7,6 +7,7 @@ import '../widgets/base_layout.dart';
 import '../routes/app_routes.dart';
 import 'serah_terima_form_screen.dart';
 import '../services/spk_service.dart';
+import '../utils/responsive_helper.dart';
 
 class SerahTerimaListScreen extends StatefulWidget {
   const SerahTerimaListScreen({super.key});
@@ -15,37 +16,82 @@ class SerahTerimaListScreen extends StatefulWidget {
   State<SerahTerimaListScreen> createState() => _SerahTerimaListScreenState();
 }
 
-class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
-  final TextEditingController _searchController = TextEditingController();
+class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> with SingleTickerProviderStateMixin {
+  final GlobalKey<SfDataGridState> _key = GlobalKey<SfDataGridState>();
+  final DataGridController _dataGridController = DataGridController();
+
+  // Warna modern dari StokinListScreen
+  final Color _primaryDark = const Color(0xFF2C3E50);
+  final Color _primaryLight = const Color(0xFF34495E);
+  final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _accentCoral = const Color(0xFFFF6B6B);
+  final Color _accentSky = const Color(0xFF4CC9F0);
+  final Color _bgSoft = const Color(0xFFF8FAFC);
+  final Color _surfaceWhite = Colors.white;
+  final Color _textDark = const Color(0xFF1A202C);
+  final Color _textMedium = const Color(0xFF718096);
+  final Color _textLight = const Color(0xFFA0AEC0);
+  final Color _borderSoft = const Color(0xFFE2E8F0);
+  final Color _shadowColor = const Color(0xFF2C3E50).withOpacity(0.1);
+
+  // Soft versions
+  final Color _primarySoft = const Color(0xFF2C3E50).withOpacity(0.1);
+  final Color _accentGoldSoft = const Color(0xFFF6A918).withOpacity(0.1);
+  final Color _accentMintSoft = const Color(0xFF06D6A0).withOpacity(0.1);
+  final Color _accentCoralSoft = const Color(0xFFFF6B6B).withOpacity(0.1);
+  final Color _accentSkySoft = const Color(0xFF4CC9F0).withOpacity(0.1);
+
+  late Map<String, double> _columnWidths = {
+    'no': 60,
+    'nomor': 180,
+    'tanggal': 100,
+    'spk_nomor': 160,
+    'keterangan': 300,
+    'aksi': 90,
+  };
+
   bool _isLoading = false;
   bool _showDateFilter = false;
   List<Map<String, dynamic>> _serahTerimaList = [];
 
+  // Filter tanggal
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now();
   final TextEditingController _startDateController = TextEditingController();
   final TextEditingController _endDateController = TextEditingController();
 
-  final DataGridController _dataGridController = DataGridController();
   late SerahTerimaDataSource _dataSource;
+
+  int _totalFilteredSerahTerima = 0;
+
+  // Animation
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+
+    // Animation
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    _animationController.forward();
+
     _endDate = DateTime.now();
     _startDate = DateTime(_endDate.year, _endDate.month, 1);
     _updateDateControllers();
-    _dataSource = SerahTerimaDataSource(
-      serahTerimaList: [],
-      onEdit: _openEditSerahTerima,
-      onDelete: _deleteSerahTerima,
-    );
     _loadSerahTerimaData();
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _animationController.dispose();
     _startDateController.dispose();
     _endDateController.dispose();
     super.dispose();
@@ -73,43 +119,89 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
     setState(() => _isLoading = true);
     try {
       final data = await SerahTerimaService.getSerahTerimaList(
-        search: _searchController.text.isEmpty ? null : _searchController.text,
+        search: null,
         startDate: _formatDateForApi(_startDate),
         endDate: _formatDateForApi(_endDate),
       );
+
       setState(() {
         _serahTerimaList = data;
+        _totalFilteredSerahTerima = data.length;
         _dataSource = SerahTerimaDataSource(
-          serahTerimaList: _serahTerimaList,
+          serahTerimaList: data,
           onEdit: _openEditSerahTerima,
           onDelete: _deleteSerahTerima,
+          primaryDark: _primaryDark,
+          accentGold: _accentGold,
+          accentMint: _accentMint,
+          accentCoral: _accentCoral,
+          accentSky: _accentSky,
+          accentMintSoft: _accentMintSoft,
+          borderSoft: _borderSoft,
+          bgSoft: _bgSoft,
+          textDark: _textDark,
+          textMedium: _textMedium,
+          textLight: _textLight,
+          formatDate: _formatDate,
         );
       });
     } catch (e) {
-      _showSnackbar('Gagal memuat data serah terima: ${e.toString()}', Colors.red);
+      _showToast('Gagal memuat data serah terima: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  void _filterSerahTerima(String query) {
-    _loadSerahTerimaData();
+  void _onFilterChanged(DataGridFilterChangeDetails details) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_dataSource.effectiveRows != null) {
+        final filteredRows = _dataSource.effectiveRows!;
+        setState(() {
+          _totalFilteredSerahTerima = filteredRows.length;
+        });
+      }
+    });
   }
 
-  void _showSnackbar(String message, Color color) {
+  // Modern Toast
+  void _showToast(String message, {required ToastType type}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(color == Colors.green ? Icons.check_circle : Icons.error_outline, color: Colors.white, size: 16),
-            const SizedBox(width: 6),
-            Text(message, style: GoogleFonts.montserrat(fontSize: 12)),
-          ],
+        content: Container(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Icon(
+                type == ToastType.success ? Icons.check_circle_rounded :
+                type == ToastType.error ? Icons.error_rounded :
+                Icons.info_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: GoogleFonts.montserrat(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        backgroundColor: color,
+        backgroundColor: type == ToastType.success ? _accentMint :
+        type == ToastType.error ? _accentCoral :
+        _accentSky,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -123,8 +215,13 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(primary: Color(0xFFF6A918), onPrimary: Colors.white),
-            dialogBackgroundColor: Colors.white,
+            colorScheme: ColorScheme.light(
+              primary: _primaryDark,
+              onPrimary: Colors.white,
+              surface: _surfaceWhite,
+              onSurface: _textDark,
+            ),
+            dialogBackgroundColor: _surfaceWhite,
           ),
           child: child!,
         );
@@ -135,29 +232,24 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
       setState(() {
         if (isStartDate) {
           _startDate = picked;
-          if (_startDate.isAfter(_endDate)) _endDate = _startDate;
+          if (_startDate.isAfter(_endDate)) {
+            _endDate = _startDate;
+          }
         } else {
           _endDate = picked;
-          if (_endDate.isBefore(_startDate)) _startDate = _endDate;
+          if (_endDate.isBefore(_startDate)) {
+            _startDate = _endDate;
+          }
         }
         _updateDateControllers();
       });
-      _loadSerahTerimaData();
     }
   }
 
-  void _resetDateFilter() {
-    setState(() {
-      _startDate = DateTime.now();
-      _endDate = DateTime.now();
-      _startDate = DateTime(_endDate.year, _endDate.month, 1);
-      _updateDateControllers();
-      _loadSerahTerimaData();
-    });
-  }
-
   void _toggleDateFilter() {
-    setState(() => _showDateFilter = !_showDateFilter);
+    setState(() {
+      _showDateFilter = !_showDateFilter;
+    });
   }
 
   void _openAddSerahTerima() {
@@ -187,12 +279,46 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
-            const SizedBox(width: 8),
-            Text('Hapus Serah Terima?', style: GoogleFonts.montserrat(fontSize: 14)),
-          ],
+        titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+        actionsPadding: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _accentCoralSoft,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _accentCoral.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.warning_amber_rounded,
+                  color: _accentCoral,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Hapus Serah Terima',
+                style: GoogleFonts.montserrat(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: _textDark,
+                ),
+              ),
+            ],
+          ),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -200,54 +326,129 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
           children: [
             Text(
               'Apakah Anda yakin ingin menghapus:',
-              style: GoogleFonts.montserrat(fontSize: 12),
+              style: GoogleFonts.montserrat(
+                fontSize: 12,
+                color: _textMedium,
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(6),
+                color: _bgSoft,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _borderSoft),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     serahTerima['stbj_nomor'],
-                    style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: GoogleFonts.montserrat(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _textDark,
+                    ),
                   ),
+                  const SizedBox(height: 4),
                   Text(
                     'Tanggal: ${_formatDate(serahTerima['stbj_tanggal'])}',
-                    style: GoogleFonts.montserrat(fontSize: 11, color: Colors.grey.shade600),
+                    style: GoogleFonts.montserrat(
+                      fontSize: 11,
+                      color: _textMedium,
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-            Text(
-              'Catatan: Hanya dapat menghapus data dengan tanggal yang sama dengan tanggal server.',
-              style: GoogleFonts.montserrat(fontSize: 11, color: Colors.orange.shade800, fontStyle: FontStyle.italic),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _accentGoldSoft,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: _accentGold.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 14,
+                    color: _accentGold,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Catatan: Hanya dapat menghapus data dengan tanggal yang sama dengan tanggal server.',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 11,
+                        color: _accentGold,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 12, color: Colors.grey[600])),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _performDelete(serahTerima);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
-            child: Text('Hapus', style: GoogleFonts.montserrat(fontSize: 12, color: Colors.white)),
+            child: Text(
+              'Batal',
+              style: GoogleFonts.montserrat(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: _textMedium,
+              ),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [_accentCoral, _accentCoral.withOpacity(0.8)],
+              ),
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: _accentCoral.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _performDelete(serahTerima);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                shadowColor: Colors.transparent,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(
+                'Hapus',
+                style: GoogleFonts.montserrat(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ),
           ),
         ],
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -257,346 +458,137 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
     try {
       final result = await SerahTerimaService.deleteSerahTerima(serahTerima['stbj_nomor'].toString());
       if (result['success']) {
-        _showSnackbar(result['message'], Colors.green);
+        _showToast(result['message'], type: ToastType.success);
         await _loadSerahTerimaData();
       } else {
-        _showSnackbar(result['message'], Colors.red);
+        _showToast(result['message'], type: ToastType.error);
       }
     } catch (e) {
-      _showSnackbar('Error: ${e.toString()}', Colors.red);
+      _showToast('Error: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  void _showDetailBottomSheet(Map<String, dynamic> serahTerima) {
-    showModalBottomSheet(
+  void _showItemDetailDialog(Map<String, dynamic> serahTerima) {
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => FutureBuilder<Map<String, dynamic>>(
-        future: SerahTerimaService.getSerahTerimaDetail(serahTerima['stbj_nomor']),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.85,
-              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-              child: const Center(child: CircularProgressIndicator(color: Color(0xFFF6A918))),
-            );
-          }
-          if (snapshot.hasError || !snapshot.hasData) {
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.85,
-              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.error_outline, size: 40, color: Colors.grey.shade400),
-                    const SizedBox(height: 8),
-                    Text('Gagal memuat detail', style: GoogleFonts.montserrat(color: Colors.grey.shade600)),
-                  ],
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(32),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Container(
+          width: 900,
+          height: 600,
+          decoration: BoxDecoration(
+            color: _surfaceWhite,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            children: [
+              // Header dengan gradient
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [_primaryDark, _primaryLight],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
                 ),
-              ),
-            );
-          }
-          final data = snapshot.data!;
-          final header = data['header'];
-          final details = List<Map<String, dynamic>>.from(data['details']);
-          return _buildDetailBottomSheet(header, details);
-        },
-      ),
-    );
-  }
-
-  Widget _buildDetailBottomSheet(Map<String, dynamic> header, List<Map<String, dynamic>> details) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+                child: Row(
                   children: [
                     Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(color: const Color(0xFFF6A918).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.inventory_rounded, color: Color(0xFFF6A918), size: 20),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.inventory_rounded, size: 18, color: Colors.white),
                     ),
                     const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          header['stbj_nomor'] ?? '-',
-                          style: GoogleFonts.montserrat(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF2C3E50)),
-                        ),
-                        Text(
-                          DateFormat('dd MMM yyyy').format(DateTime.parse(header['stbj_tanggal'])),
-                          style: GoogleFonts.montserrat(fontSize: 11, color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                IconButton(
-                  icon: Icon(Icons.close, color: Colors.grey.shade600),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(10)),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(child: _buildInfoItem('No. SPK', header['stbj_spk_nomor'] ?? '-')),
-                            Expanded(child: _buildInfoItem('Keterangan', header['stbj_keterangan'] ?? '-')),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(child: _buildInfoItem('User Create', header['user_create'] ?? '-')),
-                            Expanded(
-                              child: _buildInfoItem(
-                                'Date Create',
-                                header['date_create'] != null
-                                    ? DateFormat('dd/MM/yy HH:mm').format(DateTime.parse(header['date_create']))
-                                    : '-',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Detail Items',
-                    style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF2C3E50)),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
-                          columnSpacing: 12,
-                          horizontalMargin: 12,
-                          headingRowHeight: 36,
-                          dataRowHeight: 32,
-                          headingRowColor: MaterialStateProperty.all(Colors.grey.shade100),
-                          columns: const [
-                            DataColumn(label: Text('No', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            DataColumn(label: Text('Nama Item', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            DataColumn(label: Text('Qty Terima', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            DataColumn(label: Text('Keterangan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                          ],
-                          rows: details.asMap().entries.map((entry) {
-                            final index = entry.key + 1;
-                            final item = entry.value;
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(index.toString(), style: const TextStyle(fontSize: 10))),
-                                DataCell(Text(item['item_nama'] ?? '-', style: const TextStyle(fontSize: 10))),
-                                DataCell(Text(item['stbjd_qty'].toString(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFFF6A918)))),
-                                DataCell(Text(item['stbjd_keterangan']?.isNotEmpty == true ? item['stbjd_keterangan'] : '-', style: const TextStyle(fontSize: 10))),
-                              ],
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey.shade200))),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _openEditSerahTerima(header);
-                    },
-                    icon: const Icon(Icons.edit, size: 14),
-                    label: Text('Edit', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.blue,
-                      side: const BorderSide(color: Colors.blue),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, size: 14),
-                    label: Text('Tutup', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF6A918),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoItem(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: GoogleFonts.montserrat(fontSize: 10, color: Colors.grey.shade600)),
-        const SizedBox(height: 2),
-        Text(value, style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return BaseLayout(
-      title: 'Serah Terima Barang Jadi',
-      showBackButton: false,
-      showSidebar: true,
-      isFormScreen: false,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Column(
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Filter Tanggal', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                    IconButton(
-                      icon: Icon(_showDateFilter ? Icons.expand_less : Icons.expand_more, size: 18, color: const Color(0xFFF6A918)),
-                      onPressed: _toggleDateFilter,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 30),
-                    ),
-                  ],
-                ),
-              ),
-              if (_showDateFilter) ...[
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 3, offset: const Offset(0, 1))],
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Tanggal Mulai', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                                const SizedBox(height: 4),
-                                Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(6),
-                                    onTap: () => _selectDate(context, true),
-                                    child: Container(
-                                      height: 36,
-                                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade50,
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.grey.shade300, width: 1),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.calendar_today, size: 14, color: Color(0xFFF6A918)),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: TextField(
-                                              controller: _startDateController,
-                                              style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.black87),
-                                              decoration: const InputDecoration(border: InputBorder.none, isDense: true),
-                                              enabled: false,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                          Text(
+                            'Detail Serah Terima Barang Jadi',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(height: 2),
+                          Text(
+                            serahTerima['stbj_nomor'] ?? '-',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 11,
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: IconButton(
+                        icon: Icon(Icons.close, size: 16, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                        padding: const EdgeInsets.all(8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Info Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _bgSoft,
+                  border: Border(bottom: BorderSide(color: _borderSoft)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: _accentGoldSoft,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.calendar_today, size: 14, color: _accentGold),
+                          ),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Tanggal Selesai', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                                const SizedBox(height: 4),
-                                Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(6),
-                                    onTap: () => _selectDate(context, false),
-                                    child: Container(
-                                      height: 36,
-                                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade50,
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.grey.shade300, width: 1),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.calendar_today, size: 14, color: Color(0xFFF6A918)),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: TextField(
-                                              controller: _endDateController,
-                                              style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.black87),
-                                              decoration: const InputDecoration(border: InputBorder.none, isDense: true),
-                                              enabled: false,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                Text(
+                                  'Tanggal',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 9,
+                                    color: _textLight,
+                                  ),
+                                ),
+                                Text(
+                                  DateFormat('dd MMMM yyyy').format(DateTime.parse(serahTerima['stbj_tanggal'])),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textDark,
                                   ),
                                 ),
                               ],
@@ -604,234 +596,999 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 34,
-                        child: ElevatedButton.icon(
-                          onPressed: _resetDateFilter,
-                          icon: const Icon(Icons.refresh, size: 14, color: Colors.white),
-                          label: Text('Reset ke Awal Bulan', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey.shade600,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: _accentSkySoft,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.assignment, size: 14, color: _accentSky),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'No. SPK',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 9,
+                                    color: _textLight,
+                                  ),
+                                ),
+                                Text(
+                                  serahTerima['stbj_spk_nomor'] ?? '-',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Keterangan
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: _borderSoft)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: _accentMintSoft,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Icons.description, size: 14, color: _accentMint),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Keterangan',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 9,
+                              color: _textLight,
+                            ),
+                          ),
+                          Text(
+                            serahTerima['stbj_keterangan'] ?? '-',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: _textDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Detail Items
+              Expanded(
+                child: FutureBuilder(
+                  future: SerahTerimaService.getSerahTerimaDetail(serahTerima['stbj_nomor']),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 32,
+                              height: 32,
+                              child: CircularProgressIndicator(
+                                color: _accentGold,
+                                strokeWidth: 2,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Memuat detail items...',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 11,
+                                color: _textMedium,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (snapshot.hasError || !snapshot.hasData) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 40,
+                              color: _accentCoral,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Gagal memuat detail',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 11,
+                                color: _textMedium,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    final data = snapshot.data!;
+                    final details = List<Map<String, dynamic>>.from(data['details'] ?? []);
+
+                    if (details.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: _bgSoft,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.inventory_2_outlined,
+                                size: 30,
+                                color: _textLight,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Tidak ada item dalam transaksi ini',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 11,
+                                color: _textMedium,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          // Header Items
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: _bgSoft,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: _borderSoft),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: _accentMintSoft,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Icon(
+                                    Icons.inventory_2_outlined,
+                                    size: 12,
+                                    color: _accentMint,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Daftar Items (${details.length})',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // SfDataGrid untuk Detail Items
+                          Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(color: _borderSoft),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: SfDataGrid(
+                                  source: SerahTerimaDetailDataSource(
+                                    details: details,
+                                    accentGold: _accentGold,
+                                    textDark: _textDark,
+                                    textMedium: _textMedium,
+                                    accentMint: _accentMint,
+                                    accentMintSoft: _accentMintSoft,
+                                    bgSoft: _bgSoft,
+                                    borderSoft: _borderSoft,
+                                  ),
+                                  columnWidthMode: ColumnWidthMode.fill,
+                                  headerRowHeight: 34,
+                                  rowHeight: 32,
+                                  allowSorting: true,
+                                  gridLinesVisibility: GridLinesVisibility.both,
+                                  headerGridLinesVisibility: GridLinesVisibility.both,
+                                  columns: [
+                                    GridColumn(
+                                      columnName: 'no',
+                                      width: 60,
+                                      label: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          'No',
+                                          style: GoogleFonts.montserrat(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 10,
+                                            color: _textDark,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'nama',
+                                      label: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          'Nama Item',
+                                          style: GoogleFonts.montserrat(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 10,
+                                            color: _textDark,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'qty',
+                                      width: 100,
+                                      label: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          'Qty Terima',
+                                          style: GoogleFonts.montserrat(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 10,
+                                            color: _textDark,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'keterangan',
+                                      label: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          'Keterangan',
+                                          style: GoogleFonts.montserrat(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 10,
+                                            color: _textDark,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // Footer
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _bgSoft,
+                  border: Border(top: BorderSide(color: _borderSoft)),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Container(
+                      width: 90,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [_accentGold, _accentGold.withOpacity(0.8)],
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _accentGold.withOpacity(0.2),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          shadowColor: Colors.transparent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: Text(
+                          'Tutup',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = ResponsiveHelper.isMobile(context);
+    final isTablet = MediaQuery.of(context).size.width >= 600;
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    return BaseLayout(
+      title: 'Serah Terima Barang Jadi',
+      showBackButton: false,
+      showSidebar: !isMobile,
+      isFormScreen: false,
+      child: FadeTransition(
+        opacity: _fadeAnimation,
+        child: Container(
+          color: _bgSoft,
+          child: Column(
+            children: [
+              // Header dengan filter dan tombol aksi
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _surfaceWhite,
+                  border: Border(bottom: BorderSide(color: _borderSoft)),
+                ),
+                child: Row(
+                  children: [
+                    // Filter tanggal toggle
+                    Container(
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: _showDateFilter ? _accentGoldSoft : _bgSoft,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _showDateFilter ? _accentGold : _borderSoft,
+                        ),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _toggleDateFilter,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.date_range,
+                                  size: 14,
+                                  color: _showDateFilter ? _accentGold : _textLight,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Filter',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: _showDateFilter ? _accentGold : _textMedium,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  _showDateFilter ? Icons.expand_less : Icons.expand_more,
+                                  size: 14,
+                                  color: _showDateFilter ? _accentGold : _textLight,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const Spacer(),
+
+                    // Tambah Button
+                    Container(
+                      height: 36,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [_primaryDark, _primaryLight],
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _primaryDark.withOpacity(0.2),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _openAddSerahTerima,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Row(
+                              children: [
+                                Icon(Icons.add, size: 14, color: Colors.white),
+                                if (!isMobile) ...[
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Tambah',
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Date Filter Panel - Satu Baris dengan Tombol Load
+              if (_showDateFilter) ...[
+                Container(
+                  margin: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _surfaceWhite,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _borderSoft),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _shadowColor,
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      // Tanggal Mulai
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _selectDate(context, true),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            height: 40,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              color: _bgSoft,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: _borderSoft),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.calendar_today, size: 14, color: _accentGold),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Tanggal Mulai',
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 9,
+                                          color: _textLight,
+                                        ),
+                                      ),
+                                      Text(
+                                        _startDateController.text,
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: _textDark,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 8),
+
+                      // Tanggal Selesai
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _selectDate(context, false),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            height: 40,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              color: _bgSoft,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: _borderSoft),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.calendar_today, size: 14, color: _accentGold),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Tanggal Selesai',
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 9,
+                                          color: _textLight,
+                                        ),
+                                      ),
+                                      Text(
+                                        _endDateController.text,
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: _textDark,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 8),
+
+                      // Load Button dengan Icon
+                      Container(
+                        width: 90,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [_accentMint, _accentMint.withOpacity(0.8)],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _accentMint.withOpacity(0.2),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => _loadSerahTerimaData(),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.refresh_rounded,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Load',
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
               ],
-              Container(
-                margin: const EdgeInsets.all(12),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 3, offset: const Offset(0, 1))],
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        height: 34,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade300, width: 1),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.search, size: 14, color: Colors.grey.shade500),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: TextField(
-                                controller: _searchController,
-                                decoration: InputDecoration(
-                                  hintText: 'Cari nomor/keterangan...',
-                                  hintStyle: GoogleFonts.montserrat(fontSize: 11, color: Colors.grey.shade500),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                ),
-                                style: GoogleFonts.montserrat(fontSize: 11),
-                                onChanged: _filterSerahTerima,
-                              ),
-                            ),
-                            if (_searchController.text.isNotEmpty)
-                              IconButton(
-                                icon: Icon(Icons.clear, size: 12, color: Colors.grey.shade500),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  _filterSerahTerima('');
-                                },
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 20),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      height: 34,
-                      child: ElevatedButton.icon(
-                        onPressed: _openAddSerahTerima,
-                        icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                        label: Text('Tambah', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFF6A918),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Total: ${_serahTerimaList.length} serah terima',
-                          style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
-                        ),
-                        Text(
-                          'Periode: ${DateFormat('dd/MM/yy').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}',
-                          style: GoogleFonts.montserrat(fontSize: 9, color: Colors.grey.shade500),
-                        ),
-                      ],
-                    ),
-                    if (_isLoading)
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: const Color(0xFFF6A918)),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
+
+              // DataGrid
               Expanded(
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFFF6A918)))
+                    ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: CircularProgressIndicator(
+                          color: _accentGold,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Memuat data serah terima...',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 11,
+                          color: _textMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
                     : _serahTerimaList.isEmpty
                     ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.inbox_outlined, size: 40, color: Colors.grey.shade400),
-                      const SizedBox(height: 8),
+                      Container(
+                        width: 70,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          color: _bgSoft,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.inventory_rounded,
+                          size: 35,
+                          color: _textLight,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       Text(
-                        _searchController.text.isEmpty
-                            ? 'Tidak ada data serah terima\npada periode yang dipilih'
-                            : 'Serah terima tidak ditemukan',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.montserrat(color: Colors.grey.shade500, fontSize: 12),
+                        'Belum ada data serah terima',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Klik tombol Tambah untuk memulai',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 11,
+                          color: _textLight,
+                        ),
                       ),
                     ],
                   ),
                 )
-                    : Container(
-                  margin: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: SfDataGrid(
-                      controller: _dataGridController,
-                      source: _dataSource,
-                      allowColumnsResizing: true,
-                      columnResizeMode: ColumnResizeMode.onResize,
-                      columnWidthMode: ColumnWidthMode.auto,
-                      headerRowHeight: 32,
-                      rowHeight: 30,
-                      allowSorting: true,
-                      allowFiltering: true,
-                      gridLinesVisibility: GridLinesVisibility.both,
-                      headerGridLinesVisibility: GridLinesVisibility.both,
-                      selectionMode: SelectionMode.single,
-                      onCellTap: (details) {
-                        if (details.rowColumnIndex.rowIndex > 0) {
-                          final dataRowIndex = details.rowColumnIndex.rowIndex - 2;
-                          if (dataRowIndex >= 0 && dataRowIndex < _serahTerimaList.length) {
-                            final data = _serahTerimaList[dataRowIndex];
-                            _showDetailBottomSheet(data);
-                          }
-                        }
-                      },
-                      columns: [
-                        GridColumn(
-                          columnName: 'no',
-                          minimumWidth: 80,
-                          maximumWidth: 100,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text('No', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                    : Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _surfaceWhite,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _borderSoft),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _shadowColor,
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(12),
+                              topRight: Radius.circular(12),
+                            ),
+                            child: SfDataGrid(
+                              key: _key,
+                              controller: _dataGridController,
+                              source: _dataSource,
+                              allowColumnsResizing: true,
+                              columnResizeMode: ColumnResizeMode.onResizeEnd,
+                              onColumnResizeUpdate: (ColumnResizeUpdateDetails details) {
+                                setState(() {
+                                  _columnWidths[details.column.columnName] = details.width;
+                                });
+                                return true;
+                              },
+                              columnWidthMode: ColumnWidthMode.fill,
+                              columnWidthCalculationRange: ColumnWidthCalculationRange.allRows,
+                              headerRowHeight: 28,
+                              rowHeight: 30,
+                              allowSorting: true,
+                              allowFiltering: true,
+                              onFilterChanged: _onFilterChanged,
+                              gridLinesVisibility: GridLinesVisibility.both,
+                              headerGridLinesVisibility: GridLinesVisibility.both,
+                              selectionMode: SelectionMode.none,
+                              onCellTap: (details) {
+                                if (details.rowColumnIndex.rowIndex > 0) {
+                                  final rowIndex = details.rowColumnIndex.rowIndex - 1;
+                                  if (rowIndex < _dataSource.rows.length) {
+                                    final row = _dataSource.rows[rowIndex];
+                                    final cells = row.getCells();
+                                    final aksiCell = cells.firstWhere(
+                                          (cell) => cell.columnName == 'aksi',
+                                      orElse: () => DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: null),
+                                    );
+
+                                    if (aksiCell.value != null) {
+                                      _showItemDetailDialog(aksiCell.value as Map<String, dynamic>);
+                                    }
+                                  }
+                                }
+                              },
+                              columns: [
+                                GridColumn(
+                                  columnName: 'no',
+                                  width: _columnWidths['no'] ?? 60,
+                                  minimumWidth: 50,
+                                  maximumWidth: 100,
+                                  label: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      'No',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                GridColumn(
+                                  columnName: 'nomor',
+                                  width: _columnWidths['nomor'] ?? 180,
+                                  minimumWidth: 160,
+                                  maximumWidth: 900,
+                                  label: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      'Nomor',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                GridColumn(
+                                  columnName: 'tanggal',
+                                  width: _columnWidths['tanggal'] ?? 100,
+                                  minimumWidth: 80,
+                                  maximumWidth: 140,
+                                  label: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      'Tanggal',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                GridColumn(
+                                  columnName: 'spk_nomor',
+                                  width: _columnWidths['spk_nomor'] ?? 160,
+                                  minimumWidth: 140,
+                                  maximumWidth: 200,
+                                  label: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      'No. SPK',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                GridColumn(
+                                  columnName: 'keterangan',
+                                  width: _columnWidths['keterangan'] ?? 300,
+                                  minimumWidth: 250,
+                                  maximumWidth: 900,
+                                  label: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      'Keterangan',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                GridColumn(
+                                  columnName: 'aksi',
+                                  width: _columnWidths['aksi'] ?? 90,
+                                  minimumWidth: 80,
+                                  maximumWidth: 120,
+                                  label: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      'Aksi',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        GridColumn(
-                          columnName: 'nomor',
-                          minimumWidth: 180,
-                          maximumWidth: 220,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text('Nomor', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        // Footer Total
+                        Container(
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: _bgSoft,
+                            border: Border(
+                              top: BorderSide(color: _borderSoft),
+                            ),
+                            borderRadius: const BorderRadius.only(
+                              bottomLeft: Radius.circular(12),
+                              bottomRight: Radius.circular(12),
+                            ),
                           ),
-                        ),
-                        GridColumn(
-                          columnName: 'tanggal',
-                          minimumWidth: 80,
-                          maximumWidth: 100,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text('Tanggal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'spk_nomor',
-                          minimumWidth: 150,
-                          maximumWidth: 180,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text('No. SPK', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'keterangan',
-                          minimumWidth: 250,
-                          maximumWidth: 350,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text('Keterangan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'aksi',
-                          minimumWidth: 80,
-                          maximumWidth: 90,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.center,
-                            child: const Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SizedBox(
+                              width: screenWidth - (isTablet ? 64 : 56),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: _columnWidths['no'] ?? 60,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      'Total',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: _columnWidths['nomor'] ?? 180,
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    alignment: Alignment.centerLeft,
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.receipt, size: 11, color: _primaryDark),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '$_totalFilteredSerahTerima Transaksi',
+                                          style: GoogleFonts.montserrat(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: _primaryDark,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    width: (_columnWidths['tanggal'] ?? 100) + (_columnWidths['spk_nomor'] ?? 160) + (_columnWidths['keterangan'] ?? 300),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Periode: ${DateFormat('dd/MM').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w500,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: _columnWidths['aksi'] ?? 90,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
+                                    child: _totalFilteredSerahTerima < _serahTerimaList.length
+                                        ? Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: _accentGoldSoft,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '${_serahTerimaList.length - _totalFilteredSerahTerima} filter',
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.w600,
+                                          color: _accentGold,
+                                        ),
+                                      ),
+                                    )
+                                        : const SizedBox(),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -840,8 +1597,8 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
                 ),
               ),
             ],
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -852,10 +1609,54 @@ class SerahTerimaDataSource extends DataGridSource {
     required List<Map<String, dynamic>> serahTerimaList,
     required Function(Map<String, dynamic>) onEdit,
     required Function(Map<String, dynamic>) onDelete,
+    required Color primaryDark,
+    required Color accentGold,
+    required Color accentMint,
+    required Color accentCoral,
+    required Color accentSky,
+    required Color accentMintSoft,
+    required Color borderSoft,
+    required Color bgSoft,
+    required Color textDark,
+    required Color textMedium,
+    required Color textLight,
+    required String Function(String) formatDate,
   }) {
     _onEdit = onEdit;
     _onDelete = onDelete;
+    _primaryDark = primaryDark;
+    _accentGold = accentGold;
+    _accentMint = accentMint;
+    _accentCoral = accentCoral;
+    _accentSky = accentSky;
+    _accentMintSoft = accentMintSoft;
+    _borderSoft = borderSoft;
+    _bgSoft = bgSoft;
+    _textDark = textDark;
+    _textMedium = textMedium;
+    _textLight = textLight;
+    _formatDate = formatDate;
 
+    _updateDataSource(serahTerimaList);
+  }
+
+  List<DataGridRow> _data = [];
+  late Function(Map<String, dynamic>) _onEdit;
+  late Function(Map<String, dynamic>) _onDelete;
+  late Color _primaryDark;
+  late Color _accentGold;
+  late Color _accentMint;
+  late Color _accentCoral;
+  late Color _accentSky;
+  late Color _accentMintSoft;
+  late Color _borderSoft;
+  late Color _bgSoft;
+  late Color _textDark;
+  late Color _textMedium;
+  late Color _textLight;
+  late String Function(String) _formatDate;
+
+  void _updateDataSource(List<Map<String, dynamic>> serahTerimaList) {
     _data = serahTerimaList.asMap().entries.map((entry) {
       final index = entry.key + 1;
       final data = entry.value;
@@ -863,27 +1664,13 @@ class SerahTerimaDataSource extends DataGridSource {
       return DataGridRow(cells: [
         DataGridCell<int>(columnName: 'no', value: index),
         DataGridCell<String>(columnName: 'nomor', value: data['stbj_nomor']?.toString() ?? '-'),
-        DataGridCell<String>(columnName: 'tanggal', value: _formatDate(data['stbj_tanggal'])),
+        DataGridCell<String>(columnName: 'tanggal', value: _formatDate(data['stbj_tanggal']?.toString() ?? '')),
         DataGridCell<String>(columnName: 'spk_nomor', value: data['stbj_spk_nomor']?.toString() ?? '-'),
         DataGridCell<String>(columnName: 'keterangan', value: data['stbj_keterangan']?.toString() ?? '-'),
         DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: data),
       ]);
     }).toList();
   }
-
-  String _formatDate(String? dateString) {
-    if (dateString == null || dateString.isEmpty) return '-';
-    try {
-      final date = DateTime.parse(dateString);
-      return DateFormat('dd/MM/yy').format(date);
-    } catch (e) {
-      return dateString;
-    }
-  }
-
-  List<DataGridRow> _data = [];
-  late Function(Map<String, dynamic>) _onEdit;
-  late Function(Map<String, dynamic>) _onDelete;
 
   @override
   List<DataGridRow> get rows => _data;
@@ -896,43 +1683,221 @@ class SerahTerimaDataSource extends DataGridSource {
           final data = cell.value as Map<String, dynamic>;
           return Container(
             alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 2),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Edit Button
                 Container(
                   width: 24,
                   height: 24,
-                  decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(4)),
-                  child: IconButton(
-                    icon: Icon(Icons.edit, size: 12, color: Colors.blue.shade700),
-                    onPressed: () => _onEdit(data),
-                    padding: EdgeInsets.zero,
+                  decoration: BoxDecoration(
+                    color: _primaryDark.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _onEdit(data),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Center(
+                        child: Icon(
+                          Icons.edit_rounded,
+                          size: 12,
+                          color: _primaryDark,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 2),
+                // Delete Button
                 Container(
                   width: 24,
                   height: 24,
-                  decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(4)),
-                  child: IconButton(
-                    icon: Icon(Icons.delete, size: 12, color: Colors.red.shade700),
-                    onPressed: () => _onDelete(data),
-                    padding: EdgeInsets.zero,
+                  decoration: BoxDecoration(
+                    color: _accentCoral.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _onDelete(data),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Center(
+                        child: Icon(
+                          Icons.delete_rounded,
+                          size: 12,
+                          color: _accentCoral,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
           );
         }
+
+        Color textColor = _textDark;
+        if (cell.columnName == 'no' || cell.columnName == 'tanggal') {
+          textColor = _textMedium;
+        }
+
         return Container(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          alignment: _getAlignment(cell.columnName),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           child: Text(
             cell.value.toString(),
-            style: GoogleFonts.montserrat(fontSize: 10, color: Colors.black87),
+            textAlign: _getTextAlign(cell.columnName),
+            style: GoogleFonts.montserrat(
+              fontSize: 10,
+              fontWeight: cell.columnName == 'nomor' ? FontWeight.w600 : FontWeight.normal,
+              color: textColor,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Alignment _getAlignment(String columnName) {
+    switch (columnName) {
+      case 'aksi':
+        return Alignment.center;
+      default:
+        return Alignment.centerLeft;
+    }
+  }
+
+  TextAlign _getTextAlign(String columnName) {
+    switch (columnName) {
+      case 'aksi':
+        return TextAlign.center;
+      default:
+        return TextAlign.left;
+    }
+  }
+}
+
+// DataSource untuk detail items di dialog
+class SerahTerimaDetailDataSource extends DataGridSource {
+  SerahTerimaDetailDataSource({
+    required List<Map<String, dynamic>> details,
+    required Color accentGold,
+    required Color textDark,
+    required Color textMedium,
+    required Color accentMint,
+    required Color accentMintSoft,
+    required Color bgSoft,
+    required Color borderSoft,
+  }) {
+    _accentGold = accentGold;
+    _textDark = textDark;
+    _textMedium = textMedium;
+    _accentMint = accentMint;
+    _accentMintSoft = accentMintSoft;
+    _bgSoft = bgSoft;
+    _borderSoft = borderSoft;
+    _accentGoldSoft = accentGold.withOpacity(0.1);
+
+    _data = details.asMap().entries.map((entry) {
+      final index = entry.key + 1;
+      final item = entry.value;
+
+      return DataGridRow(cells: [
+        DataGridCell<int>(columnName: 'no', value: index),
+        DataGridCell<String>(columnName: 'nama', value: item['item_nama']?.toString() ?? '-'),
+        DataGridCell<int>(columnName: 'qty', value: item['stbjd_qty'] ?? 0),
+        DataGridCell<String>(columnName: 'keterangan', value: item['stbjd_keterangan']?.toString() ?? '-'),
+      ]);
+    }).toList();
+  }
+
+  List<DataGridRow> _data = [];
+  late Color _accentGold;
+  late Color _textDark;
+  late Color _textMedium;
+  late Color _accentMint;
+  late Color _accentMintSoft;
+  late Color _accentGoldSoft;
+  late Color _bgSoft;
+  late Color _borderSoft;
+
+  @override
+  List<DataGridRow> get rows => _data;
+
+  @override
+  DataGridRowAdapter buildRow(DataGridRow row) {
+    return DataGridRowAdapter(
+      cells: row.getCells().map<Widget>((cell) {
+        if (cell.columnName == 'qty') {
+          return Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: _accentMintSoft,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: _accentMint.withOpacity(0.3)),
+              ),
+              child: Text(
+                cell.value.toString(),
+                style: GoogleFonts.montserrat(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _accentMint,
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (cell.columnName == 'keterangan') {
+          return Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Text(
+              cell.value.toString(),
+              style: GoogleFonts.montserrat(
+                fontSize: 11,
+                color: _textMedium,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        }
+
+        Color textColor = _textDark;
+        if (cell.columnName == 'no') {
+          textColor = _textMedium;
+        }
+        if (cell.columnName == 'nama') {
+          textColor = _textDark;
+        }
+
+        return Container(
+          alignment: cell.columnName == 'no' ? Alignment.center : Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          child: Text(
+            cell.value.toString(),
+            style: GoogleFonts.montserrat(
+              fontSize: 11,
+              fontWeight: cell.columnName == 'nama' ? FontWeight.w600 : FontWeight.normal,
+              color: textColor,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         );
       }).toList(),
     );
   }
 }
+
+// Toast Type enum
+enum ToastType { success, error, info }

@@ -14,12 +14,26 @@ class AddItemModal extends StatefulWidget {
 }
 
 class _AddItemModalState extends State<AddItemModal> {
+  // Warna konsisten dengan screen lainnya
+  final Color _primaryDark = const Color(0xFF2C3E50);
+  final Color _primaryLight = const Color(0xFF34495E);
+  final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _accentCoral = const Color(0xFFFF6B6B);
+  final Color _accentSky = const Color(0xFF4CC9F0);
+  final Color _bgLight = const Color(0xFFFAFAFA);
+  final Color _bgCard = const Color(0xFFFFFFFF);
+  final Color _textPrimary = const Color(0xFF1A202C);
+  final Color _textSecondary = const Color(0xFF718096);
+  final Color _borderColor = const Color(0xFFE2E8F0);
+
   List<Map<String, dynamic>> _searchResults = [];
   List<StokinItem> _selectedItems = [];
   TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   bool _showRotiOnly = false;
   final Map<int, TextEditingController> _qtyControllers = {};
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -30,6 +44,7 @@ class _AddItemModalState extends State<AddItemModal> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     _qtyControllers.values.forEach((controller) => controller.dispose());
     super.dispose();
   }
@@ -179,9 +194,18 @@ class _AddItemModalState extends State<AddItemModal> {
   void _showErrorSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        duration: Duration(seconds: 2),
+        content: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.white, size: 14),
+            const SizedBox(width: 6),
+            Expanded(child: Text(message, style: GoogleFonts.montserrat(fontSize: 11))),
+          ],
+        ),
+        backgroundColor: _accentCoral,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        margin: const EdgeInsets.all(12),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -189,9 +213,18 @@ class _AddItemModalState extends State<AddItemModal> {
   void _showInfoSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.blue,
-        duration: Duration(seconds: 2),
+        content: Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.white, size: 14),
+            const SizedBox(width: 6),
+            Expanded(child: Text(message, style: GoogleFonts.montserrat(fontSize: 11))),
+          ],
+        ),
+        backgroundColor: _accentSky,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        margin: const EdgeInsets.all(12),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -199,74 +232,83 @@ class _AddItemModalState extends State<AddItemModal> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
+      height: MediaQuery.of(context).size.height * 0.85,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.only(
+        color: _bgCard,
+        borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(12),
           topRight: Radius.circular(12),
         ),
       ),
       child: Column(
         children: [
-          // HEADER COMPACT
+          // HEADER
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+              gradient: LinearGradient(
+                colors: [_primaryDark, _primaryLight],
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Pilih Item',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black87,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        Icons.inventory_2_outlined,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Pilih Item',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
                 IconButton(
-                  icon: Icon(Icons.close, size: 18, color: Colors.grey.shade700),
+                  icon: Icon(Icons.close, size: 16, color: Colors.white),
                   onPressed: () => Navigator.pop(context),
                   padding: EdgeInsets.zero,
-                  constraints: BoxConstraints(minWidth: 30),
                 ),
               ],
             ),
           ),
 
-          // SEARCH BAR COMPACT
+          // SEARCH BAR
           Container(
-            margin: EdgeInsets.all(12),
-            padding: EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
-                  blurRadius: 3,
-                  offset: Offset(0, 1),
-                ),
-              ],
-            ),
+            margin: const EdgeInsets.all(16),
             child: Row(
               children: [
                 Expanded(
                   child: Container(
-                    height: 34,
-                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.shade300, width: 1),
+                      color: _bgLight,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: _borderColor),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.search, size: 14, color: Colors.grey.shade500),
-                        SizedBox(width: 6),
+                        Icon(Icons.search, size: 14, color: _textSecondary),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: TextField(
                             controller: _searchController,
@@ -274,7 +316,7 @@ class _AddItemModalState extends State<AddItemModal> {
                               hintText: 'Cari item...',
                               hintStyle: GoogleFonts.montserrat(
                                 fontSize: 11,
-                                color: Colors.grey.shade500,
+                                color: _textSecondary.withOpacity(0.5),
                               ),
                               border: InputBorder.none,
                               isDense: true,
@@ -287,10 +329,17 @@ class _AddItemModalState extends State<AddItemModal> {
                     ),
                   ),
                 ),
-                SizedBox(width: 8),
-                // Tombol Search
+                const SizedBox(width: 8),
                 Container(
-                  height: 34,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [_accentGold, _accentGold.withOpacity(0.8)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
                   child: ElevatedButton.icon(
                     onPressed: _searchItems,
                     icon: _isSearching
@@ -299,13 +348,17 @@ class _AddItemModalState extends State<AddItemModal> {
                       height: 12,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                        : Icon(Icons.search, size: 12),
-                    label: Text('Cari', style: GoogleFonts.montserrat(fontSize: 11)),
+                        : const Icon(Icons.search, size: 12, color: Colors.white),
+                    label: Text(
+                      'Cari',
+                      style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white),
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFFF6A918),
+                      backgroundColor: Colors.transparent,
                       foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(horizontal: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                     ),
                   ),
                 ),
@@ -313,24 +366,25 @@ class _AddItemModalState extends State<AddItemModal> {
             ),
           ),
 
-          // LOAD ROTI BUTTON COMPACT
+          // LOAD ROTI BUTTON
           Container(
-            margin: EdgeInsets.symmetric(horizontal: 12),
+            margin: const EdgeInsets.symmetric(horizontal: 16),
             child: SizedBox(
               width: double.infinity,
-              height: 32,
+              height: 34,
               child: ElevatedButton.icon(
                 onPressed: _loadRotiItems,
-                icon: Icon(Icons.restaurant, size: 12),
+                icon: Icon(Icons.restaurant, size: 12, color: Colors.white),
                 label: Text(
                   'LOAD ALL ROTI',
                   style: GoogleFonts.montserrat(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
+                    color: Colors.white,
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade700,
+                  backgroundColor: _accentSky,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                 ),
@@ -338,14 +392,14 @@ class _AddItemModalState extends State<AddItemModal> {
             ),
           ),
 
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
 
-          // INFO BAR COMPACT
+          // INFO BAR
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+              color: _bgLight,
+              border: Border(bottom: BorderSide(color: _borderColor), top: BorderSide(color: _borderColor)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -354,51 +408,51 @@ class _AddItemModalState extends State<AddItemModal> {
                   '${_searchResults.length} item ditemukan',
                   style: GoogleFonts.montserrat(
                     fontSize: 10,
-                    color: Colors.grey.shade700,
+                    color: _textSecondary,
                   ),
                 ),
                 Row(
                   children: [
                     Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
+                        color: _accentGold.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey.shade300, width: 1),
+                        border: Border.all(color: _accentGold.withOpacity(0.3)),
                       ),
                       child: Text(
                         '${_selectedItems.length} dipilih',
                         style: GoogleFonts.montserrat(
-                          fontSize: 10,
+                          fontSize: 9,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFFF6A918),
+                          color: _accentGold,
                         ),
                       ),
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     GestureDetector(
                       onTap: _toggleSelectAll,
                       child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
+                          color: _accentSky.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.blue.shade200, width: 1),
+                          border: Border.all(color: _accentSky.withOpacity(0.3)),
                         ),
                         child: Row(
                           children: [
                             Icon(
                               Icons.check_box_outlined,
                               size: 10,
-                              color: Colors.blue.shade700,
+                              color: _accentSky,
                             ),
-                            SizedBox(width: 4),
+                            const SizedBox(width: 4),
                             Text(
                               'PILIH SEMUA',
                               style: GoogleFonts.montserrat(
-                                fontSize: 9,
+                                fontSize: 8,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.blue.shade700,
+                                color: _accentSky,
                               ),
                             ),
                           ],
@@ -411,13 +465,30 @@ class _AddItemModalState extends State<AddItemModal> {
             ),
           ),
 
-          // LIST ITEMS COMPACT
+          // LIST ITEMS - DENGAN SCROLL CONTROLLER
           Expanded(
             child: _isSearching
                 ? Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFFF6A918),
-                strokeWidth: 2,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 30,
+                    height: 30,
+                    child: CircularProgressIndicator(
+                      color: _accentGold,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Mencari item...',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 11,
+                      color: _textSecondary,
+                    ),
+                  ),
+                ],
               ),
             )
                 : _searchResults.isEmpty
@@ -427,87 +498,103 @@ class _AddItemModalState extends State<AddItemModal> {
                 children: [
                   Icon(
                     Icons.search_off,
-                    size: 32,
-                    color: Colors.grey.shade400,
+                    size: 36,
+                    color: _borderColor,
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     _searchController.text.isEmpty
                         ? 'Mulai pencarian item'
                         : 'Item tidak ditemukan',
                     style: GoogleFonts.montserrat(
-                      color: Colors.grey.shade500,
-                      fontSize: 12,
+                      fontSize: 11,
+                      color: _textSecondary,
                     ),
                   ),
                 ],
               ),
             )
-                : ListView.separated(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              separatorBuilder: (context, index) => SizedBox(height: 4),
-              itemCount: _searchResults.length,
-              itemBuilder: (context, index) {
-                final item = _searchResults[index];
-                final itemId = item['item_id'];
-                final itemName = item['item_nama']?.toString() ?? 'Tanpa Nama';
+                : Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              thickness: 6,
+              radius: const Radius.circular(10),
+              child: ListView.separated(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                separatorBuilder: (context, index) => const SizedBox(height: 8),
+                itemCount: _searchResults.length,
+                itemBuilder: (context, index) {
+                  final item = _searchResults[index];
+                  final itemId = item['item_id'];
+                  final itemName = item['item_nama']?.toString() ?? 'Tanpa Nama';
 
-                if (itemId == null) return SizedBox();
+                  if (itemId == null) return const SizedBox();
 
-                final isSelected = _isItemSelected(itemId);
-                final controller = _qtyControllers[itemId];
+                  final isSelected = _isItemSelected(itemId);
+                  final controller = _qtyControllers[itemId];
 
-                if (controller == null) {
-                  _qtyControllers[itemId] = TextEditingController(text: '0');
-                }
+                  if (controller == null) {
+                    _qtyControllers[itemId] = TextEditingController(text: '0');
+                  }
 
-                final currentController = _qtyControllers[itemId]!;
-                final alreadyInList = widget.existingItems.any((i) => i.itemId == itemId);
+                  final currentController = _qtyControllers[itemId]!;
+                  final alreadyInList = widget.existingItems.any((i) => i.itemId == itemId);
 
-                return Container(
-                  margin: EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
-                        blurRadius: 2,
-                        offset: Offset(0, 1),
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: _bgCard,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isSelected ? _accentGold : _borderColor,
+                        width: isSelected ? 1.5 : 1,
                       ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
+                    ),
                     child: Padding(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(12),
                       child: Row(
                         children: [
-                          // Checkbox
+                          // Checkbox / Status
                           if (!alreadyInList)
-                            Checkbox(
-                              value: isSelected,
-                              onChanged: (_) => _toggleItem(item),
-                              activeColor: Color(0xFFF6A918),
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
+                            GestureDetector(
+                              onTap: () => _toggleItem(item),
+                              child: Container(
+                                width: 20,
+                                height: 20,
+                                decoration: BoxDecoration(
+                                  color: isSelected ? _accentGold : _bgLight,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: isSelected ? _accentGold : _borderColor,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: isSelected
+                                    ? Icon(
+                                  Icons.check,
+                                  size: 14,
+                                  color: Colors.white,
+                                )
+                                    : null,
+                              ),
                             )
                           else
                             Container(
-                              width: 24,
-                              height: 24,
+                              width: 20,
+                              height: 20,
                               decoration: BoxDecoration(
-                                color: Colors.red.shade50,
+                                color: _accentCoral.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: _accentCoral.withOpacity(0.5)),
                               ),
                               child: Icon(
                                 Icons.block,
                                 size: 12,
-                                color: Colors.red.shade700,
+                                color: _accentCoral,
                               ),
                             ),
 
-                          SizedBox(width: 8),
+                          const SizedBox(width: 12),
 
                           // Item Info
                           Expanded(
@@ -520,108 +607,99 @@ class _AddItemModalState extends State<AddItemModal> {
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                     color: alreadyInList
-                                        ? Colors.grey.shade500
-                                        : Colors.black87,
+                                        ? _textSecondary
+                                        : _textPrimary,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                SizedBox(height: 2),
+                                const SizedBox(height: 2),
                                 Text(
                                   'ID: $itemId',
                                   style: GoogleFonts.montserrat(
                                     fontSize: 9,
-                                    color: Colors.grey.shade600,
+                                    color: _textSecondary,
                                   ),
                                 ),
                               ],
                             ),
                           ),
 
-                          SizedBox(width: 8),
+                          const SizedBox(width: 12),
 
-                          // QTY Input - COMPACT
-                          StatefulBuilder(
-                            builder: (context, setLocalState) {
-                              return Container(
-                                width: 70,
-                                height: 30,
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? Color(0xFFF6A918)
-                                        : Colors.grey.shade300,
-                                    width: 1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(6),
+                          // QTY Input - FIXED CENTER
+                          Container(
+                            width: 70,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: _bgLight,
+                              border: Border.all(
+                                color: isSelected ? _accentGold : _borderColor,
+                                width: 1,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Center(  // Center untuk memastikan posisi tengah
+                              child: TextField(
+                                controller: currentController,
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                textAlignVertical: TextAlignVertical.center,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected ? _accentGold : _textSecondary,
+                                  height: 1.0,
                                 ),
-                                child: TextField(
-                                  controller: currentController,
-                                  keyboardType: TextInputType.number,
-                                  textAlign: TextAlign.center,
-                                  textAlignVertical: TextAlignVertical.center,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                  ],
-                                  style: GoogleFonts.montserrat(
+                                decoration: InputDecoration(
+                                  hintText: '0',
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,  // Hilangkan padding
+                                  isDense: true,
+                                  hintStyle: GoogleFonts.montserrat(
                                     fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: isSelected
-                                        ? Color(0xFFF6A918)
-                                        : Colors.grey.shade600,
+                                    color: _textSecondary.withOpacity(0.5),
                                     height: 1.0,
                                   ),
-                                  decoration: InputDecoration(
-                                    hintText: '0',
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.zero,
-                                    isDense: true,
-                                    hintStyle: GoogleFonts.montserrat(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade400,
-                                      height: 1.0,
-                                    ),
-                                  ),
-                                  enabled: isSelected || (int.tryParse(currentController.text) ?? 0) > 0,
-                                  onChanged: (value) {
-                                    // Trigger local rebuild
-                                    setLocalState(() {});
-
-                                    // Update parent state
-                                    final qty = int.tryParse(value) ?? 0;
-                                    final selectedIndex = _selectedItems.indexWhere((i) => i.itemId == itemId);
-                                    if (selectedIndex != -1) {
-                                      _selectedItems[selectedIndex] = StokinItem(
-                                        itemId: _selectedItems[selectedIndex].itemId,
-                                        itemNama: _selectedItems[selectedIndex].itemNama,
-                                        qty: qty,
-                                      );
-                                    }
-                                  },
                                 ),
-                              );
-                            },
+                                enabled: isSelected || (int.tryParse(currentController.text) ?? 0) > 0,
+                                onChanged: (value) {
+                                  final qty = int.tryParse(value) ?? 0;
+                                  final selectedIndex = _selectedItems.indexWhere((i) => i.itemId == itemId);
+                                  if (selectedIndex != -1) {
+                                    _selectedItems[selectedIndex] = StokinItem(
+                                      itemId: _selectedItems[selectedIndex].itemId,
+                                      itemNama: _selectedItems[selectedIndex].itemNama,
+                                      qty: qty,
+                                    );
+                                  }
+                                },
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
 
-          // FOOTER BUTTONS COMPACT
+          // FOOTER BUTTONS
           Container(
-            padding: EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Colors.grey.shade300)),
+              color: _bgCard,
+              border: Border(top: BorderSide(color: _borderColor)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 4,
-                  offset: Offset(0, -2),
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
                 ),
               ],
             ),
@@ -631,45 +709,43 @@ class _AddItemModalState extends State<AddItemModal> {
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.grey.shade700,
-                      side: BorderSide(color: Colors.grey.shade400),
-                      padding: EdgeInsets.symmetric(vertical: 10),
+                      foregroundColor: _textSecondary,
+                      side: BorderSide(color: _borderColor),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                      minimumSize: Size(0, 0),
                     ),
                     child: Text(
                       'BATAL',
                       style: GoogleFonts.montserrat(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
+                        color: _textSecondary,
                       ),
                     ),
                   ),
                 ),
-                SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _selectedItems.isEmpty ? null : () {
                       Navigator.pop(context, _selectedItems);
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _selectedItems.isEmpty
-                          ? Colors.grey.shade400
-                          : Color(0xFFF6A918),
+                      backgroundColor: _selectedItems.isEmpty ? _borderColor : _accentGold,
                       foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 10),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                      minimumSize: Size(0, 0),
                     ),
                     child: Text(
                       'TAMBAH ${_selectedItems.length} ITEM',
                       style: GoogleFonts.montserrat(
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
                       ),
                     ),
                   ),

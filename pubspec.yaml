@@ -29,7 +29,7 @@ dependencies:
   share_plus: ^7.2.1
 
   # Internationalization & Formatting
-  intl: ^0.18.1
+  intl: ^0.20.2
 
   # Image Processing
   image: ^4.0.17
@@ -68,14 +68,17 @@ dependencies:
   # Platform detection
   universal_io: ^2.2.2
 
-  syncfusion_flutter_datagrid: ^27.1.48
-  syncfusion_flutter_datagrid_export: ^27.1.48
-  syncfusion_flutter_xlsio: ^27.1.48
-  syncfusion_flutter_pdf: ^27.1.48
+  syncfusion_flutter_datagrid: ^30.2.7
+  syncfusion_flutter_datagrid_export: ^30.2.7
+  syncfusion_flutter_xlsio: ^30.2.7
+  syncfusion_flutter_pdf: ^30.2.7
+
   pivot_table:
     git:
       url: https://github.com/BoyPhanna/flutter_pivot_table.git
   open_file: ^3.3.2
+
+  # pluto_grid: 8.0.0
 
 dependency_overrides:
   image: ^4.0.17
@@ -100,7 +103,7 @@ flutter:
 
   assets:
     - assets/
-    - assets/icons/
+    - saests/icons/
     - assets/images/
     - packages/pivot_table/assets/
 

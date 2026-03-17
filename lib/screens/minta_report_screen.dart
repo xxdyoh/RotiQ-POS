@@ -91,38 +91,39 @@ class _MintaReportScreenState extends State<MintaReportScreen> with SingleTicker
       if (response['success'] == true) {
         final List<dynamic> data = response['data'];
 
-        // Debug: print data pertama untuk lihat struktur
-        if (data.isNotEmpty) {
-          print('Sample data: $data');
+        // 🔥 PERBAIKAN: Ambil hanya result set pertama yang tidak kosong
+        List<MintaReportItem> items = [];
+
+        for (var outerItem in data) {
+          if (outerItem is List && outerItem.isNotEmpty) {
+            // Hanya proses array yang tidak kosong
+            for (var innerItem in outerItem) {
+              if (innerItem is Map<String, dynamic>) {
+                items.add(MintaReportItem.fromJson(innerItem));
+              }
+            }
+            // Setelah dapat data, break loop (abaikan result set berikutnya)
+            break;
+          }
         }
 
-        final items = data.map((json) {
-          // Pastikan json adalah Map<String, dynamic>
-          if (json is Map<String, dynamic>) {
-            return MintaReportItem.fromJson(json);
-          } else {
-            // Handle jika json bukan Map
-            print('Invalid data format: $json');
-            return MintaReportItem(
-              itemNama: '',
-              cabang: '',
-              keterangan: '',
-              totalQty: 0,
-            );
-          }
-        }).toList();
+        print('✅ Total items setelah flatten: ${items.length}');
+        if (items.isNotEmpty) {
+          print('Item pertama: ${items.first.itemNama} - ${items.first.cabang}');
+        }
 
         setState(() {
           _reportItems = items;
           _dataSource = MintaReportDataSource(items: items);
         });
+
       } else {
         setState(() {
           _error = response['message'] ?? 'Gagal memuat data';
         });
       }
     } catch (e) {
-      print('Error loading data: $e');
+      print('❌ Error loading data: $e');
       setState(() {
         _error = e.toString();
       });

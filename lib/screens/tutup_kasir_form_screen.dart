@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/tutup_kasir_service.dart';
@@ -21,9 +22,31 @@ class TutupKasirFormScreen extends StatefulWidget {
   State<TutupKasirFormScreen> createState() => _TutupKasirFormScreenState();
 }
 
-class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
+class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> with SingleTickerProviderStateMixin {
   final _setoranController = TextEditingController();
   final _otorisasiController = TextEditingController();
+
+  // Warna modern dari screen lainnya
+  final Color _primaryDark = const Color(0xFF2C3E50);
+  final Color _primaryLight = const Color(0xFF34495E);
+  final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _accentCoral = const Color(0xFFFF6B6B);
+  final Color _accentSky = const Color(0xFF4CC9F0);
+  final Color _bgSoft = const Color(0xFFF8FAFC);
+  final Color _surfaceWhite = Colors.white;
+  final Color _textDark = const Color(0xFF1A202C);
+  final Color _textMedium = const Color(0xFF718096);
+  final Color _textLight = const Color(0xFFA0AEC0);
+  final Color _borderSoft = const Color(0xFFE2E8F0);
+  final Color _shadowColor = const Color(0xFF2C3E50).withOpacity(0.1);
+
+  // Soft versions
+  final Color _primarySoft = const Color(0xFF2C3E50).withOpacity(0.1);
+  final Color _accentGoldSoft = const Color(0xFFF6A918).withOpacity(0.1);
+  final Color _accentMintSoft = const Color(0xFF06D6A0).withOpacity(0.1);
+  final Color _accentCoralSoft = const Color(0xFFFF6B6B).withOpacity(0.1);
+  final Color _accentSkySoft = const Color(0xFF4CC9F0).withOpacity(0.1);
 
   DateTime _selectedDate = DateTime.now();
   User? _currentUser;
@@ -32,10 +55,39 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
   bool _isProcessing = false;
   bool _showOtorisasi = false;
 
+  // Animation
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
   @override
   void initState() {
     super.initState();
+
+    // Animation
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic));
+
+    _animationController.forward();
+
     _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _setoranController.dispose();
+    _otorisasiController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadInitialData() async {
@@ -43,9 +95,10 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
     try {
       final user = SessionManager.getCurrentUser();
       setState(() => _currentUser = user);
+      // Tetap load summary untuk keperluan backend, tapi tidak ditampilkan ke UI
       await _loadSummary();
     } catch (e) {
-      _showSnackbar('Gagal memuat data: ${e.toString()}', Colors.red);
+      _showToast('Gagal memuat data: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -61,35 +114,49 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
       );
       setState(() => _summary = summary);
     } catch (e) {
-      _showSnackbar('Gagal memuat summary penjualan: ${e.toString()}', Colors.red);
+      _showToast('Gagal memuat summary penjualan: ${e.toString()}', type: ToastType.error);
     }
   }
 
-  @override
-  void dispose() {
-    _setoranController.dispose();
-    _otorisasiController.dispose();
-    super.dispose();
-  }
-
-  void _showSnackbar(String message, Color color) {
+  // Modern Toast
+  void _showToast(String message, {required ToastType type}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              color == Colors.green ? Icons.check_circle : Icons.error_outline,
-              color: Colors.white,
-              size: 16,
-            ),
-            const SizedBox(width: 6),
-            Text(message, style: GoogleFonts.montserrat(fontSize: 12)),
-          ],
+        content: Container(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Icon(
+                type == ToastType.success ? Icons.check_circle_rounded :
+                type == ToastType.error ? Icons.error_rounded :
+                Icons.info_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: GoogleFonts.montserrat(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        backgroundColor: color,
+        backgroundColor: type == ToastType.success ? _accentMint :
+        type == ToastType.error ? _accentCoral :
+        _accentSky,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -100,6 +167,20 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(
+              primary: _primaryDark,
+              onPrimary: Colors.white,
+              surface: _surfaceWhite,
+              onSurface: _textDark,
+            ),
+            dialogBackgroundColor: _surfaceWhite,
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null && picked != _selectedDate) {
@@ -108,20 +189,28 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
     }
   }
 
+  // Fungsi untuk mengambil nilai numerik dari text yang sudah diformat
+  double _getNilaiSetoran() {
+    if (_setoranController.text.isEmpty) return 0;
+    // Hapus semua titik (separator ribuan) dan konversi ke double
+    final cleanText = _setoranController.text.replaceAll('.', '');
+    return double.tryParse(cleanText) ?? 0;
+  }
+
   Future<void> _prosesTutupKasir() async {
     if (_currentUser == null) {
-      _showSnackbar('User tidak ditemukan!', Colors.red);
+      _showToast('User tidak ditemukan!', type: ToastType.error);
       return;
     }
 
     if (_setoranController.text.isEmpty) {
-      _showSnackbar('Setoran harus diisi!', Colors.red);
+      _showToast('Setoran harus diisi!', type: ToastType.error);
       return;
     }
 
-    final setoran = double.tryParse(_setoranController.text.replaceAll(',', '')) ?? 0;
+    final setoran = _getNilaiSetoran();
     if (setoran <= 0) {
-      _showSnackbar('Setoran harus lebih dari 0!', Colors.red);
+      _showToast('Setoran harus lebih dari 0!', type: ToastType.error);
       return;
     }
 
@@ -135,32 +224,111 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
         final shouldContinue = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: Row(
-              children: [
-                const Icon(Icons.warning, color: Colors.orange),
-                const SizedBox(width: 8),
-                Text('Sudah Pernah Tutup Kasir',
-                    style: GoogleFonts.montserrat(fontSize: 14)),
-              ],
+            titlePadding: EdgeInsets.zero,
+            contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            actionsPadding: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
-            content: Text('Sudah pernah dilakukan tutup kasir untuk tanggal ini. Lanjutkan?',
-                style: GoogleFonts.montserrat(fontSize: 12)),
+            title: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _accentGoldSoft,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _accentGold.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.warning_amber_rounded,
+                      color: _accentGold,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Sudah Pernah Tutup Kasir',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: _textDark,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            content: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Sudah pernah dilakukan tutup kasir untuk tanggal ini. Lanjutkan?',
+                style: GoogleFonts.montserrat(
+                  fontSize: 12,
+                  color: _textMedium,
+                ),
+              ),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: Text('Batal',
-                    style: GoogleFonts.montserrat(fontSize: 12, color: Colors.grey[600])),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF6A918),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                child: Text('Lanjut',
-                    style: GoogleFonts.montserrat(fontSize: 12, color: Colors.white)),
+                child: Text(
+                  'Batal',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: _textMedium,
+                  ),
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [_accentGold, _accentGold.withOpacity(0.8)],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accentGold.withOpacity(0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    shadowColor: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Lanjut',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
               ),
             ],
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
 
@@ -171,12 +339,12 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
         return;
       }
     } catch (e) {
-      _showSnackbar('Gagal mengecek setoran: ${e.toString()}', Colors.red);
+      _showToast('Gagal mengecek setoran: ${e.toString()}', type: ToastType.error);
       return;
     }
 
     if (_showOtorisasi && _otorisasiController.text.isEmpty) {
-      _showSnackbar('Kode otorisasi harus diisi!', Colors.red);
+      _showToast('Kode otorisasi harus diisi!', type: ToastType.error);
       return;
     }
 
@@ -186,20 +354,20 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
       final result = await TutupKasirService.prosesTutupKasir(
         tanggal: _selectedDate,
         userKode: _currentUser!.kduser,
-        setoran: setoran,
+        setoran: setoran, // Mengirim nilai numerik tanpa separator
         kodeOtorisasi: _showOtorisasi ? _otorisasiController.text : null,
       );
 
       if (result['success']) {
-        _showSnackbar(result['message'], Colors.green);
+        _showToast(result['message'], type: ToastType.success);
         await _printStrukTutupKasir();
         widget.onTutupKasirSuccess();
         Navigator.pop(context);
       } else {
-        _showSnackbar(result['message'], Colors.red);
+        _showToast(result['message'], type: ToastType.error);
       }
     } catch (e) {
-      _showSnackbar('Error: ${e.toString()}', Colors.red);
+      _showToast('Error: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() => _isProcessing = false);
     }
@@ -213,17 +381,6 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
     ).format(amount);
   }
 
-  double get _totalPenjualan {
-    if (_summary == null) return 0;
-    return _summary!.cash + _summary!.card + _summary!.other + _summary!.dp;
-  }
-
-  double get _selisih {
-    if (_setoranController.text.isEmpty) return 0;
-    final setoran = double.tryParse(_setoranController.text.replaceAll(',', '')) ?? 0;
-    return setoran - (_summary?.cash ?? 0) - (_summary?.dp ?? 0);
-  }
-
   Future<void> _printStrukTutupKasir() async {
     try {
       final result = await TutupKasirService.getStrukTutupKasir(
@@ -233,7 +390,6 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
       );
 
       if (result['success']) {
-        // final success = await ReceiptService.printStrukTutupKasir(result['data']);
         final data = result['data'];
         final success = await UniversalPrinterService().printStrukTutupKasir(
           mainData: data['main'] as Map<String, dynamic>,
@@ -244,13 +400,13 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
         );
 
         if (!success) {
-          _showSnackbar('Gagal print struk, tetapi tutup kasir berhasil', Colors.orange);
+          _showToast('Gagal print struk, tetapi tutup kasir berhasil', type: ToastType.info);
         }
       } else {
-        _showSnackbar('Gagal mengambil data struk: ${result['message']}', Colors.orange);
+        _showToast('Gagal mengambil data struk: ${result['message']}', type: ToastType.info);
       }
     } catch (e) {
-      _showSnackbar('Error print struk: ${e.toString()}', Colors.orange);
+      _showToast('Error print struk: ${e.toString()}', type: ToastType.info);
     }
   }
 
@@ -261,388 +417,491 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> {
       showBackButton: true,
       showSidebar: true,
       isFormScreen: true,
-      child: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFF6A918)))
-          : SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // ========== INFO USER & TANGGAL ==========
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
+      child: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: Container(
+            color: _bgSoft,
+            child: _isLoading
+                ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      color: _accentGold,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Memuat data...',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 11,
+                      color: _textMedium,
+                    ),
                   ),
                 ],
               ),
+            )
+                : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // User Info
+                  // ========== INFO USER & TANGGAL ==========
                   Container(
-                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.blue.shade100, width: 1),
+                      color: _surfaceWhite,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _borderSoft),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _shadowColor,
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    child: Row(
+                    child: Column(
                       children: [
-                        Icon(Icons.person, size: 16, color: Colors.blue.shade700),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        // Header
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(color: _borderSoft),
+                            ),
+                          ),
+                          child: Row(
                             children: [
-                              Text(
-                                _currentUser?.nmuser ?? '-',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.blue.shade800,
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: _primarySoft,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  Icons.person_rounded,
+                                  size: 16,
+                                  color: _primaryDark,
                                 ),
                               ),
-                              Text(
-                                _currentUser?.kduser ?? '-',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 10,
-                                  color: Colors.blue.shade600,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Kasir',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 10,
+                                        color: _textLight,
+                                      ),
+                                    ),
+                                    Text(
+                                      _currentUser?.nmuser ?? '-',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _accentGoldSoft,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: _accentGold.withOpacity(0.3)),
+                                ),
+                                child: Text(
+                                  _currentUser?.kduser ?? '-',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: _accentGold,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
 
-                  // Tanggal
-                  InkWell(
-                    onTap: () => _selectDate(context),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade300, width: 1),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.calendar_today, size: 14, color: Colors.grey.shade600),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              DateFormat('EEEE, dd MMMM yyyy', 'id_ID').format(_selectedDate),
-                              style: GoogleFonts.montserrat(
-                                fontSize: 11,
-                                color: Colors.black87,
+                        // Tanggal
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: InkWell(
+                            onTap: () => _selectDate(context),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              height: 40,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: _bgSoft,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: _borderSoft),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.calendar_today_rounded, size: 14, color: _accentGold),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Tanggal',
+                                          style: GoogleFonts.montserrat(
+                                            fontSize: 9,
+                                            color: _textLight,
+                                          ),
+                                        ),
+                                        Text(
+                                          DateFormat('EEEE, dd MMMM yyyy', 'id').format(_selectedDate),
+                                          style: GoogleFonts.montserrat(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            color: _textDark,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(Icons.arrow_drop_down_rounded, size: 18, color: _textLight),
+                                ],
                               ),
                             ),
                           ),
-                          Icon(Icons.arrow_drop_down, size: 16, color: Colors.grey.shade600),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
 
-            // const SizedBox(height: 16),
-            //
-            // // ========== SUMMARY PENJUALAN ==========
-            // Container(
-            //   decoration: BoxDecoration(
-            //     color: Colors.white,
-            //     borderRadius: BorderRadius.circular(10),
-            //     boxShadow: [
-            //       BoxShadow(
-            //         color: Colors.black.withOpacity(0.03),
-            //         blurRadius: 3,
-            //         offset: const Offset(0, 1),
-            //       ),
-            //     ],
-            //   ),
-            //   padding: const EdgeInsets.all(16),
-            //   child: Column(
-            //     crossAxisAlignment: CrossAxisAlignment.start,
-            //     children: [
-            //       Text(
-            //         'Summary Penjualan',
-            //         style: GoogleFonts.montserrat(
-            //           fontSize: 13,
-            //           fontWeight: FontWeight.w700,
-            //           color: Colors.black87,
-            //         ),
-            //       ),
-            //       const SizedBox(height: 12),
-            //
-            //       _buildSummaryItem('Cash', _summary?.cash ?? 0),
-            //       _buildSummaryItem('Card', _summary?.card ?? 0),
-            //       _buildSummaryItem('Other', _summary?.other ?? 0),
-            //       _buildSummaryItem('DP', _summary?.dp ?? 0),
-            //
-            //       const Divider(height: 16, color: Colors.grey),
-            //
-            //       _buildSummaryItem(
-            //         'TOTAL PENJUALAN',
-            //         _totalPenjualan,
-            //         isTotal: true,
-            //         color: const Color(0xFFF6A918),
-            //       ),
-            //     ],
-            //   ),
-            // ),
-            //
-            // const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-            // ========== INPUT SETORAN ==========
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Setoran Kasir',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
+                  // ========== INPUT SETORAN ==========
                   Container(
-                    height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.shade300, width: 1),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    alignment: Alignment.centerLeft,
-                    child: TextFormField(
-                      controller: _setoranController,
-                      keyboardType: TextInputType.number,
-                      style: GoogleFonts.montserrat(fontSize: 13),
-                      decoration: InputDecoration(
-                        hintText: 'Masukkan jumlah setoran...',
-                        hintStyle: GoogleFonts.montserrat(
-                          fontSize: 12,
-                          color: Colors.grey.shade500,
+                      color: _surfaceWhite,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _borderSoft),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _shadowColor,
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                        prefixText: 'Rp ',
-                        prefixStyle: GoogleFonts.montserrat(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      onChanged: (value) {
-                        setState(() {});
-                      },
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Info Selisih
-                  // Container(
-                  //   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  //   decoration: BoxDecoration(
-                  //     color: _selisih == 0 ? Colors.green.shade50 : Colors.orange.shade50,
-                  //     borderRadius: BorderRadius.circular(6),
-                  //     border: Border.all(
-                  //       color: _selisih == 0 ? Colors.green.shade200 : Colors.orange.shade200,
-                  //       width: 1,
-                  //     ),
-                  //   ),
-                  //   child: Row(
-                  //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //     children: [
-                  //       Text(
-                  //         'SELISIH:',
-                  //         style: GoogleFonts.montserrat(
-                  //           fontSize: 10,
-                  //           fontWeight: FontWeight.w600,
-                  //           color: Colors.grey.shade700,
-                  //         ),
-                  //       ),
-                  //       Text(
-                  //         _formatCurrency(_selisih),
-                  //         style: GoogleFonts.montserrat(
-                  //           fontSize: 11,
-                  //           fontWeight: FontWeight.w700,
-                  //           color: _selisih == 0
-                  //               ? Colors.green.shade700
-                  //               : Colors.orange.shade700,
-                  //         ),
-                  //       ),
-                  //     ],
-                  //   ),
-                  // ),
-                ],
-              ),
-            ),
-
-            // ========== OTORISASI SECTION ==========
-            if (_showOtorisasi) ...[
-              const SizedBox(height: 16),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 3,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-                  border: Border.all(color: Colors.orange.shade200, width: 1),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                    child: Column(
                       children: [
-                        Icon(Icons.security, size: 16, color: Colors.orange.shade700),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Otorisasi Diperlukan',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.orange.shade700,
+                        // Header
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(color: _borderSoft),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: _accentGoldSoft,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  Icons.payments_rounded,
+                                  size: 16,
+                                  color: _accentGold,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Setoran Kasir',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _textDark,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Content - INPUT SETORAN dengan format separator
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Container(
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: _bgSoft,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: _borderSoft),
+                            ),
+                            child: Row(
+                              children: [
+                                // Prefix Rp
+                                Container(
+                                  width: 45,
+                                  height: 44,
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    'Rp',
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: _accentGold,
+                                    ),
+                                  ),
+                                ),
+
+                                // Separator
+                                Container(
+                                  width: 1,
+                                  height: 24,
+                                  color: _borderSoft,
+                                ),
+
+                                // Input field dengan format separator
+                                Expanded(
+                                  child: SizedBox(
+                                    height: 44,
+                                    child: TextField(
+                                      controller: _setoranController,
+                                      keyboardType: TextInputType.number,
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 13,
+                                        color: _textDark,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                        TextInputFormatter.withFunction((oldValue, newValue) {
+                                          if (newValue.text.isEmpty) return newValue;
+
+                                          // Hapus semua titik yang ada
+                                          final cleanText = newValue.text.replaceAll('.', '');
+
+                                          // Format dengan separator ribuan (titik)
+                                          final buffer = StringBuffer();
+                                          for (int i = 0; i < cleanText.length; i++) {
+                                            if (i > 0 && (cleanText.length - i) % 3 == 0) {
+                                              buffer.write('.');
+                                            }
+                                            buffer.write(cleanText[i]);
+                                          }
+
+                                          return TextEditingValue(
+                                            text: buffer.toString(),
+                                            selection: TextSelection.collapsed(offset: buffer.length),
+                                          );
+                                        }),
+                                      ],
+                                      decoration: InputDecoration(
+                                        hintText: '0',
+                                        hintStyle: GoogleFonts.montserrat(
+                                          fontSize: 13,
+                                          color: _textLight,
+                                        ),
+                                        border: InputBorder.none,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                                      ),
+                                      onChanged: (value) {
+                                        setState(() {});
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Karena sudah pernah dilakukan tutup kasir untuk tanggal ini, diperlukan kode otorisasi.',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 10,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+                  ),
+
+                  // ========== OTORISASI SECTION ==========
+                  if (_showOtorisasi) ...[
+                    const SizedBox(height: 16),
                     Container(
-                      height: 40,
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade300, width: 1),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      alignment: Alignment.centerLeft,
-                      child: TextFormField(
-                        controller: _otorisasiController,
-                        obscureText: true,
-                        style: GoogleFonts.montserrat(fontSize: 13),
-                        decoration: InputDecoration(
-                          hintText: 'Masukkan kode otorisasi...',
-                          hintStyle: GoogleFonts.montserrat(
-                            fontSize: 12,
-                            color: Colors.grey.shade500,
+                        color: _surfaceWhite,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _accentGold.withOpacity(0.5), width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _accentGold.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          // Header
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(color: _borderSoft),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: _accentGoldSoft,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    Icons.security_rounded,
+                                    size: 16,
+                                    color: _accentGold,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Otorisasi Diperlukan',
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: _textDark,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Karena sudah pernah dilakukan tutup kasir',
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 9,
+                                          color: _textLight,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Content
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Container(
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: _bgSoft,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: _borderSoft),
+                              ),
+                              child: TextFormField(
+                                controller: _otorisasiController,
+                                obscureText: true,
+                                textAlignVertical: TextAlignVertical.center,
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  color: _textDark,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Masukkan kode otorisasi...',
+                                  hintStyle: GoogleFonts.montserrat(
+                                    fontSize: 12,
+                                    color: _textLight,
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.lock_rounded,
+                                    size: 16,
+                                    color: _accentGold,
+                                  ),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
-              ),
-            ],
 
-            const SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
-            // ========== PROSES BUTTON ==========
-            SizedBox(
-              width: double.infinity,
-              height: 42,
-              child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _prosesTutupKasir,
-                icon: _isProcessing
-                    ? SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2.5,
+                  // ========== PROSES BUTTON ==========
+                  Container(
+                    width: double.infinity,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [_primaryDark, _primaryLight],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _primaryDark.withOpacity(0.2),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _isProcessing ? null : _prosesTutupKasir,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Center(
+                          child: _isProcessing
+                              ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                              : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.lock_clock_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'PROSES TUTUP KASIR',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                )
-                    : Icon(Icons.lock_clock_rounded, size: 16, color: Colors.white),
-                label: Text(
-                  'PROSES TUTUP KASIR',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF6A918),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
+                ],
               ),
             ),
-
-            const SizedBox(height: 16),
-          ],
+          ),
         ),
       ),
     );
   }
-
-  Widget _buildSummaryItem(String label, double value, {bool isTotal = false, Color? color}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.montserrat(
-              fontSize: isTotal ? 12 : 11,
-              fontWeight: isTotal ? FontWeight.w700 : FontWeight.w500,
-              color: color ?? Colors.grey.shade700,
-            ),
-          ),
-          Text(
-            _formatCurrency(value),
-            style: GoogleFonts.montserrat(
-              fontSize: isTotal ? 13 : 11,
-              fontWeight: isTotal ? FontWeight.w700 : FontWeight.w600,
-              color: color ?? const Color(0xFFF6A918),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
+
+// Toast Type enum
+enum ToastType { success, error, info }

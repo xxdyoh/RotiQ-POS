@@ -20,7 +20,7 @@ class DoService {
       headers['X-Cabang-Kode'] = cabang.kode;
       headers['X-Cabang-Nama'] = cabang.nama;
     }
-
+    print(headers);
     return headers;
   }
 
@@ -103,6 +103,8 @@ class DoService {
         uri,
         headers: await _getHeadersWithCabang(),
       );
+
+      print(response);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -221,6 +223,52 @@ class DoService {
         'success': false,
         'message': 'Error: ${e.toString()}',
       };
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getDoForStokIn() async {
+    try {
+      final url = '$baseUrl/do/available-for-stokin';
+      print('🌐 Calling URL: $url');
+
+      final headers = await _getHeadersWithCabang();
+      print('📋 Headers: $headers');
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: headers,
+      );
+
+      print('📡 Response status: ${response.statusCode}');
+      print('📦 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['data']);
+      } else {
+        throw Exception('Gagal mengambil data pengiriman');
+      }
+    } catch (e) {
+      print('❌ Error in getDoForStokIn: $e');
+      throw Exception('Error: ${e.toString()}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getDoDetailForStokIn(String nomor) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/do/$nomor/for-stokin'),
+        headers: await _getHeadersWithCabang(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['data'];
+      } else {
+        throw Exception('Gagal mengambil detail pengiriman');
+      }
+    } catch (e) {
+      throw Exception('Error: ${e.toString()}');
     }
   }
 }

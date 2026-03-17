@@ -28,6 +28,19 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
 
+  // Warna konsisten dengan POS Screen dan ItemListScreen
+  final Color _primaryDark = const Color(0xFF2C3E50);
+  final Color _primaryLight = const Color(0xFF34495E);
+  final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _accentCoral = const Color(0xFFFF6B6B);
+  final Color _accentSky = const Color(0xFF4CC9F0);
+  final Color _bgLight = const Color(0xFFFAFAFA);
+  final Color _bgCard = const Color(0xFFFFFFFF);
+  final Color _textPrimary = const Color(0xFF1A202C);
+  final Color _textSecondary = const Color(0xFF718096);
+  final Color _borderColor = const Color(0xFFE2E8F0);
+
   String? _selectedCategory;
   SetengahJadi? _selectedSetengahJadi;
   List<Map<String, dynamic>> _setengahJadiDetails = [];
@@ -138,42 +151,30 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         content: Row(
           children: [
             Icon(
-              color == Colors.green ? Icons.check_circle : Icons.error_outline,
+              color == _accentMint ? Icons.check_circle : Icons.error_outline,
               color: Colors.white,
               size: 16,
             ),
-            SizedBox(width: 6),
-            Text(message, style: GoogleFonts.montserrat(fontSize: 12)),
+            const SizedBox(width: 6),
+            Expanded(child: Text(message, style: GoogleFonts.montserrat(fontSize: 12))),
           ],
         ),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        margin: EdgeInsets.all(12),
+        margin: const EdgeInsets.all(12),
       ),
     );
   }
 
-  // void _showSetengahJadiDialog() async {
-  //   final selected = await showDialog<SetengahJadi>(
-  //     context: context,
-  //     builder: (context) => SetengahJadiSelectionDialog(
-  //       setengahJadiList: _setengahJadiList,
-  //       selectedSetengahJadi: _selectedSetengahJadi,
-  //     ),
-  //   );
-  //
-  //   if (selected != null) {
-  //     setState(() => _selectedSetengahJadi = selected);
-  //   }
-  // }
-
   Future<void> _saveItem() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedCategory == null) {
+      _showSnackbar('Kategori harus dipilih', _accentCoral);
+      return;
+    }
 
     setState(() => _isLoading = true);
-
-    print("disini coba");
 
     try {
       final name = _nameController.text.trim();
@@ -194,7 +195,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
       );
 
       if (!itemResult['success']) {
-        _showSnackbar(itemResult['message'], Colors.red);
+        _showSnackbar(itemResult['message'], _accentCoral);
         setState(() => _isLoading = false);
         return;
       }
@@ -215,15 +216,15 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         );
 
         if (!detailResult['success']) {
-          _showSnackbar(detailResult['message'], Colors.orange);
+          _showSnackbar(detailResult['message'], _accentGold);
         }
       }
 
-      _showSnackbar('Item berhasil disimpan!', Colors.green);
+      _showSnackbar('Item berhasil disimpan!', _accentMint);
       widget.onItemSaved();
       Navigator.pop(context);
     } catch (e) {
-      _showSnackbar('Error: ${e.toString()}', Colors.red);
+      _showSnackbar('Error: ${e.toString()}', _accentCoral);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -232,376 +233,500 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.item != null;
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return BaseLayout(
       title: isEdit ? 'Edit Item' : 'Tambah Item',
       showBackButton: true,
       showSidebar: true,
       isFormScreen: true,
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Form(
-          key: _formKey, // PASTIKAN FORM KEY DI SINI
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                padding: EdgeInsets.zero,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: constraints.maxHeight,
+      child: Container(
+        color: _bgLight,
+        child: Column(
+          children: [
+            // Header dengan gradient
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [_primaryDark, _primaryLight],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
                   ),
-                  child: IntrinsicHeight(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Form Header (nama, kategori, harga)
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 3,
-                                offset: Offset(0, 1),
-                              ),
-                            ],
-                          ),
-                          padding: EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              // Nama Item
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Nama Item',
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                  SizedBox(height: 6),
-                                  Container(
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade50,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey.shade300, width: 1),
-                                    ),
-                                    padding: EdgeInsets.symmetric(horizontal: 12),
-                                    alignment: Alignment.centerLeft,
-                                    child: TextFormField(
-                                      controller: _nameController,
-                                      autofocus: true,
-                                      style: GoogleFonts.montserrat(fontSize: 13),
-                                      decoration: InputDecoration(
-                                        hintText: 'Masukkan nama item...',
-                                        hintStyle: GoogleFonts.montserrat(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade500,
-                                        ),
-                                        border: InputBorder.none,
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                      ),
-                                      validator: (value) {
-                                        if (value == null || value.trim().isEmpty) {
-                                          return 'Nama harus diisi';
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withOpacity(0.25)),
+                    ),
+                    child: Icon(
+                      isEdit ? Icons.edit_note : Icons.add_box_rounded,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    isEdit ? 'Edit Item' : 'Tambah Item Baru',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
-                              SizedBox(height: 16),
-
-                              // Kategori
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Kategori',
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                  SizedBox(height: 6),
-                                  Container(
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade50,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey.shade300, width: 1),
-                                    ),
-                                    padding: EdgeInsets.symmetric(horizontal: 12),
-                                    child: DropdownButtonHideUnderline(
-                                      child: DropdownButton<String>(
-                                        value: _selectedCategory,
-                                        items: widget.categories.map((category) {
-                                          final nama = category['ct_nama'] as String;
-                                          return DropdownMenuItem<String>(
-                                            value: nama,
-                                            child: Container(
-                                              padding: EdgeInsets.symmetric(vertical: 4),
-                                              child: Text(
-                                                nama,
-                                                style: GoogleFonts.montserrat(
-                                                  fontSize: 12,
-                                                  color: Colors.black87,
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        }).toList(),
-                                        onChanged: (value) {
-                                          setState(() => _selectedCategory = value);
-                                        },
-                                        style: GoogleFonts.montserrat(fontSize: 12),
-                                        icon: Icon(Icons.arrow_drop_down, size: 18, color: Colors.grey.shade600),
-                                        isExpanded: true,
-                                        dropdownColor: Colors.white,
-                                        borderRadius: BorderRadius.circular(8),
-                                        elevation: 2,
-                                        hint: Text(
-                                          'Pilih kategori...',
-                                          style: GoogleFonts.montserrat(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade500,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-
-                              SizedBox(height: 16),
-
-                              // Harga
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Harga',
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                  SizedBox(height: 6),
-                                  Container(
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade50,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey.shade300, width: 1),
-                                    ),
-                                    padding: EdgeInsets.symmetric(horizontal: 12),
-                                    alignment: Alignment.centerLeft,
-                                    child: TextFormField(
-                                      controller: _priceController,
-                                      keyboardType: TextInputType.number,
-                                      style: GoogleFonts.montserrat(fontSize: 13),
-                                      decoration: InputDecoration(
-                                        hintText: 'Masukkan harga...',
-                                        hintStyle: GoogleFonts.montserrat(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade500,
-                                        ),
-                                        border: InputBorder.none,
-                                        isDense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                      ),
-                                      validator: (value) {
-                                        if (value == null || value.trim().isEmpty) {
-                                          return 'Harga harus diisi';
-                                        }
-                                        final price = double.tryParse(value.replaceAll(',', ''));
-                                        if (price == null || price <= 0) {
-                                          return 'Harga harus angka dan lebih dari 0';
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Form(
+                  key: _formKey,
+                  child: ListView(
+                    children: [
+                      // Card Informasi Item
+                      Container(
+                        decoration: BoxDecoration(
+                          color: _bgCard,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _borderColor),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 3,
+                              offset: Offset(0, 1),
+                            ),
+                          ],
                         ),
-
-                        SizedBox(height: 16),
-
-                        // Section: Setengah Jadi Details
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 3,
-                                offset: Offset(0, 1),
+                        child: Column(
+                          children: [
+                            // Header Card
+                            Container(
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: _bgLight,
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                                border: Border(bottom: BorderSide(color: _borderColor)),
                               ),
-                            ],
-                          ),
-                          padding: EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              child: Row(
                                 children: [
+                                  Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      color: _primaryDark.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Icon(
+                                      Icons.inventory_2,
+                                      size: 14,
+                                      color: _primaryDark,
+                                    ),
+                                  ),
+                                  SizedBox(width: 10),
                                   Text(
-                                    'Item Setengah Jadi',
+                                    'Informasi Item',
                                     style: GoogleFonts.montserrat(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.black87,
+                                      color: _textPrimary,
                                     ),
                                   ),
-                                  if (_isLoadingDetails)
-                                    SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Color(0xFFF6A918),
-                                      ),
-                                    ),
                                 ],
                               ),
-                              SizedBox(height: 8),
+                            ),
 
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: _showAddSetengahJadiDialog,
-                                  icon: Icon(Icons.add, size: 14, color: Color(0xFFF6A918)),
-                                  label: Text(
-                                    'TAMBAH ITEM SETENGAH JADI',
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFFF6A918),
-                                    ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    side: BorderSide(color: Color(0xFFF6A918), width: 1),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: EdgeInsets.symmetric(vertical: 10),
-                                  ),
-                                ),
-                              ),
-
-                              SizedBox(height: 12),
-
-                              // List Setengah Jadi
-                              if (_setengahJadiDetails.isEmpty)
-                                Container(
-                                  padding: EdgeInsets.symmetric(vertical: 20),
-                                  child: Column(
+                            Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Column(
+                                children: [
+                                  // Nama Item
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Icon(
-                                        Icons.construction_outlined,
-                                        size: 36,
-                                        color: Colors.grey.shade300,
-                                      ),
-                                      SizedBox(height: 8),
                                       Text(
-                                        'Belum ada bahan setengah jadi',
+                                        'Nama Item',
                                         style: GoogleFonts.montserrat(
                                           fontSize: 11,
-                                          color: Colors.grey.shade500,
+                                          fontWeight: FontWeight.w600,
+                                          color: _textSecondary,
+                                        ),
+                                      ),
+                                      SizedBox(height: 6),
+                                      Container(
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: _bgLight,
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: _borderColor),
+                                        ),
+                                        child: Center( // Tambahkan Center widget
+                                          child: TextFormField(
+                                            controller: _nameController,
+                                            style: GoogleFonts.montserrat(
+                                              fontSize: 12,
+                                              color: _textPrimary,
+                                            ),
+                                            decoration: InputDecoration(
+                                              hintText: 'Masukkan nama item',
+                                              hintStyle: GoogleFonts.montserrat(
+                                                fontSize: 11,
+                                                color: _textSecondary.withOpacity(0.5),
+                                              ),
+                                              border: InputBorder.none,
+                                              contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                                              isDense: true,
+                                            ),
+                                            validator: (value) {
+                                              if (value == null || value.trim().isEmpty) {
+                                                return 'Nama item harus diisi';
+                                              }
+                                              return null;
+                                            },
+                                          ),
                                         ),
                                       ),
                                     ],
                                   ),
-                                )
-                              else
-                                Column(
-                                  children: _setengahJadiDetails.asMap().entries.map((entry) {
-                                    final index = entry.key;
-                                    final detail = entry.value;
+                                  SizedBox(height: 16),
 
-                                    return Container(
-                                      margin: EdgeInsets.only(bottom: 8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade50,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.grey.shade200, width: 1),
+                                  // Kategori
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Kategori',
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: _textSecondary,
+                                        ),
                                       ),
-                                      child: Material(
-                                        color: Colors.transparent,
-                                        child: ListTile(
-                                          contentPadding: EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
-                                          ),
-                                          leading: Container(
-                                            width: 32,
-                                            height: 32,
-                                            decoration: BoxDecoration(
-                                              color: Colors.teal.shade50,
-                                              borderRadius: BorderRadius.circular(6),
+                                      SizedBox(height: 6),
+                                      Container(
+                                        height: 40,
+                                        padding: EdgeInsets.symmetric(horizontal: 12),
+                                        decoration: BoxDecoration(
+                                          color: _bgLight,
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: _borderColor),
+                                        ),
+                                        child: DropdownButtonHideUnderline(
+                                          child: DropdownButton<String>(
+                                            value: _selectedCategory,
+                                            isExpanded: true,
+                                            hint: Text(
+                                              'Pilih kategori',
+                                              style: GoogleFonts.montserrat(
+                                                fontSize: 11,
+                                                color: _textSecondary.withOpacity(0.5),
+                                              ),
                                             ),
-                                            child: Icon(
-                                              Icons.construction_rounded,
-                                              size: 14,
-                                              color: Colors.teal.shade700,
+                                            items: widget.categories.map((category) {
+                                              return DropdownMenuItem<String>(
+                                                value: category['ct_nama'],
+                                                child: Container(
+                                                  padding: EdgeInsets.symmetric(vertical: 4),
+                                                  child: Text(
+                                                    category['ct_nama'],
+                                                    style: GoogleFonts.montserrat(
+                                                      fontSize: 11,
+                                                      color: _textPrimary,
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            }).toList(),
+                                            onChanged: (value) {
+                                              setState(() {
+                                                _selectedCategory = value;
+                                              });
+                                            },
+                                            icon: Icon(
+                                              Icons.arrow_drop_down,
+                                              color: _textSecondary,
+                                              size: 20,
                                             ),
+                                            dropdownColor: _bgCard,
+                                            borderRadius: BorderRadius.circular(8),
                                           ),
-                                          title: Text(
-                                            detail['stjNama'],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  SizedBox(height: 16),
+
+                                  // Harga
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Harga',
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: _textSecondary,
+                                        ),
+                                      ),
+                                      SizedBox(height: 6),
+                                      Container(
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: _bgLight,
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: _borderColor),
+                                        ),
+                                        child: Center( // Tambahkan Center widget
+                                          child: TextFormField(
+                                            controller: _priceController,
+                                            keyboardType: TextInputType.number,
+                                            style: GoogleFonts.montserrat(
+                                              fontSize: 12,
+                                              color: _textPrimary,
+                                            ),
+                                            decoration: InputDecoration(
+                                              hintText: 'Masukkan harga',
+                                              hintStyle: GoogleFonts.montserrat(
+                                                fontSize: 11,
+                                                color: _textSecondary.withOpacity(0.5),
+                                              ),
+                                              border: InputBorder.none,
+                                              contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                                              isDense: true,
+                                            ),
+                                            validator: (value) {
+                                              if (value == null || value.isEmpty) {
+                                                return 'Harga harus diisi';
+                                              }
+                                              final number = double.tryParse(value.replaceAll(',', ''));
+                                              if (number == null || number <= 0) {
+                                                return 'Harga harus angka positif';
+                                              }
+                                              return null;
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      SizedBox(height: 16),
+
+                      // Card Setengah Jadi
+                      Container(
+                        decoration: BoxDecoration(
+                          color: _bgCard,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _borderColor),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 3,
+                              offset: Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            // Header Card dengan loading
+                            Container(
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: _bgLight,
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                                border: Border(bottom: BorderSide(color: _borderColor)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          color: _accentSky.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Icon(
+                                          Icons.construction_rounded,
+                                          size: 14,
+                                          color: _accentSky,
+                                        ),
+                                      ),
+                                      SizedBox(width: 10),
+                                      Text(
+                                        'Bahan Setengah Jadi',
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: _textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_isLoadingDetails)
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: _accentGold,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+
+                            Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Column(
+                                children: [
+                                  // Tombol Tambah
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _showAddSetengahJadiDialog,
+                                      icon: Icon(
+                                        Icons.add,
+                                        size: 16,
+                                        color: _accentGold,
+                                      ),
+                                      label: Text(
+                                        'TAMBAH BAHAN SETENGAH JADI',
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: _accentGold,
+                                        ),
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        side: BorderSide(color: _accentGold),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        padding: EdgeInsets.symmetric(vertical: 12),
+                                      ),
+                                    ),
+                                  ),
+
+                                  if (_setengahJadiDetails.isNotEmpty) SizedBox(height: 16),
+
+                                  // List Setengah Jadi
+                                  if (_setengahJadiDetails.isEmpty)
+                                    Container(
+                                      padding: EdgeInsets.symmetric(vertical: 24),
+                                      child: Column(
+                                        children: [
+                                          Icon(
+                                            Icons.construction_outlined,
+                                            size: 40,
+                                            color: _borderColor,
+                                          ),
+                                          SizedBox(height: 8),
+                                          Text(
+                                            'Belum ada bahan setengah jadi',
                                             style: GoogleFonts.montserrat(
                                               fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.black87,
+                                              color: _textSecondary,
                                             ),
                                           ),
-                                          subtitle: Text(
-                                            'ID: ${detail['stjId']}',
-                                            style: GoogleFonts.montserrat(
-                                              fontSize: 9,
-                                              color: Colors.grey.shade600,
-                                            ),
+                                        ],
+                                      ),
+                                    )
+                                  else
+                                    ListView.separated(
+                                      shrinkWrap: true,
+                                      physics: NeverScrollableScrollPhysics(),
+                                      itemCount: _setengahJadiDetails.length,
+                                      separatorBuilder: (_, __) => SizedBox(height: 8),
+                                      itemBuilder: (context, index) {
+                                        final detail = _setengahJadiDetails[index];
+                                        return Container(
+                                          padding: EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: _bgLight,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: _borderColor),
                                           ),
-                                          trailing: Row(
-                                            mainAxisSize: MainAxisSize.min,
+                                          child: Row(
                                             children: [
-                                              // Qty dengan edit inline
+                                              Container(
+                                                width: 32,
+                                                height: 32,
+                                                decoration: BoxDecoration(
+                                                  color: _accentSky.withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Icon(
+                                                  Icons.construction_rounded,
+                                                  size: 14,
+                                                  color: _accentSky,
+                                                ),
+                                              ),
+                                              SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      detail['stjNama'],
+                                                      style: GoogleFonts.montserrat(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.w600,
+                                                        color: _textPrimary,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                    SizedBox(height: 2),
+                                                    Text(
+                                                      'ID: ${detail['stjId']}',
+                                                      style: GoogleFonts.montserrat(
+                                                        fontSize: 9,
+                                                        color: _textSecondary,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              // Qty
                                               GestureDetector(
-                                                onTap: () {
-                                                  _showEditQtyDialog(index, detail['qty']);
-                                                },
+                                                onTap: () => _showEditQtyDialog(index, detail['qty']),
                                                 child: Container(
                                                   padding: EdgeInsets.symmetric(
-                                                    horizontal: 8,
+                                                    horizontal: 10,
                                                     vertical: 4,
                                                   ),
                                                   decoration: BoxDecoration(
-                                                    color: Colors.orange.shade50,
+                                                    color: _accentGold.withOpacity(0.1),
                                                     borderRadius: BorderRadius.circular(4),
                                                     border: Border.all(
-                                                      color: Colors.orange.shade100,
-                                                      width: 1,
+                                                      color: _accentGold.withOpacity(0.3),
                                                     ),
                                                   ),
                                                   child: Text(
-                                                    'Qty: ${detail['qty'].toInt()}',
+                                                    '${detail['qty'].toInt()}',
                                                     style: GoogleFonts.montserrat(
-                                                      fontSize: 9,
+                                                      fontSize: 11,
                                                       fontWeight: FontWeight.w700,
-                                                      color: Colors.orange.shade700,
+                                                      color: _accentGold,
                                                     ),
                                                   ),
                                                 ),
@@ -610,79 +735,84 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                                               IconButton(
                                                 icon: Icon(
                                                   Icons.delete_outline,
-                                                  size: 14,
-                                                  color: Colors.red.shade400,
+                                                  size: 18,
+                                                  color: _accentCoral,
                                                 ),
-                                                onPressed: () {
-                                                  _removeSetengahJadiDetail(index);
-                                                },
+                                                onPressed: () => _removeSetengahJadiDetail(index),
                                                 padding: EdgeInsets.zero,
-                                                constraints: BoxConstraints(minWidth: 30),
+                                                constraints: BoxConstraints(),
                                               ),
                                             ],
                                           ),
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                            ],
-                          ),
-                        ),
-
-                        Spacer(),
-
-                        // Save Button
-                        Container(
-                          margin: EdgeInsets.only(
-                            top: 16,
-                            bottom: MediaQuery.of(context).viewInsets.bottom > 0
-                                ? MediaQuery.of(context).viewInsets.bottom + 8
-                                : 8,
-                          ),
-                          child: SizedBox(
-                            width: double.infinity,
-                            height: 42,
-                            child: ElevatedButton.icon(
-                              onPressed: _isLoading ? null : _saveItem,
-                              icon: _isLoading
-                                  ? SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                                  : Icon(
-                                isEdit ? Icons.edit : Icons.add,
-                                size: 16,
-                                color: Colors.white,
-                              ),
-                              label: Text(
-                                isEdit ? 'UPDATE ITEM' : 'TAMBAH ITEM',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Color(0xFFF6A918),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
+                                        );
+                                      },
+                                    ),
+                                ],
                               ),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            ),
+
+            // Bottom Button
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _bgCard,
+                border: Border(top: BorderSide(color: _borderColor)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 8,
+                    offset: Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 42,
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _saveItem,
+                  icon: _isLoading
+                      ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                      : Icon(
+                    isEdit ? Icons.edit : Icons.add,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                  label: Text(
+                    isEdit ? 'UPDATE ITEM' : 'TAMBAH ITEM',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _accentGold,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    elevation: 2,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -690,476 +820,159 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
   void _showEditQtyDialog(int index, double currentQty) {
     final qtyController = TextEditingController(text: currentQty.toInt().toString());
+    int tempQuantity = currentQty.toInt();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(
-          'Edit Jumlah',
-          style: GoogleFonts.montserrat(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+        titlePadding: EdgeInsets.all(16),
+        contentPadding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: _accentGold.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                Icons.edit_note,
+                size: 16,
+                color: _accentGold,
+              ),
+            ),
+            SizedBox(width: 8),
+            Text(
+              'Edit Jumlah',
+              style: GoogleFonts.montserrat(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: _textPrimary,
+              ),
+            ),
+          ],
         ),
-        content: TextField(
-          controller: qtyController,
-          keyboardType: TextInputType.number,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Qty',
-            border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _setengahJadiDetails[index]['stjNama'],
+              style: GoogleFonts.montserrat(
+                fontSize: 11,
+                color: _textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: _borderColor),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: IconButton(
+                    icon: Icon(Icons.remove, size: 16, color: _primaryDark),
+                    onPressed: () {
+                      if (tempQuantity > 1) {
+                        tempQuantity--;
+                        qtyController.text = tempQuantity.toString();
+                      }
+                    },
+                    padding: EdgeInsets.all(8),
+                    constraints: BoxConstraints(minWidth: 36, minHeight: 36),
+                  ),
+                ),
+                SizedBox(width: 8),
+                Container(
+                  width: 70,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: _borderColor),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Center( // Tambahkan Center widget
+                    child: TextField(
+                      controller: qtyController,
+                      textAlign: TextAlign.center,
+                      keyboardType: TextInputType.number,
+                      style: GoogleFonts.montserrat(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                        isDense: true,
+                      ),
+                      onChanged: (value) {
+                        final newQty = int.tryParse(value);
+                        if (newQty != null && newQty > 0) {
+                          tempQuantity = newQty;
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                SizedBox(width: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: _borderColor),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: IconButton(
+                    icon: Icon(Icons.add, size: 16, color: _primaryDark),
+                    onPressed: () {
+                      tempQuantity++;
+                      qtyController.text = tempQuantity.toString();
+                    },
+                    padding: EdgeInsets.all(8),
+                    constraints: BoxConstraints(minWidth: 36, minHeight: 36),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Batal'),
+            child: Text(
+              'Batal',
+              style: GoogleFonts.montserrat(
+                fontSize: 11,
+                color: _textSecondary,
+              ),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
-              final newQty = int.tryParse(qtyController.text.trim()) ?? 0;
-              if (newQty > 0) {
-                _updateSetengahJadiQty(index, newQty);
+              if (tempQuantity > 0) {
+                _updateSetengahJadiQty(index, tempQuantity);
                 Navigator.pop(context);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Qty harus lebih dari 0'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
               }
             },
-            child: Text('Simpan'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _accentGold,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            child: Text(
+              'Simpan',
+              style: GoogleFonts.montserrat(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
           ),
         ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
 }
-
-// class SetengahJadiSelectionDialog extends StatefulWidget {
-//   final List<SetengahJadi> setengahJadiList;
-//   final SetengahJadi? selectedSetengahJadi;
-//
-//   const SetengahJadiSelectionDialog({
-//     super.key,
-//     required this.setengahJadiList,
-//     this.selectedSetengahJadi, required List<SetengahJadi> alreadySelectedItems,
-//   });
-//
-//   @override
-//   State<SetengahJadiSelectionDialog> createState() =>
-//       _SetengahJadiSelectionDialogState();
-// }
-//
-// class _SetengahJadiSelectionDialogState extends State<SetengahJadiSelectionDialog> {
-//   final TextEditingController _searchController = TextEditingController();
-//   List<SetengahJadi> _filteredItems = [];
-//
-//   @override
-//   void initState() {
-//     super.initState();
-//     _filteredItems = widget.setengahJadiList;
-//   }
-//
-//   void _filterItems(String query) {
-//     setState(() {
-//       _filteredItems = widget.setengahJadiList.where((item) {
-//         return item.stjNama.toLowerCase().contains(query.toLowerCase());
-//       }).toList();
-//     });
-//   }
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Dialog(
-//       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-//       backgroundColor: Colors.white,
-//       elevation: 4,
-//       child: Container(
-//         height: 420,
-//         child: Column(
-//           children: [
-//             Container(
-//               padding: EdgeInsets.all(16),
-//               decoration: BoxDecoration(
-//                 color: Colors.grey.shade50,
-//                 borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-//                 border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
-//               ),
-//               child: Row(
-//                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-//                 children: [
-//                   Text(
-//                     'Pilih Setengah Jadi',
-//                     style: GoogleFonts.montserrat(
-//                       fontSize: 14,
-//                       fontWeight: FontWeight.w600,
-//                       color: Colors.black87,
-//                     ),
-//                   ),
-//                   IconButton(
-//                     icon: Icon(Icons.close, size: 18, color: Colors.grey.shade600),
-//                     onPressed: () => Navigator.pop(context),
-//                     padding: EdgeInsets.zero,
-//                     constraints: BoxConstraints(minWidth: 30, minHeight: 30),
-//                     splashRadius: 18,
-//                   ),
-//                 ],
-//               ),
-//             ),
-//
-//             // Search Bar
-//             Padding(
-//               padding: EdgeInsets.all(12),
-//               child: Container(
-//                 height: 34,
-//                 padding: EdgeInsets.symmetric(horizontal: 10),
-//                 decoration: BoxDecoration(
-//                   color: Colors.white,
-//                   borderRadius: BorderRadius.circular(8),
-//                   border: Border.all(color: Colors.grey.shade300, width: 1),
-//                   boxShadow: [
-//                     BoxShadow(
-//                       color: Colors.black.withOpacity(0.02),
-//                       blurRadius: 2,
-//                       offset: Offset(0, 1),
-//                     ),
-//                   ],
-//                 ),
-//                 child: Row(
-//                   children: [
-//                     Icon(Icons.search, size: 14, color: Colors.grey.shade500),
-//                     SizedBox(width: 6),
-//                     Expanded(
-//                       child: TextField(
-//                         controller: _searchController,
-//                         autofocus: true,
-//                         decoration: InputDecoration(
-//                           hintText: 'Cari setengah jadi...',
-//                           hintStyle: GoogleFonts.montserrat(
-//                             fontSize: 11,
-//                             color: Colors.grey.shade500,
-//                           ),
-//                           border: InputBorder.none,
-//                           isDense: true,
-//                         ),
-//                         style: GoogleFonts.montserrat(fontSize: 11),
-//                         onChanged: _filterItems,
-//                       ),
-//                     ),
-//                     if (_searchController.text.isNotEmpty)
-//                       IconButton(
-//                         icon: Icon(Icons.clear, size: 12, color: Colors.grey.shade500),
-//                         onPressed: () {
-//                           _searchController.clear();
-//                           _filterItems('');
-//                         },
-//                         padding: EdgeInsets.zero,
-//                         constraints: BoxConstraints(minWidth: 20),
-//                       ),
-//                   ],
-//                 ),
-//               ),
-//             ),
-//
-//             // Info jumlah hasil
-//             Padding(
-//               padding: EdgeInsets.symmetric(horizontal: 12),
-//               child: Row(
-//                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-//                 children: [
-//                   Text(
-//                     'Hasil: ${_filteredItems.length} item${_filteredItems.length != 1 ? 's' : ''}',
-//                     style: GoogleFonts.montserrat(
-//                       fontSize: 10,
-//                       color: Colors.grey.shade600,
-//                       fontWeight: FontWeight.w500,
-//                     ),
-//                   ),
-//                   if (widget.selectedSetengahJadi != null)
-//                     Container(
-//                       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-//                       decoration: BoxDecoration(
-//                         color: Colors.orange.shade50,
-//                         borderRadius: BorderRadius.circular(4),
-//                         border: Border.all(color: Colors.orange.shade100, width: 1),
-//                       ),
-//                       child: Text(
-//                         'Dipilih: ${widget.selectedSetengahJadi!.stjNama}',
-//                         style: GoogleFonts.montserrat(
-//                           fontSize: 9,
-//                           color: Colors.orange.shade700,
-//                           fontWeight: FontWeight.w500,
-//                         ),
-//                         maxLines: 1,
-//                         overflow: TextOverflow.ellipsis,
-//                       ),
-//                     ),
-//                 ],
-//               ),
-//             ),
-//
-//             SizedBox(height: 8),
-//
-//             // List Items
-//             Expanded(
-//               child: _filteredItems.isEmpty
-//                   ? Center(
-//                 child: Column(
-//                   mainAxisAlignment: MainAxisAlignment.center,
-//                   children: [
-//                     Icon(
-//                       Icons.construction_outlined,
-//                       size: 36,
-//                       color: Colors.grey.shade400,
-//                     ),
-//                     SizedBox(height: 8),
-//                     Text(
-//                       _searchController.text.isEmpty
-//                           ? 'Tidak ada data setengah jadi'
-//                           : 'Setengah jadi tidak ditemukan',
-//                       style: GoogleFonts.montserrat(
-//                         fontSize: 12,
-//                         color: Colors.grey.shade500,
-//                       ),
-//                     ),
-//                   ],
-//                 ),
-//               )
-//                   : ListView.builder(
-//                 padding: EdgeInsets.symmetric(horizontal: 12),
-//                 itemCount: _filteredItems.length,
-//                 itemBuilder: (context, index) {
-//                   final item = _filteredItems[index];
-//                   final isSelected = widget.selectedSetengahJadi?.stjId == item.stjId;
-//
-//                   return Container(
-//                     margin: EdgeInsets.only(bottom: 6),
-//                     decoration: BoxDecoration(
-//                       color: isSelected ? Colors.orange.shade50 : Colors.white,
-//                       borderRadius: BorderRadius.circular(8),
-//                       border: Border.all(
-//                         color: isSelected ? Colors.orange.shade200 : Colors.grey.shade200,
-//                         width: 1,
-//                       ),
-//                       boxShadow: isSelected
-//                           ? [
-//                         BoxShadow(
-//                           color: Colors.orange.shade100.withOpacity(0.3),
-//                           blurRadius: 4,
-//                           offset: Offset(0, 1),
-//                         )
-//                       ]
-//                           : [
-//                         BoxShadow(
-//                           color: Colors.black.withOpacity(0.02),
-//                           blurRadius: 2,
-//                           offset: Offset(0, 1),
-//                         )
-//                       ],
-//                     ),
-//                     child: Material(
-//                       color: Colors.transparent,
-//                       child: InkWell(
-//                         borderRadius: BorderRadius.circular(8),
-//                         onTap: () => Navigator.pop(context, item),
-//                         splashColor: Colors.orange.shade100,
-//                         highlightColor: Colors.orange.shade50.withOpacity(0.3),
-//                         child: Padding(
-//                           padding: EdgeInsets.all(10),
-//                           child: Row(
-//                             children: [
-//                               // Icon dengan badge
-//                               Stack(
-//                                 children: [
-//                                   Container(
-//                                     width: 30,
-//                                     height: 30,
-//                                     decoration: BoxDecoration(
-//                                       color: isSelected
-//                                           ? Colors.orange.shade100
-//                                           : Colors.teal.shade50,
-//                                       borderRadius: BorderRadius.circular(6),
-//                                     ),
-//                                     child: Icon(
-//                                       Icons.construction_rounded,
-//                                       size: 14,
-//                                       color: isSelected
-//                                           ? Colors.orange.shade700
-//                                           : Colors.teal.shade700,
-//                                     ),
-//                                   ),
-//                                   if (item.stjStock <= 5)
-//                                     Positioned(
-//                                       top: -3,
-//                                       right: -3,
-//                                       child: Container(
-//                                         width: 12,
-//                                         height: 12,
-//                                         decoration: BoxDecoration(
-//                                           color: Colors.red.shade600,
-//                                           borderRadius: BorderRadius.circular(6),
-//                                           border: Border.all(
-//                                             color: Colors.white,
-//                                             width: 1.5,
-//                                           ),
-//                                         ),
-//                                       ),
-//                                     ),
-//                                 ],
-//                               ),
-//                               SizedBox(width: 12),
-//
-//                               // Detail
-//                               Expanded(
-//                                 child: Column(
-//                                   crossAxisAlignment: CrossAxisAlignment.start,
-//                                   children: [
-//                                     Text(
-//                                       item.stjNama,
-//                                       style: GoogleFonts.montserrat(
-//                                         fontSize: 11,
-//                                         fontWeight: FontWeight.w600,
-//                                         color: isSelected
-//                                             ? Colors.orange.shade800
-//                                             : Colors.black87,
-//                                       ),
-//                                       maxLines: 1,
-//                                       overflow: TextOverflow.ellipsis,
-//                                     ),
-//                                     SizedBox(height: 2),
-//                                     Row(
-//                                       children: [
-//                                         Container(
-//                                           padding: EdgeInsets.symmetric(
-//                                             horizontal: 4,
-//                                             vertical: 1,
-//                                           ),
-//                                           decoration: BoxDecoration(
-//                                             color: Colors.grey.shade100,
-//                                             borderRadius: BorderRadius.circular(3),
-//                                           ),
-//                                           child: Text(
-//                                             'ID: ${item.stjId}',
-//                                             style: GoogleFonts.montserrat(
-//                                               fontSize: 8,
-//                                               color: Colors.grey.shade700,
-//                                             ),
-//                                           ),
-//                                         ),
-//                                         SizedBox(width: 6),
-//                                         Container(
-//                                           padding: EdgeInsets.symmetric(
-//                                             horizontal: 4,
-//                                             vertical: 1,
-//                                           ),
-//                                           decoration: BoxDecoration(
-//                                             color: item.stjStock <= 5
-//                                                 ? Colors.red.shade50
-//                                                 : Colors.green.shade50,
-//                                             borderRadius: BorderRadius.circular(3),
-//                                             border: Border.all(
-//                                               color: item.stjStock <= 5
-//                                                   ? Colors.red.shade100
-//                                                   : Colors.green.shade100,
-//                                               width: 1,
-//                                             ),
-//                                           ),
-//                                           child: Text(
-//                                             'STOK: ${item.stjStock}',
-//                                             style: GoogleFonts.montserrat(
-//                                               fontSize: 8,
-//                                               fontWeight: FontWeight.w700,
-//                                               color: item.stjStock <= 5
-//                                                   ? Colors.red.shade700
-//                                                   : Colors.green.shade700,
-//                                             ),
-//                                           ),
-//                                         ),
-//                                       ],
-//                                     ),
-//                                   ],
-//                                 ),
-//                               ),
-//
-//                               // Checkmark untuk selected
-//                               if (isSelected)
-//                                 Icon(
-//                                   Icons.check_circle,
-//                                   size: 16,
-//                                   color: Colors.orange.shade700,
-//                                 ),
-//                             ],
-//                           ),
-//                         ),
-//                       ),
-//                     ),
-//                   );
-//                 },
-//               ),
-//             ),
-//
-//             // Footer dengan buttons
-//             Container(
-//               padding: EdgeInsets.all(12),
-//               decoration: BoxDecoration(
-//                 color: Colors.grey.shade50,
-//                 borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
-//                 border: Border(top: BorderSide(color: Colors.grey.shade200, width: 1)),
-//               ),
-//               child: Row(
-//                 children: [
-//                   Expanded(
-//                     child: OutlinedButton(
-//                       onPressed: () => Navigator.pop(context, null),
-//                       style: OutlinedButton.styleFrom(
-//                         side: BorderSide(color: Colors.grey.shade300),
-//                         shape: RoundedRectangleBorder(
-//                           borderRadius: BorderRadius.circular(8),
-//                         ),
-//                         padding: EdgeInsets.symmetric(vertical: 8),
-//                       ),
-//                       child: Text(
-//                         'Hapus Pilihan',
-//                         style: GoogleFonts.montserrat(
-//                           fontSize: 11,
-//                           fontWeight: FontWeight.w500,
-//                           color: Colors.grey.shade700,
-//                         ),
-//                       ),
-//                     ),
-//                   ),
-//                   SizedBox(width: 8),
-//                   Expanded(
-//                     child: ElevatedButton(
-//                       onPressed: () => Navigator.pop(context),
-//                       style: ElevatedButton.styleFrom(
-//                         backgroundColor: Colors.grey.shade800,
-//                         foregroundColor: Colors.white,
-//                         shape: RoundedRectangleBorder(
-//                           borderRadius: BorderRadius.circular(8),
-//                         ),
-//                         padding: EdgeInsets.symmetric(vertical: 8),
-//                         elevation: 0,
-//                       ),
-//                       child: Text(
-//                         'Tutup',
-//                         style: GoogleFonts.montserrat(
-//                           fontSize: 11,
-//                           fontWeight: FontWeight.w500,
-//                         ),
-//                       ),
-//                     ),
-//                   ),
-//                 ],
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
