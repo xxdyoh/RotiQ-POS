@@ -7,6 +7,8 @@ class SessionManager {
   static String? _token;
   static Cabang? _currentCabang;
   static Map<int, Map<String, int>> _userPermissions = {};
+  static Map<String, int> _menuNameToId = {};
+  static Map<String, Map<String, int>> _userPermissionsByName = {};
 
   static Future<void> saveSession(String token, User user, Cabang cabang, {Map<String, dynamic>? permissions}) async {
     _currentUser = user;
@@ -14,17 +16,14 @@ class SessionManager {
     _currentCabang = cabang;
 
     if (permissions != null) {
-      _userPermissions = {};
-      permissions.forEach((key, value) {
+      _userPermissionsByName = {};
+      permissions.forEach((menuName, value) {
         if (value is Map) {
-          final menuId = int.tryParse(key.toString());
-          if (menuId != null) {
-            _userPermissions[menuId] = {
-              'insert': (value['insert'] as num?)?.toInt() ?? 0,
-              'edit': (value['edit'] as num?)?.toInt() ?? 0,
-              'delete': (value['delete'] as num?)?.toInt() ?? 0,
-            };
-          }
+          _userPermissionsByName[menuName] = {
+            'insert': (value['insert'] as num?)?.toInt() ?? 0,
+            'edit': (value['edit'] as num?)?.toInt() ?? 0,
+            'delete': (value['delete'] as num?)?.toInt() ?? 0,
+          };
         }
       });
     }
@@ -61,6 +60,14 @@ class SessionManager {
         permissions['delete'] == 1);
   }
 
+  static bool hasMenuAccessByName(String menuName) {
+    final permissions = _userPermissionsByName[menuName];
+    if (permissions == null) return false;
+    return (permissions['insert'] == 1 ||
+        permissions['edit'] == 1 ||
+        permissions['delete'] == 1);
+  }
+
   static bool canInsert(int menuId) {
     return _userPermissions[menuId]?['insert'] == 1;
   }
@@ -82,6 +89,7 @@ class SessionManager {
     _token = null;
     _currentCabang = null;
     _userPermissions = {};
+    _menuNameToId = {};
     ApiService.clearToken();
   }
 }

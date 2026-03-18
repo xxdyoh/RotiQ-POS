@@ -156,9 +156,9 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
     if (char == 'Enter' || char == 'Tab' || char == 'Escape') return false;
 
     final code = char.codeUnitAt(0);
-    return (code >= 48 && code <= 57) || // angka
-        (code >= 65 && code <= 90) ||    // huruf besar
-        (code >= 97 && code <= 122) ||   // huruf kecil
+    return (code >= 48 && code <= 57) ||
+        (code >= 65 && code <= 90) ||
+        (code >= 97 && code <= 122) ||
         char == '-' || char == '.' || char == '_' || char == '/';
   }
 

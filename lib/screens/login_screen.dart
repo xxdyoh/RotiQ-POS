@@ -428,8 +428,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         final user = result['user'] as User;
         final token = result['token'] as String;
         final permissions = result['permissions'] as Map<String, dynamic>?;
+        final menuMapping = result['menuMapping'] as Map<String, dynamic>?;
 
-        SessionManager.saveSession(token, user, _selectedCabang!, permissions: permissions);
+        print('Menu mapping dari API: ${result['menuMapping']}'); // Tambahkan ini
+
+        SessionManager.saveSession(
+          token,
+          user,
+          _selectedCabang!,
+          permissions: permissions,
+        );
 
         final bool isKasir = (user.nmuser ?? '').toUpperCase().contains('KASIR');
 

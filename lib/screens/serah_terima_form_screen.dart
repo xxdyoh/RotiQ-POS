@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:syncfusion_flutter_datagrid/datagrid.dart';
+import 'dart:async';
 import '../services/serah_terima_service.dart';
 import '../widgets/base_layout.dart';
 import '../widgets/spk_selection_dialog.dart';
@@ -21,26 +22,71 @@ class SerahTerimaFormScreen extends StatefulWidget {
   State<SerahTerimaFormScreen> createState() => _SerahTerimaFormScreenState();
 }
 
-class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
+class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> with SingleTickerProviderStateMixin {
+  final TextEditingController _searchController = TextEditingController();
   final TextEditingController _keteranganController = TextEditingController();
+  final TextEditingController _barcodeController = TextEditingController();
   final Map<int, TextEditingController> _qtyControllers = {};
   final Map<int, TextEditingController> _ketControllers = {};
-  final DataGridController _dataGridController = DataGridController();
-  late SerahTerimaItemDataSource _itemDataSource;
+  final FocusNode _barcodeFocusNode = FocusNode();
+  final FocusNode _searchFocusNode = FocusNode();
+
+  final Color _primaryDark = const Color(0xFF2C3E50);
+  final Color _primaryLight = const Color(0xFF34495E);
+  final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _accentCoral = const Color(0xFFFF6B6B);
+  final Color _accentSky = const Color(0xFF4CC9F0);
+  final Color _bgSoft = const Color(0xFFF8FAFC);
+  final Color _surfaceWhite = Colors.white;
+  final Color _textDark = const Color(0xFF1A202C);
+  final Color _textMedium = const Color(0xFF718096);
+  final Color _textLight = const Color(0xFFA0AEC0);
+  final Color _borderSoft = const Color(0xFFE2E8F0);
+  final Color _shadowColor = const Color(0xFF2C3E50).withOpacity(0.1);
+
+  final Color _primarySoft = const Color(0xFF2C3E50).withOpacity(0.1);
+  final Color _accentGoldSoft = const Color(0xFFF6A918).withOpacity(0.1);
+  final Color _accentMintSoft = const Color(0xFF06D6A0).withOpacity(0.1);
+  final Color _accentSkySoft = const Color(0xFF4CC9F0).withOpacity(0.1);
+  final Color _accentCoralSoft = const Color(0xFFFF6B6B).withOpacity(0.1);
 
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
   bool _isSaving = false;
   bool _isLoadingSpk = false;
 
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
   String? _nomorSerahTerima;
   Map<String, dynamic>? _selectedSpk;
   List<SerahTerimaItem> _items = [];
   List<SerahTerimaItem> _filteredItems = [];
 
+  String _barcodeBuffer = '';
+  Timer? _barcodeTimer;
+
   @override
   void initState() {
     super.initState();
+
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic));
+
+    _animationController.forward();
+
+    _setupAutoScanner();
 
     if (widget.serahTerimaHeader != null) {
       _nomorSerahTerima = widget.serahTerimaHeader!['stbj_nomor'];
@@ -52,31 +98,118 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
       _loadSerahTerimaDetail();
     }
 
-    _itemDataSource = SerahTerimaItemDataSource(
-      items: _items,
-      onQtyChanged: _updateItemQty,
-      onKeteranganChanged: _updateItemKeterangan,
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _barcodeFocusNode.requestFocus();
+    });
   }
 
   @override
   void dispose() {
+    _animationController.dispose();
+    _searchController.dispose();
     _keteranganController.dispose();
+    _barcodeController.dispose();
+    _barcodeFocusNode.dispose();
+    _searchFocusNode.dispose();
     _qtyControllers.values.forEach((controller) => controller.dispose());
     _ketControllers.values.forEach((controller) => controller.dispose());
+    _barcodeTimer?.cancel();
+    RawKeyboard.instance.removeListener(_handleRawKeyEvent);
     super.dispose();
+  }
+
+  void _setupAutoScanner() {
+    RawKeyboard.instance.addListener(_handleRawKeyEvent);
+  }
+
+  void _handleRawKeyEvent(RawKeyEvent event) {
+    if (event is! RawKeyDownEvent) return;
+
+    final logicalKey = event.logicalKey;
+    final keyLabel = logicalKey.keyLabel;
+
+    if (_isValidBarcodeCharacter(keyLabel)) {
+      _barcodeBuffer += keyLabel;
+      _resetBarcodeTimer();
+    }
+  }
+
+  bool _isValidBarcodeCharacter(String char) {
+    if (char.isEmpty || char.length > 1) return false;
+    if (char == 'Enter' || char == 'Tab' || char == 'Escape') return false;
+    final code = char.codeUnitAt(0);
+    return (code >= 48 && code <= 57) ||
+        (code >= 65 && code <= 90) ||
+        (code >= 97 && code <= 122) ||
+        char == '-' || char == '.' || char == '_' || char == '/';
+  }
+
+  void _resetBarcodeTimer() {
+    _barcodeTimer?.cancel();
+    _barcodeTimer = Timer(const Duration(milliseconds: 100), () {
+      if (_barcodeBuffer.isNotEmpty && _barcodeBuffer.length >= 3) {
+        final barcodeToProcess = _barcodeBuffer;
+        _barcodeBuffer = '';
+        _processBarcode(barcodeToProcess);
+      } else {
+        _barcodeBuffer = '';
+      }
+    });
+  }
+
+  void _processBarcode(String barcode) {
+    final cleanBarcode = barcode.trim();
+    if (cleanBarcode.isEmpty) return;
+    _updateQtyFromBarcode(cleanBarcode);
+  }
+
+  void _updateQtyFromBarcode(String barcode) {
+    final itemId = int.tryParse(barcode);
+    if (itemId == null) {
+      _showToast('Format barcode tidak valid', type: ToastType.error);
+      return;
+    }
+
+    final existingIndices = <int>[];
+    for (int i = 0; i < _filteredItems.length; i++) {
+      if (_filteredItems[i].itemId == itemId) {
+        existingIndices.add(i);
+      }
+    }
+
+    if (existingIndices.isNotEmpty) {
+      setState(() {
+        final index = existingIndices[0];
+        _filteredItems[index] = _filteredItems[index].copyWith(qtyTerima: _filteredItems[index].qtyTerima + 1);
+
+        final itemIndex = _items.indexWhere((item) => item.itemId == itemId);
+        if (itemIndex != -1) {
+          _items[itemIndex] = _items[itemIndex].copyWith(qtyTerima: _items[itemIndex].qtyTerima + 1);
+        }
+
+        if (_qtyControllers.containsKey(itemId)) {
+          _qtyControllers[itemId]?.text = _filteredItems[index].qtyTerima.toString();
+        } else {
+          _qtyControllers[itemId] = TextEditingController(text: _filteredItems[index].qtyTerima.toString());
+        }
+      });
+
+      _showToast('${_filteredItems[existingIndices[0]].itemNama} +1', type: ToastType.success);
+      HapticFeedback.lightImpact();
+    } else {
+      _showToast('Item tidak ada dalam daftar SPK', type: ToastType.error);
+      HapticFeedback.heavyImpact();
+    }
   }
 
   Future<void> _loadSerahTerimaDetail() async {
     if (_nomorSerahTerima == null) return;
-
     setState(() => _isLoading = true);
 
     try {
       final detail = await SerahTerimaService.getSerahTerimaDetail(_nomorSerahTerima!);
       final details = List<Map<String, dynamic>>.from(detail['details']);
 
-      // Load juga detail SPK untuk mendapatkan qty SPK asli
       final spkDetail = await SerahTerimaService.getSpkDetail(_selectedSpk!['spk_nomor']);
       final spkDetails = Map.fromIterable(
         spkDetail['details'],
@@ -103,15 +236,10 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
         }).toList();
 
         _filteredItems = List.from(_items);
-        _itemDataSource = SerahTerimaItemDataSource(
-          items: _filteredItems,
-          onQtyChanged: _updateItemQty,
-          onKeteranganChanged: _updateItemKeterangan,
-        );
         _initializeControllers();
       });
     } catch (e) {
-      _showErrorSnackbar('Gagal memuat detail serah terima: ${e.toString()}');
+      _showToast('Gagal memuat detail: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -129,34 +257,28 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
 
       setState(() {
         _items = details.map((detail) {
-          // Parse qty SPK dengan benar
           int qtySpk = 0;
           var rawQty = detail['spkd_qty'];
           if (rawQty is int) qtySpk = rawQty;
           else if (rawQty is double) qtySpk = rawQty.toInt();
           else if (rawQty is String) qtySpk = int.tryParse(rawQty) ?? 0;
 
-          print('Item: ${detail['item_nama']}, Qty SPK: $qtySpk'); // Debug
-
           return SerahTerimaItem(
             itemId: detail['spkd_brg_kode'],
             itemNama: detail['item_nama'] ?? '',
-            qtySpk: qtySpk, // Gunakan hasil parsing
+            qtySpk: qtySpk,
             qtyTerima: 0,
             keterangan: '',
           );
         }).toList();
 
         _filteredItems = List.from(_items);
-        _itemDataSource = SerahTerimaItemDataSource(
-          items: _filteredItems,
-          onQtyChanged: _updateItemQty,
-          onKeteranganChanged: _updateItemKeterangan,
-        );
         _initializeControllers();
       });
+
+      _showToast('Berhasil load ${_items.length} item dari SPK', type: ToastType.success);
     } catch (e) {
-      _showErrorSnackbar('Gagal memuat detail SPK: ${e.toString()}');
+      _showToast('Gagal memuat detail SPK: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() => _isLoadingSpk = false);
     }
@@ -183,72 +305,68 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
           return item.itemNama.toLowerCase().contains(searchLower);
         }).toList();
       }
-      _itemDataSource.updateItems(_filteredItems);
     });
   }
 
   void _updateItemQty(int itemId, int newQty) {
-    print('Updating item $itemId to qty: $newQty');
+    setState(() {
+      final itemIndex = _items.indexWhere((item) => item.itemId == itemId);
+      if (itemIndex != -1) {
+        _items[itemIndex] = _items[itemIndex].copyWith(qtyTerima: newQty);
+      }
 
-    // Update di _items
-    final itemIndex = _items.indexWhere((item) => item.itemId == itemId);
-    if (itemIndex != -1) {
-      print('Found item at index $itemIndex, old qty: ${_items[itemIndex]
-          .qtyTerima}');
-      _items[itemIndex] = _items[itemIndex].copyWith(qtyTerima: newQty);
-      print('New qty: ${_items[itemIndex].qtyTerima}');
-    }
+      final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
+      if (filteredIndex != -1) {
+        _filteredItems[filteredIndex] = _filteredItems[filteredIndex].copyWith(qtyTerima: newQty);
+      }
 
-    // Update di _filteredItems
-    final filteredIndex = _filteredItems.indexWhere((item) =>
-    item.itemId == itemId);
-    if (filteredIndex != -1) {
-      _filteredItems[filteredIndex] =
-          _filteredItems[filteredIndex].copyWith(qtyTerima: newQty);
-    }
-
-    // Update DataSource
-    _itemDataSource.updateItems(_filteredItems);
-
-    setState(() {});
+      if (_qtyControllers.containsKey(itemId)) {
+        _qtyControllers[itemId]?.text = newQty.toString();
+      }
+    });
   }
 
   void _updateItemKeterangan(int itemId, String keterangan) {
-    // Update di _items
-    final itemIndex = _items.indexWhere((item) => item.itemId == itemId);
-    if (itemIndex != -1) {
-      _items[itemIndex] = _items[itemIndex].copyWith(keterangan: keterangan);
-    }
+    setState(() {
+      final itemIndex = _items.indexWhere((item) => item.itemId == itemId);
+      if (itemIndex != -1) {
+        _items[itemIndex] = _items[itemIndex].copyWith(keterangan: keterangan);
+      }
 
-    // Update di _filteredItems
-    final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
-    if (filteredIndex != -1) {
-      _filteredItems[filteredIndex] = _filteredItems[filteredIndex].copyWith(keterangan: keterangan);
-    }
+      final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
+      if (filteredIndex != -1) {
+        _filteredItems[filteredIndex] = _filteredItems[filteredIndex].copyWith(keterangan: keterangan);
+      }
 
-    // Update DataSource
-    _itemDataSource.updateItems(_filteredItems);
-
-    // Trigger rebuild untuk update tampilan
-    setState(() {});
+      if (_ketControllers.containsKey(itemId)) {
+        _ketControllers[itemId]?.text = keterangan;
+      }
+    });
   }
 
   Future<void> _selectSpk() async {
+    HapticFeedback.selectionClick();
     final selectedSpk = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => SpkSelectionDialog(
-        onSpkSelected: (spk) {
-          Navigator.pop(context, spk);
-        },
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.transparent,
+        ),
+        child: SpkSelectionDialog(
+          onSpkSelected: (spk) {
+            Navigator.pop(context, spk);
+          },
+        ),
       ),
     );
 
     if (selectedSpk != null) {
-      print('SPK selected: ${selectedSpk['spk_nomor']}');
       setState(() {
         _selectedSpk = selectedSpk;
+        _qtyControllers.clear();
+        _ketControllers.clear();
       });
       await _loadSpkDetail(selectedSpk['spk_nomor']);
     }
@@ -259,12 +377,17 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(primary: Color(0xFFF6A918), onPrimary: Colors.white),
-            dialogBackgroundColor: Colors.white,
+            colorScheme: ColorScheme.light(
+              primary: _primaryDark,
+              onPrimary: Colors.white,
+              surface: _surfaceWhite,
+              onSurface: _textDark,
+            ),
+            dialogBackgroundColor: _surfaceWhite,
           ),
           child: child!,
         );
@@ -276,38 +399,44 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
     }
   }
 
-  void _showErrorSnackbar(String message) {
+  void _showToast(String message, {required ToastType type}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.error_outline, color: Colors.white, size: 16),
-            const SizedBox(width: 6),
-            Expanded(child: Text(message, style: GoogleFonts.montserrat(fontSize: 12))),
-          ],
+        content: Container(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Icon(
+                type == ToastType.success ? Icons.check_circle_rounded :
+                type == ToastType.error ? Icons.error_rounded :
+                Icons.info_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: GoogleFonts.montserrat(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: type == ToastType.success ? _accentMint :
+        type == ToastType.error ? _accentCoral :
+        _accentSky,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         margin: const EdgeInsets.all(12),
-      ),
-    );
-  }
-
-  void _showSuccessSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 16),
-            const SizedBox(width: 6),
-            Expanded(child: Text(message, style: GoogleFonts.montserrat(fontSize: 12))),
-          ],
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
         ),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        margin: const EdgeInsets.all(12),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -331,26 +460,22 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
 
   Future<void> _saveSerahTerima() async {
     if (_selectedSpk == null) {
-      _showErrorSnackbar('SPK harus dipilih!');
+      _showToast('SPK harus dipilih!', type: ToastType.error);
       return;
     }
 
-    // Ambil nilai terbaru dari TextField di grid
-    // Data sudah otomatis terupdate melalui _updateItemQty
+    _updateAllQtyFromControllers();
+    _updateAllKeteranganFromControllers();
 
     final itemsWithQty = _items.where((item) => item.qtyTerima > 0).toList();
 
-    print('Items with qty: ${itemsWithQty.length}'); // Untuk debug
-    for (var item in itemsWithQty) {
-      print('Item: ${item.itemNama}, Qty: ${item.qtyTerima}');
-    }
-
     if (itemsWithQty.isEmpty) {
-      _showErrorSnackbar('Minimal satu item harus memiliki quantity terima!');
+      _showToast('Minimal satu item harus memiliki quantity terima!', type: ToastType.error);
       return;
     }
 
     setState(() => _isSaving = true);
+    HapticFeedback.mediumImpact();
 
     try {
       final tanggalStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
@@ -367,14 +492,14 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
           : await SerahTerimaService.updateSerahTerima(_nomorSerahTerima!, requestData);
 
       if (result['success']) {
-        _showSuccessSnackbar(result['message']);
+        _showToast(result['message'], type: ToastType.success);
         widget.onSerahTerimaSaved();
         Navigator.pop(context);
       } else {
-        _showErrorSnackbar(result['message']);
+        _showToast(result['message'], type: ToastType.error);
       }
     } catch (e) {
-      _showErrorSnackbar('Error: ${e.toString()}');
+      _showToast('Error: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() => _isSaving = false);
     }
@@ -384,341 +509,278 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
     return _items.where((item) => item.qtyTerima > 0).length;
   }
 
+  int get _totalQuantity {
+    return _items.fold(0, (sum, item) => sum + item.qtyTerima);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.serahTerimaHeader != null;
 
     return BaseLayout(
-        title: isEdit ? 'Edit Serah Terima' : 'Tambah Serah Terima',
-        showBackButton: true,
-        showSidebar: true,
-        isFormScreen: true,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-          Container(
-          decoration: BoxDecoration(
-          color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 3, offset: const Offset(0, 1))],
-          ),
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              if (_nomorSerahTerima != null) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.grey.shade200, width: 1),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.confirmation_number, size: 14, color: Colors.grey.shade600),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          _nomorSerahTerima!,
-                          style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
-                        ),
-                      ),
-                    ],
+      title: isEdit ? 'Edit Serah Terima' : 'Tambah Serah Terima',
+      showBackButton: true,
+      showSidebar: true,
+      isFormScreen: true,
+      child: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: Container(
+            color: _bgSoft,
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      children: [
+                        _buildInfoCard(isEdit),
+                        const SizedBox(height: 12),
+                        _buildSpkCard(),
+                        const SizedBox(height: 12),
+                        _buildItemsCard(),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                _buildModernBottomBar(isEdit),
               ],
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Tanggal', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                        const SizedBox(height: 4),
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(6),
-                            onTap: () => _selectDate(context),
-                            child: Container(
-                              height: 36,
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: Colors.grey.shade300, width: 1),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.calendar_today, size: 14, color: Color(0xFFF6A918)),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      DateFormat('dd/MM/yy').format(_selectedDate),
-                                      style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.black87),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Keterangan', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                        const SizedBox(height: 4),
-                        Container(
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.grey.shade300, width: 1),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          alignment: Alignment.centerLeft,
-                          child: TextField(
-                            controller: _keteranganController,
-                            style: GoogleFonts.montserrat(fontSize: 11),
-                            decoration: InputDecoration(
-                              hintText: 'Keterangan serah terima...',
-                              hintStyle: GoogleFonts.montserrat(fontSize: 10, color: Colors.grey.shade500),
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            maxLines: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(bool isEdit) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _surfaceWhite,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderSoft),
+        boxShadow: [
+          BoxShadow(
+            color: _shadowColor,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            if (_nomorSerahTerima != null) ...[
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: _primarySoft,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade200),
+                  border: Border.all(color: _primaryDark.withOpacity(0.2)),
                 ),
                 child: Row(
                   children: [
+                    Icon(Icons.confirmation_number_rounded, size: 14, color: _primaryDark),
+                    const SizedBox(width: 6),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('No. SPK', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.blue.shade700)),
-                          const SizedBox(height: 4),
-                          Text(
-                            _selectedSpk != null ? _selectedSpk!['spk_nomor'] : 'Belum dipilih',
-                            style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.blue.shade800),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(
-                      height: 32,
-                      child: ElevatedButton.icon(
-                        onPressed: _selectSpk,
-                        icon: Icon(Icons.search, size: 14, color: Colors.white),
-                        label: Text('Pilih SPK', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      child: Text(
+                        _nomorSerahTerima!,
+                        style: GoogleFonts.montserrat(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _primaryDark,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 10),
             ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 2, offset: const Offset(0, 1))],
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 34,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.grey.shade300, width: 1),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.search, size: 14, color: Colors.grey.shade500),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Cari item...',
-                            hintStyle: GoogleFonts.montserrat(fontSize: 11, color: Colors.grey.shade500),
-                            border: InputBorder.none,
-                            isDense: true,
-                          ),
-                          style: GoogleFonts.montserrat(fontSize: 11),
-                          onChanged: _filterItems,
-                        ),
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => _selectDate(context),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      height: 40,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: _bgSoft,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _borderSoft),
                       ),
-                    ],
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_today_rounded,
+                            color: _accentGold,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Tanggal',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 9,
+                                    color: _textMedium,
+                                  ),
+                                ),
+                                Text(
+                                  DateFormat('dd/MM/yyyy').format(_selectedDate),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-            Text(
-            'Total: ${_items.length} items',
-              style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: _bgSoft,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _borderSoft),
+                    ),
+                    child: Center(
+                      child: TextFormField(
+                        controller: _keteranganController,
+                        textAlignVertical: TextAlignVertical.center,
+                        textAlign: TextAlign.left,
+                        style: GoogleFonts.montserrat(
+                          fontSize: 11,
+                          color: _textDark,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Keterangan serah terima...',
+                          hintStyle: GoogleFonts.montserrat(
+                            fontSize: 11,
+                            color: _textLight,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.description_rounded,
+                            color: _primaryDark,
+                            size: 14,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpkCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _surfaceWhite,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderSoft),
+        boxShadow: [
+          BoxShadow(
+            color: _shadowColor,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(color: const Color(0xFFF6A918).withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-              child: Row(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: _accentSkySoft,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                Icons.inventory_rounded,
+                color: _accentSky,
+                size: 14,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.check_circle, size: 10, color: _totalItemsWithQty > 0 ? Colors.green : Colors.grey),
-                  const SizedBox(width: 4),
                   Text(
-                    '${_totalItemsWithQty} dengan QTY',
-                    style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                    'No. SPK',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 9,
+                      color: _textLight,
+                    ),
+                  ),
+                  Text(
+                    _selectedSpk != null ? _selectedSpk!['spk_nomor'] : 'Belum dipilih',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _selectedSpk != null ? _accentSky : _textLight,
+                    ),
                   ),
                 ],
               ),
             ),
-              ],
-            ),
-        ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: _isLoading || _isLoadingSpk
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFFF6A918), strokeWidth: 2))
-                    : _filteredItems.isEmpty
-                    ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.inbox_outlined, size: 36, color: Colors.grey.shade400),
-                      const SizedBox(height: 8),
-                      Text(
-                        _selectedSpk == null
-                            ? 'Pilih SPK terlebih dahulu'
-                            : 'Tidak ada data items',
-                        style: GoogleFonts.montserrat(color: Colors.grey.shade500, fontSize: 12),
-                      ),
-                    ],
+            Container(
+              height: 32,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [_accentSky, _accentSky.withOpacity(0.8)],
+                ),
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accentSky.withOpacity(0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
                   ),
-                )
-                    : Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: SfDataGrid(
-                      source: _itemDataSource,
-                      controller: _dataGridController,
-                      allowColumnsResizing: true,
-                      columnResizeMode: ColumnResizeMode.onResize,
-                      columnWidthMode: ColumnWidthMode.auto,
-                      headerRowHeight: 36,
-                      rowHeight: 40,
-                      gridLinesVisibility: GridLinesVisibility.both,
-                      headerGridLinesVisibility: GridLinesVisibility.both,
-                      columns: [
-                        GridColumn(
-                          columnName: 'no',
-                          minimumWidth: 50,
-                          maximumWidth: 60,
-                          label: Container(
-                            padding: const EdgeInsets.all(8),
-                            alignment: Alignment.center,
-                            child: const Text(
-                              'No',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'item_nama',
-                          minimumWidth: 200,
-                          maximumWidth: 300,
-                          label: Container(
-                            padding: const EdgeInsets.all(8),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Nama Item',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'qty_spk',
-                          minimumWidth: 80,
-                          maximumWidth: 100,
-                          label: Container(
-                            padding: const EdgeInsets.all(8),
-                            alignment: Alignment.center,
-                            child: const Text(
-                              'Qty SPK',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'qty_terima',
-                          minimumWidth: 100,
-                          maximumWidth: 120,
-                          label: Container(
-                            padding: const EdgeInsets.all(8),
-                            alignment: Alignment.center,
-                            child: const Text(
-                              'Qty Terima',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'keterangan',
-                          minimumWidth: 200,
-                          maximumWidth: 300,
-                          label: Container(
-                            padding: const EdgeInsets.all(8),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Keterangan',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _selectSpk,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      children: [
+                        Icon(Icons.search_rounded, size: 12, color: Colors.white),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Pilih SPK',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
                           ),
                         ),
                       ],
@@ -726,34 +788,285 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 42,
-                child: ElevatedButton.icon(
-                  onPressed: _isSaving ? null : _saveSerahTerima,
-                  icon: _isSaving
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Icon(isEdit ? Icons.edit_rounded : Icons.save_rounded, size: 16, color: Colors.white),
-                  label: Text(
-                    isEdit ? 'UPDATE SERAH TERIMA' : 'SIMPAN SERAH TERIMA',
-                    style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF6A918),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
     );
   }
 
-  Widget _buildItemCard(SerahTerimaItem item) {
+  Widget _buildItemsCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _surfaceWhite,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderSoft),
+        boxShadow: [
+          BoxShadow(
+            color: _shadowColor,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: _primarySoft,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    Icons.inventory_2_rounded,
+                    color: _primaryDark,
+                    size: 14,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Daftar Item',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: _textDark,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _bgSoft,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _borderSoft),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.shopping_bag_rounded,
+                        size: 10,
+                        color: _primaryDark,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${_items.length} items',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: _textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Container(
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: _bgSoft,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: _borderSoft),
+                        ),
+                        child: Center(
+                          child: TextField(
+                            controller: _searchController,
+                            textAlignVertical: TextAlignVertical.center,
+                            textAlign: TextAlign.left,
+                            style: GoogleFonts.montserrat(fontSize: 11),
+                            onChanged: _filterItems,
+                            decoration: InputDecoration(
+                              hintText: 'Cari item...',
+                              hintStyle: GoogleFonts.montserrat(
+                                fontSize: 11,
+                                color: _textLight,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search_rounded,
+                                color: _primaryDark,
+                                size: 14,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: _bgSoft,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: _borderSoft),
+                        ),
+                        child: Center(
+                          child: TextField(
+                            controller: _barcodeController,
+                            focusNode: _barcodeFocusNode,
+                            textAlignVertical: TextAlignVertical.center,
+                            textAlign: TextAlign.left,
+                            style: GoogleFonts.montserrat(fontSize: 11),
+                            onSubmitted: (value) {
+                              if (value.isNotEmpty) {
+                                _processBarcode(value);
+                                _barcodeController.clear();
+                              }
+                            },
+                            decoration: InputDecoration(
+                              hintText: 'Scan barcode...',
+                              hintStyle: GoogleFonts.montserrat(
+                                fontSize: 11,
+                                color: _textLight,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.qr_code_scanner_rounded,
+                                color: _accentMint,
+                                size: 14,
+                              ),
+                              suffixIcon: _barcodeController.text.isNotEmpty
+                                  ? GestureDetector(
+                                onTap: () => _barcodeController.clear(),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Icon(
+                                    Icons.close_rounded,
+                                    color: _textLight,
+                                    size: 12,
+                                  ),
+                                ),
+                              )
+                                  : null,
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _primarySoft,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.inventory_rounded,
+                            size: 10,
+                            color: _primaryDark,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_items.length}',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: _primaryDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _accentGoldSoft,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.shopping_cart_rounded,
+                            size: 10,
+                            color: _accentGold,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$_totalQuantity',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: _accentGold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _accentMintSoft,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_rounded,
+                            size: 10,
+                            color: _accentMint,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$_totalItemsWithQty',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: _accentMint,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (_filteredItems.isEmpty)
+                  _buildEmptyState()
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _filteredItems.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 6),
+                    itemBuilder: (context, index) => _buildModernItemCard(_filteredItems[index]),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernItemCard(SerahTerimaItem item) {
     if (!_qtyControllers.containsKey(item.itemId)) {
       _qtyControllers[item.itemId] = TextEditingController(
           text: item.qtyTerima > 0 ? item.qtyTerima.toString() : ''
@@ -767,247 +1080,351 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> {
 
     final qtyController = _qtyControllers[item.itemId]!;
     final ketController = _ketControllers[item.itemId]!;
+    final hasQty = item.qtyTerima > 0;
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 2, offset: const Offset(0, 1))],
+        color: _surfaceWhite,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: hasQty ? _primaryDark.withOpacity(0.3) : _borderSoft,
+          width: hasQty ? 1.5 : 1,
+        ),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF6A918).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Icon(Icons.inventory_2_outlined, size: 14, color: Color(0xFFF6A918)),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: hasQty ? _primaryDark : _bgSoft,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.itemNama,
-                          style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black87),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                  child: Center(
+                    child: Icon(
+                      Icons.inventory_2_outlined,
+                      color: hasQty ? Colors.white : _textLight,
+                      size: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.itemNama,
+                        style: GoogleFonts.montserrat(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _textDark,
                         ),
-                        const SizedBox(height: 2),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: _bgSoft,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'ID: ${item.itemId}',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 8,
+                                color: _textMedium,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: _accentSkySoft,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'SPK: ${item.qtySpk}',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w600,
+                                color: _accentSky,
+                              ),
+                            ),
+                          ),
+                          if (hasQty) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: _accentGoldSoft,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Terima: ${item.qtyTerima}',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w600,
+                                  color: _accentGold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 60,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: _bgSoft,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: hasQty ? _primaryDark.withOpacity(0.3) : _borderSoft,
+                    ),
+                  ),
+                  child: TextField(
+                    controller: qtyController,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: GoogleFonts.montserrat(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: hasQty ? _primaryDark : _textLight,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '0',
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
+                      isDense: true,
+                      hintStyle: GoogleFonts.montserrat(
+                        fontSize: 11,
+                        color: _textLight,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      final intValue = int.tryParse(value) ?? 0;
+                      _updateItemQty(item.itemId, intValue);
+                    },
+                    onTap: () {
+                      qtyController.selection = TextSelection(
+                        baseOffset: 0,
+                        extentOffset: qtyController.text.length,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Container(
+              height: 28,
+              decoration: BoxDecoration(
+                color: _bgSoft,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: _borderSoft),
+              ),
+              child: TextField(
+                controller: ketController,
+                style: GoogleFonts.montserrat(fontSize: 10, color: _textDark),
+                decoration: InputDecoration(
+                  hintText: 'Keterangan item (opsional)',
+                  hintStyle: GoogleFonts.montserrat(
+                    fontSize: 9,
+                    color: _textLight,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.notes_rounded,
+                    color: _textLight,
+                    size: 12,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  isDense: true,
+                ),
+                onChanged: (value) {
+                  _updateItemKeterangan(item.itemId, value);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: _bgSoft,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              _searchController.text.isEmpty
+                  ? Icons.inventory_2_outlined
+                  : Icons.search_off_rounded,
+              size: 32,
+              color: _textLight,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _selectedSpk == null
+                ? 'Pilih SPK terlebih dahulu'
+                : (_searchController.text.isEmpty
+                ? 'Tidak ada item dari SPK'
+                : 'Item tidak ditemukan'),
+            style: GoogleFonts.montserrat(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: _textDark,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            _selectedSpk == null
+                ? 'Klik tombol Pilih SPK untuk memulai'
+                : (_searchController.text.isEmpty
+                ? 'Item akan muncul setelah SPK dipilih'
+                : 'Coba kata kunci lain'),
+            style: GoogleFonts.montserrat(
+              fontSize: 10,
+              color: _textLight,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernBottomBar(bool isEdit) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _surfaceWhite,
+        border: Border(top: BorderSide(color: _borderSoft)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Item dengan QTY',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 9,
+                      color: _textLight,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle_rounded,
+                        size: 12,
+                        color: _accentMint,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$_totalItemsWithQty dari ${_items.length}',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 120,
+              height: 40,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [_primaryDark, _primaryLight],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: _primaryDark.withOpacity(0.2),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _isSaving ? null : _saveSerahTerima,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Center(
+                    child: _isSaving
+                        ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                        : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          isEdit ? Icons.edit_rounded : Icons.save_rounded,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
                         Text(
-                          'ID: ${item.itemId} | SPK: ${item.qtySpk}',
-                          style: GoogleFonts.montserrat(fontSize: 9, color: Colors.grey.shade600),
+                          isEdit ? 'Update' : 'Simpan',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 1,
-                    child: Container(
-                      width: 70,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300, width: 1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Align(
-                        alignment: Alignment.center,
-                        child: TextField(
-                          controller: qtyController,
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.center,
-                          textAlignVertical: TextAlignVertical.center,
-                          style: GoogleFonts.montserrat(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: item.qtyTerima > 0 ? const Color(0xFFF6A918) : Colors.grey.shade600,
-                            height: 1.0,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: '0',
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
-                            isDense: true,
-                            hintStyle: GoogleFonts.montserrat(fontSize: 12, color: Colors.grey.shade400, height: 1.0),
-                          ),
-                          onChanged: (value) {
-                            final intValue = int.tryParse(value) ?? 0;
-                            _updateItemQty(item.itemId, intValue);
-                          },
-                          onTap: () {
-                            qtyController.selection = TextSelection(
-                              baseOffset: 0,
-                              extentOffset: qtyController.text.length,
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: TextField(
-                  controller: ketController,
-                  style: GoogleFonts.montserrat(fontSize: 10),
-                  decoration: InputDecoration(
-                    hintText: 'Keterangan item (opsional)',
-                    hintStyle: GoogleFonts.montserrat(fontSize: 10, color: Colors.grey.shade400),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    isDense: true,
-                  ),
-                  onChanged: (value) {
-                    _updateItemKeterangan(item.itemId, value);
-                  },
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class SerahTerimaItemDataSource extends DataGridSource {
-  SerahTerimaItemDataSource({
-    required List<SerahTerimaItem> items,
-    required Function(int, int) onQtyChanged,
-    required Function(int, String) onKeteranganChanged,
-  }) {
-    _items = items;
-    _onQtyChanged = onQtyChanged;
-    _onKeteranganChanged = onKeteranganChanged;
-    _buildRows();
-  }
-
-  List<SerahTerimaItem> _items = [];
-  List<DataGridRow> _data = [];
-  late Function(int, int) _onQtyChanged;
-  late Function(int, String) _onKeteranganChanged;
-
-  void _buildRows() {
-    _data = _items.asMap().entries.map((entry) {
-      final index = entry.key + 1;
-      final item = entry.value;
-
-      return DataGridRow(cells: [
-        DataGridCell<int>(columnName: 'no', value: index),
-        DataGridCell<String>(columnName: 'item_nama', value: item.itemNama),
-        DataGridCell<int>(columnName: 'qty_spk', value: item.qtySpk),
-        DataGridCell<int>(columnName: 'qty_terima', value: item.qtyTerima),
-        DataGridCell<String>(columnName: 'keterangan', value: item.keterangan ?? ''),
-      ]);
-    }).toList();
-  }
-
-  @override
-  List<DataGridRow> get rows => _data;
-
-  @override
-  DataGridRowAdapter buildRow(DataGridRow row) {
-    final rowIndex = _data.indexOf(row);
-    if (rowIndex < 0 || rowIndex >= _items.length) {
-      return DataGridRowAdapter(cells: []);
-    }
-
-    final item = _items[rowIndex];
-    final cells = row.getCells();
-
-    return DataGridRowAdapter(
-      cells: cells.map<Widget>((cell) {
-        if (cell.columnName == 'qty_terima') {
-          return Container(
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: TextFormField(
-              initialValue: cell.value.toString(),
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.montserrat(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: cell.value > 0 ? const Color(0xFFF6A918) : Colors.grey.shade600,
-              ),
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                isDense: true,
-              ),
-              onChanged: (value) {
-                final intValue = int.tryParse(value) ?? 0;
-                _onQtyChanged(item.itemId, intValue);
-              },
-            ),
-          );
-        }
-
-        if (cell.columnName == 'keterangan') {
-          return Container(
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: TextFormField(
-              initialValue: cell.value,
-              style: GoogleFonts.montserrat(fontSize: 11),
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                isDense: true,
-              ),
-              onChanged: (value) {
-                _onKeteranganChanged(item.itemId, value);
-              },
-            ),
-          );
-        }
-
-        return Container(
-          alignment: cell.columnName == 'no' || cell.columnName == 'qty_spk'
-              ? Alignment.center
-              : Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Text(
-            cell.value.toString(),
-            style: GoogleFonts.montserrat(
-              fontSize: 11,
-              fontWeight: cell.columnName == 'qty_spk' ? FontWeight.w600 : FontWeight.normal,
-              color: cell.columnName == 'qty_spk' ? Colors.blue.shade700 : Colors.black87,
-            ),
-            textAlign: cell.columnName == 'no' || cell.columnName == 'qty_spk'
-                ? TextAlign.center
-                : TextAlign.left,
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  void updateItems(List<SerahTerimaItem> items) {
-    _items = items;
-    _buildRows();
-    notifyListeners();
-  }
-}
+enum ToastType { success, error, info }

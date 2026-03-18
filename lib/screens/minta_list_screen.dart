@@ -210,7 +210,7 @@ class _MintaListScreenState extends State<MintaListScreen> with SingleTickerProv
       context: context,
       initialDate: isStartDate ? _startDate : _endDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(

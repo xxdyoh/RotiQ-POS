@@ -26,34 +26,35 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     'utility': false,
   };
 
-  final Map<String, int> _menuIdMap = {
-    AppRoutes.dashboard: 1,
-    AppRoutes.categoryList: 2,
-    AppRoutes.itemList: 4,
-    AppRoutes.pos: 5,
-    AppRoutes.salesByInvoice: 9,
-    AppRoutes.salesByItem: 10,
-    AppRoutes.salesOrderList: 11,
-    AppRoutes.voidList: 12,
-    AppRoutes.setoran: 13,
-    AppRoutes.stockInList: 14,
-    AppRoutes.returnProduction: 15,
-    AppRoutes.lapStock: 17,
-    AppRoutes.discountList: 19,
-    AppRoutes.returnProductionList: 22,
-    AppRoutes.biayaLain: 23,
-    AppRoutes.uangMukaList: 24,
-    AppRoutes.setengahJadiList: 100,
-    AppRoutes.penerimaanSetengahJadi: 101,
-    AppRoutes.mintaList: 102,
-    AppRoutes.serahTerimaList: 103,
-    AppRoutes.spkList: 104,
-    AppRoutes.doList: 105,
-    AppRoutes.stockSetengahJadi: 106,
-    '/minta-report': 107,
-    AppRoutes.connectPrinter: 108,
-    AppRoutes.settingPrinter: 109,
-    '/user-permissions': 110,
+  final Map<String, String> _menuNameMap = {
+    AppRoutes.dashboard: 'frmsalestype',
+    AppRoutes.categoryList: 'frmCategory',
+    AppRoutes.itemList: 'frmItem',
+    AppRoutes.pos: 'frmPos',
+    AppRoutes.salesByInvoice: 'frmSalesbyInv',
+    AppRoutes.salesByItem: 'frmListJual',
+    AppRoutes.salesOrderList: 'frmCheckList',
+    AppRoutes.voidList: 'frmListVoid',
+    AppRoutes.setoran: 'frmSetoran',
+    AppRoutes.stockInList: 'frmStokin',
+    AppRoutes.returnProduction: 'frmReturn',
+    AppRoutes.lapStock: 'frmLapStok',
+    AppRoutes.discountList: 'frmdiscount',
+    AppRoutes.returnProductionList: 'frmReturn',
+    AppRoutes.biayaLain: 'frmPembayaranLain',
+    AppRoutes.uangMukaList: 'frmUangMuka',
+    AppRoutes.setengahJadiList: 'frmSetengahJadi',
+    AppRoutes.penerimaanSetengahJadi: 'frmPenerimaanStJadi',
+    AppRoutes.spkList: 'frmSPK',
+    AppRoutes.doList: 'frmDO',
+    AppRoutes.stockSetengahJadi: 'frmStockSetengahJadi',
+    AppRoutes.connectPrinter: 'frmConnectPrinter',
+    AppRoutes.settingPrinter: 'frmSettingPrinter',
+    '/user-permissions': 'frmUserPermissions',
+    AppRoutes.tutupKasir: 'frmTutupKasir',
+    AppRoutes.mintaReport: 'frmLapPermintaan',
+    AppRoutes.serahTerimaList: 'frmSTBJ',
+    AppRoutes.mintaList: 'frmPermintaanBarang'
   };
 
   final Color _primaryDark = const Color(0xFF2C3E50);
@@ -159,14 +160,22 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   }
 
   bool _hasMenuAccess(String routeName) {
-    final menuId = _menuIdMap[routeName];
-    if (menuId == null) return true;
-    return SessionManager.hasMenuAccess(menuId);
+    final menuName = _menuNameMap[routeName];
+    if (menuName == null) return true;
+    return SessionManager.hasMenuAccessByName(menuName);
   }
 
   @override
   Widget build(BuildContext context) {
     final user = SessionManager.getCurrentUser();
+    final permissions = SessionManager.getUserPermissions();
+    print('Current user: ${user?.kduser}');
+    print('All permissions: $permissions');
+
+    final menuName = _menuNameMap[AppRoutes.categoryList];
+    final hasAccess = SessionManager.hasMenuAccessByName(menuName!);
+    print('Menu categoryList: $menuName, hasAccess: $hasAccess');
+
     final bool isKasir = (user?.nmuser ?? '').toUpperCase().contains('KASIR');
 
     if (isKasir) {
@@ -360,15 +369,15 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         indent: true,
       ),
       _buildMenuItem(
-        icon: Icons.inventory_rounded,
-        label: 'Serah Terima BJ',
-        routeName: AppRoutes.serahTerimaList,
-        indent: true,
-      ),
-      _buildMenuItem(
         icon: Icons.assignment_rounded,
         label: 'SPK',
         routeName: AppRoutes.spkList,
+        indent: true,
+      ),
+      _buildMenuItem(
+        icon: Icons.inventory_rounded,
+        label: 'Serah Terima BJ',
+        routeName: AppRoutes.serahTerimaList,
         indent: true,
       ),
       _buildMenuItem(
