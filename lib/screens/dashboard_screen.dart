@@ -32,6 +32,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _groupBy = 'day';
   String _selectedJenis = 'all';
 
+  DateTime? _tempStartDate;
+  DateTime? _tempEndDate;
+  String _tempGroupBy = 'day';
+  String _tempSelectedJenis = 'all';
+
   List<Map<String, dynamic>> _cabangList = [];
   List<String> _jenisList = [];
   bool _isPusat = false;
@@ -51,6 +56,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _endDate = DateTime.now();
     _startDate = _endDate!.subtract(const Duration(days: 30));
+    _tempStartDate = _startDate;
+    _tempEndDate = _endDate;
+    _tempGroupBy = _groupBy;
+    _tempSelectedJenis = _selectedJenis;
     _checkUserRole();
     _loadInitialData();
   }
@@ -88,29 +97,110 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadDashboardData() async {
-    if (_startDate == null || _endDate == null) return;
+    if (_tempStartDate == null || _tempEndDate == null) return;
 
     setState(() => _isLoading = true);
     try {
-      String? jenisParam = _selectedJenis != 'all' ? _selectedJenis : null;
+      String? jenisParam = _tempSelectedJenis != 'all' ? _tempSelectedJenis : null;
       final data = await DashboardService.getDashboardData(
-        startDate: _startDate!,
-        endDate: _endDate!,
-        groupBy: _groupBy,
+        startDate: _tempStartDate!,
+        endDate: _tempEndDate!,
+        groupBy: _tempGroupBy,
         jenis: jenisParam,
       );
 
-      print('========== DEBUG DASHBOARD DATA ==========');
-      print('Group By: $_groupBy');
-      print('Sales labels: ${data.sales.map((e) => e.label).toList()}');
-      if (data.multiSeriesSales != null) {
-        print('Multi Series Dates: ${data.multiSeriesSales!.dates}');
-        print('Multi Series Series Count: ${data.multiSeriesSales!.series.length}');
-        for (var i = 0; i < data.multiSeriesSales!.series.length; i++) {
-          print('Series ${i+1}: ${data.multiSeriesSales!.series[i]['cabang_nama']} - data length: ${(data.multiSeriesSales!.series[i]['data'] as List).length}');
+      if (_tempGroupBy == 'year' && data.sales.isNotEmpty) {
+        final Map<String, double> yearMap = {};
+
+        for (var sale in data.sales) {
+          String dateStr = sale.label;
+          String year = dateStr.substring(0, 4);
+          yearMap[year] = (yearMap[year] ?? 0) + sale.totalSales;
         }
+
+        final sortedYears = yearMap.keys.toList()..sort((a, b) => int.parse(a).compareTo(int.parse(b)));
+        final newSales = sortedYears.map((year) => DashboardSalesData(
+          label: year,
+          totalSales: yearMap[year] ?? 0,
+        )).toList();
+
+        data.sales = newSales;
       }
-      print('==========================================');
+
+      if (data.multiSeriesSales != null && data.multiSeriesSales!.dates.isNotEmpty && _tempGroupBy == 'year') {
+        final originalDates = data.multiSeriesSales!.dates;
+        final originalSeries = data.multiSeriesSales!.series;
+
+        final Map<String, Map<String, double>> yearDataMap = {};
+
+        for (var cabangData in originalSeries) {
+          final cabangNama = cabangData['cabang_nama'] as String;
+          final oldData = List<double>.from(cabangData['data']);
+
+          for (int i = 0; i < originalDates.length; i++) {
+            final dateStr = originalDates[i];
+            final year = dateStr.substring(0, 4);
+            final sales = oldData[i];
+
+            yearDataMap.putIfAbsent(cabangNama, () => {});
+            yearDataMap[cabangNama]![year] = (yearDataMap[cabangNama]![year] ?? 0) + sales;
+          }
+        }
+
+        final allYears = <String>{};
+        for (var cabangData in yearDataMap.values) {
+          allYears.addAll(cabangData.keys);
+        }
+        final sortedYears = allYears.toList()..sort((a, b) => int.parse(a).compareTo(int.parse(b)));
+
+        final newSeries = <Map<String, dynamic>>[];
+        for (var entry in yearDataMap.entries) {
+          final dataByYear = entry.value;
+          final dataList = sortedYears.map((year) => dataByYear[year] ?? 0).toList();
+          newSeries.add({
+            'cabang_nama': entry.key,
+            'data': dataList,
+          });
+        }
+
+        newSeries.sort((a, b) {
+          final totalA = (a['data'] as List<double>).reduce((sum, val) => sum + val);
+          final totalB = (b['data'] as List<double>).reduce((sum, val) => sum + val);
+          return totalB.compareTo(totalA);
+        });
+
+        data.multiSeriesSales = MultiSeriesSalesData(
+          dates: sortedYears,
+          series: newSeries,
+        );
+      } else if (data.multiSeriesSales != null && data.multiSeriesSales!.dates.isNotEmpty) {
+        final originalDates = data.multiSeriesSales!.dates;
+        final originalSeries = data.multiSeriesSales!.series;
+
+        final indices = List.generate(originalDates.length, (i) => i);
+        indices.sort((a, b) {
+          final dateA = DateTime.tryParse(originalDates[a]);
+          final dateB = DateTime.tryParse(originalDates[b]);
+          if (dateA == null || dateB == null) return 0;
+          return dateA.compareTo(dateB);
+        });
+
+        final sortedDates = indices.map((i) => originalDates[i]).toList();
+
+        final sortedSeries = originalSeries.map((cabangData) {
+          final oldData = List<double>.from(cabangData['data']);
+          final newData = indices.map((i) => oldData[i]).toList();
+          return {
+            'cabang_nama': cabangData['cabang_nama'],
+            'data': newData,
+          };
+        }).toList();
+
+        data.multiSeriesSales = MultiSeriesSalesData(
+          dates: sortedDates,
+          series: sortedSeries,
+        );
+      }
 
       setState(() {
         _dashboardData = data;
@@ -145,35 +235,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _dashboardData?.categories.clear();
         _dashboardData?.kasir.clear();
         _dashboardData?.topItems.clear();
-        _dashboardData?.multiSeriesSales = MultiSeriesSalesData(dates: [], series: []);
       });
       return;
     }
 
     try {
       final headers = await _getHeaders();
-      final startDateStr = DateFormat('yyyy-MM-dd').format(_startDate!);
-      final endDateStr = DateFormat('yyyy-MM-dd').format(_endDate!);
-      final jenisParam = _selectedJenis != 'all' ? _selectedJenis : null;
-
-      final multiUrl = '${ApiService.baseUrl}/dashboard/data?'
-          'start_date=$startDateStr'
-          '&end_date=$endDateStr'
-          '&group_by=$_groupBy'
-          '&cabang_kode=all'
-          '${jenisParam != null ? '&jenis=$jenisParam' : ''}';
-
-      final multiResponse = await http.get(Uri.parse(multiUrl), headers: headers);
-
+      final cabangKodesParam = selectedKodes.join(',');
+      final jenisParam = _tempSelectedJenis != 'all' ? _tempSelectedJenis : null;
       final baseUrl = '${ApiService.baseUrl}/dashboard/data-by-cabang?'
-          'start_date=$startDateStr'
-          '&end_date=$endDateStr'
+          'start_date=${DateFormat('yyyy-MM-dd').format(_tempStartDate!)}'
+          '&end_date=${DateFormat('yyyy-MM-dd').format(_tempEndDate!)}'
           '${jenisParam != null ? '&jenis=$jenisParam' : ''}';
 
       final results = await Future.wait([
-        http.get(Uri.parse('$baseUrl&data_type=category&cabang_kodes=${selectedKodes.join(',')}'), headers: headers),
-        http.get(Uri.parse('$baseUrl&data_type=kasir&cabang_kodes=${selectedKodes.join(',')}'), headers: headers),
-        http.get(Uri.parse('$baseUrl&data_type=topItems&cabang_kodes=${selectedKodes.join(',')}'), headers: headers),
+        http.get(Uri.parse('$baseUrl&data_type=category&cabang_kodes=$cabangKodesParam'), headers: headers),
+        http.get(Uri.parse('$baseUrl&data_type=kasir&cabang_kodes=$cabangKodesParam'), headers: headers),
+        http.get(Uri.parse('$baseUrl&data_type=topItems&cabang_kodes=$cabangKodesParam'), headers: headers),
       ]);
 
       if (results.every((r) => r.statusCode == 200)) {
@@ -181,82 +259,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final kasirData = jsonDecode(results[1].body);
         final topItemsData = jsonDecode(results[2].body);
 
-        Map<String, dynamic> multiData = {};
-        if (multiResponse.statusCode == 200) {
-          multiData = jsonDecode(multiResponse.body);
-        }
-
         final categories = _aggregateCategoryData(categoryData);
         final kasir = _aggregateKasirData(kasirData);
         final topItems = _aggregateTopItemsData(topItemsData);
-
-        MultiSeriesSalesData? multiSeries;
-        if (multiData['success'] == true && multiData['data']['multi_series_sales'] != null) {
-          final originalMulti = multiData['data']['multi_series_sales'];
-          final originalDates = List<String>.from(originalMulti['dates']);
-          final originalSeries = List<Map<String, dynamic>>.from(originalMulti['series']);
-
-          final filteredSeries = originalSeries.where((s) {
-            final cabangNama = s['cabang_nama'] as String;
-            final cabang = _cabangList.firstWhere(
-                  (c) => c['nama'] == cabangNama,
-              orElse: () => {'kode': ''},
-            );
-            return selectedKodes.contains(cabang['kode']);
-          }).toList();
-
-          final dateEntries = originalDates.map((date) => MapEntry(date, date)).toList();
-          dateEntries.sort((a, b) {
-            final dateA = DateTime.tryParse(a.key);
-            final dateB = DateTime.tryParse(b.key);
-            if (dateA == null || dateB == null) return 0;
-            return dateA.compareTo(dateB);
-          });
-
-          final sortedDates = dateEntries.map((e) => e.value).toList();
-
-          final Map<String, List<double>> cabangDataMap = {};
-          for (final series in filteredSeries) {
-            final cabangNama = series['cabang_nama'] as String;
-            final data = List<double>.from(series['data']);
-            cabangDataMap[cabangNama] = data;
-          }
-
-          final sortedSeries = <Map<String, dynamic>>[];
-          cabangDataMap.forEach((cabangNama, oldData) {
-            final newData = <double>[];
-            for (final date in sortedDates) {
-              final index = originalDates.indexOf(date);
-              if (index >= 0 && index < oldData.length) {
-                newData.add(oldData[index]);
-              } else {
-                newData.add(0);
-              }
-            }
-            sortedSeries.add({
-              'cabang_nama': cabangNama,
-              'data': newData,
-            });
-          });
-
-          sortedSeries.sort((a, b) {
-            final totalA = (a['data'] as List<double>).reduce((sum, val) => sum + val);
-            final totalB = (b['data'] as List<double>).reduce((sum, val) => sum + val);
-            return totalB.compareTo(totalA);
-          });
-
-          multiSeries = MultiSeriesSalesData(
-            dates: sortedDates,
-            series: sortedSeries,
-          );
-        }
 
         setState(() {
           if (_dashboardData != null) {
             _dashboardData!.categories = categories;
             _dashboardData!.kasir = kasir;
             _dashboardData!.topItems = topItems.take(10).toList();
-            _dashboardData!.multiSeriesSales = multiSeries;
           }
         });
       }
@@ -363,7 +374,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _startDate = picked;
       });
-      _loadDashboardData();
     }
   }
 
@@ -391,8 +401,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _endDate = picked;
       });
-      _loadDashboardData();
     }
+  }
+
+  Future<void> _refreshDashboard() async {
+    setState(() {
+      _tempStartDate = _startDate;
+      _tempEndDate = _endDate;
+      _tempGroupBy = _groupBy;
+      _tempSelectedJenis = _selectedJenis;
+    });
+    await _loadDashboardData();
   }
 
   @override
@@ -419,16 +438,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onGroupByChanged: (value) {
                 if (value != null) {
                   setState(() => _groupBy = value);
-                  _loadDashboardData();
                 }
               },
               onJenisChanged: (value) {
                 if (value != null) {
                   setState(() => _selectedJenis = value);
-                  _loadDashboardData();
                 }
               },
-              onRefresh: _loadDashboardData,
+              onRefresh: _refreshDashboard,
               theme: _theme,
             ),
             Expanded(
@@ -450,16 +467,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   setState(() {
                     if (index < _selectedCabangVisibility.length) {
                       _selectedCabangVisibility[index] = selected;
-                      final kode = _cabangList.firstWhere(
-                            (c) => c['nama'] == _dashboardData!.multiSeriesSales!.series[index]['cabang_nama'],
-                        orElse: () => {'kode': ''},
-                      )['kode'] as String;
-                      if (selected) {
-                        if (!_selectedCabangKodes.contains(kode)) {
-                          _selectedCabangKodes.add(kode);
+                      if (_dashboardData?.multiSeriesSales != null &&
+                          index < _dashboardData!.multiSeriesSales!.series.length) {
+                        final kode = _cabangList.firstWhere(
+                              (c) => c['nama'] == _dashboardData!.multiSeriesSales!.series[index]['cabang_nama'],
+                          orElse: () => {'kode': ''},
+                        )['kode'] as String;
+                        if (selected) {
+                          if (!_selectedCabangKodes.contains(kode)) {
+                            _selectedCabangKodes.add(kode);
+                          }
+                        } else {
+                          _selectedCabangKodes.remove(kode);
                         }
-                      } else {
-                        _selectedCabangKodes.remove(kode);
                       }
                     }
                   });
@@ -476,7 +496,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 class AppTheme {
-  // Premium corporate colors
   final Color primary = const Color(0xFF0F3B5C);
   final Color primaryDark = const Color(0xFF0A2A42);
   final Color primaryLight = const Color(0xFFE8F0F7);
@@ -486,21 +505,17 @@ class AppTheme {
   final Color error = const Color(0xFFE74C3C);
   final Color warning = const Color(0xFFF39C12);
 
-  // Neutral colors
   final Color background = const Color(0xFFF5F7FA);
   final Color surface = const Color(0xFFFFFFFF);
   final Color surfaceAlt = const Color(0xFFF8FAFD);
 
-  // Text colors
   final Color textPrimary = const Color(0xFF2C3E50);
   final Color textSecondary = const Color(0xFF5D6E7F);
   final Color textTertiary = const Color(0xFF8A99AA);
 
-  // Border colors
   final Color border = const Color(0xFFE4E9F0);
   final Color borderLight = const Color(0xFFF0F3F8);
 
-  // Shadows
   List<BoxShadow> get cardShadow => [
     BoxShadow(
       color: Colors.black.withOpacity(0.03),
@@ -514,7 +529,6 @@ class AppTheme {
     ),
   ];
 
-  // Typography
   TextStyle get headlineLarge => GoogleFonts.plusJakartaSans(
     fontSize: 28,
     fontWeight: FontWeight.w700,
@@ -770,7 +784,7 @@ class _RefreshButton extends StatelessWidget {
           children: [
             Icon(Icons.refresh_rounded, size: 16, color: Colors.white),
             const SizedBox(width: 6),
-            Text('Muat Ulang', style: theme.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
+            Text('Load', style: theme.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -886,6 +900,7 @@ class _DashboardContent extends StatelessWidget {
               cabangList: cabangList,
               selectedVisibility: selectedVisibility,
               currencyFormat: currencyFormat,
+              groupBy: groupBy,
               theme: theme,
               onVisibilityChanged: onCabangVisibilityChanged,
             )
@@ -936,10 +951,24 @@ class _SalesChart extends StatelessWidget {
   Widget build(BuildContext context) {
     if (sales.isEmpty) return _EmptyCard(message: 'Data penjualan tidak tersedia', theme: theme);
 
-    final dataCount = sales.length;
+    final processedSales = sales.map((item) {
+      String labelStr;
+      if (item.label is int) {
+        labelStr = item.label.toString();
+      } else {
+        labelStr = item.label;
+      }
+      return DashboardSalesData(
+        label: labelStr,
+        totalSales: item.totalSales,
+      );
+    }).toList();
+
+    final dataCount = processedSales.length;
     final isMobile = MediaQuery.of(context).size.width < 600;
     final bool isDayView = groupBy == 'day';
-    final bool needScroll = isDayView && dataCount > 7;
+    final bool isYearView = groupBy == 'year';
+    final bool needScroll = (isDayView && dataCount > 7) || (isYearView && dataCount > 8);
 
     double barWidth = 0;
     double chartWidth = 0;
@@ -981,8 +1010,12 @@ class _SalesChart extends StatelessWidget {
       }
     } else {
       labelRotation = 0;
-      labelFontSize = isMobile ? 12 : 13;
-      seriesWidth = 0.9;
+      labelFontSize = isMobile ? 14 : 16;
+      seriesWidth = 0.85;
+      if (dataCount > 8) {
+        barWidth = isMobile ? 100 : 120;
+        chartWidth = barWidth * dataCount;
+      }
     }
 
     return Container(
@@ -1014,7 +1047,7 @@ class _SalesChart extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              'Total: ${currencyFormat.format(sales.fold<double>(0, (sum, item) => sum + item.totalSales))}',
+              'Total: ${currencyFormat.format(processedSales.fold<double>(0, (sum, item) => sum + item.totalSales))}',
               style: theme.labelLarge,
             ),
           ),
@@ -1026,24 +1059,34 @@ class _SalesChart extends StatelessWidget {
                 ? SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: chartWidth,
-                child: _buildChart(dataCount, labelFontSize, labelRotation, seriesWidth, true),
+                width: chartWidth > 0 ? chartWidth : null,
+                child: _buildChart(processedSales, dataCount, labelFontSize, labelRotation, seriesWidth, true, isYearView),
               ),
             )
-                : _buildChart(dataCount, labelFontSize, labelRotation, seriesWidth, false),
+                : _buildChart(processedSales, dataCount, labelFontSize, labelRotation, seriesWidth, false, isYearView),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildChart(int dataCount, double labelFontSize, int labelRotation, double seriesWidth, bool isScrollable) {
+  Widget _buildChart(
+      List<DashboardSalesData> salesData,
+      int dataCount,
+      double labelFontSize,
+      int labelRotation,
+      double seriesWidth,
+      bool isScrollable,
+      bool isYearView) {
     return SfCartesianChart(
       plotAreaBorderWidth: 0,
       margin: EdgeInsets.fromLTRB(10, 20, isScrollable ? 20 : 10, 20),
       primaryXAxis: CategoryAxis(
-        labelRotation: labelRotation,
-        labelStyle: theme.caption.copyWith(fontSize: labelFontSize),
+        labelRotation: isYearView ? 0 : labelRotation,
+        labelStyle: theme.caption.copyWith(
+          fontSize: labelFontSize,
+          fontWeight: isYearView ? FontWeight.w600 : FontWeight.w400,
+        ),
         majorGridLines: const MajorGridLines(width: 0),
         axisLine: const AxisLine(width: 0),
         labelPlacement: LabelPlacement.betweenTicks,
@@ -1057,13 +1100,13 @@ class _SalesChart extends StatelessWidget {
       ),
       series: [
         ColumnSeries<DashboardSalesData, String>(
-          dataSource: sales,
+          dataSource: salesData,
           xValueMapper: (d, _) => d.label,
           yValueMapper: (d, _) => d.totalSales,
           color: theme.primary,
           enableTooltip: true,
           width: seriesWidth,
-          spacing: 0.1,
+          spacing: isYearView ? 0.2 : 0.1,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
         ),
       ],
@@ -1084,6 +1127,7 @@ class _MultiCabangChart extends StatelessWidget {
   final List<Map<String, dynamic>> cabangList;
   final List<bool> selectedVisibility;
   final NumberFormat currencyFormat;
+  final String groupBy;
   final AppTheme theme;
   final Function(int, bool) onVisibilityChanged;
 
@@ -1092,6 +1136,7 @@ class _MultiCabangChart extends StatelessWidget {
     required this.cabangList,
     required this.selectedVisibility,
     required this.currencyFormat,
+    required this.groupBy,
     required this.theme,
     required this.onVisibilityChanged,
   });
@@ -1107,44 +1152,44 @@ class _MultiCabangChart extends StatelessWidget {
     final dates = data.dates;
     final series = data.series;
 
-    print('========== MULTI CABANG CHART ==========');
-    print('Dates received: $dates');
-    print('Series count: ${series.length}');
-    for (var i = 0; i < series.length; i++) {
-      print('Series ${series[i]['cabang_nama']} data: ${series[i]['data']}');
-    }
-    print('========================================');
-
     final dataCount = dates.length;
     final isMobile = MediaQuery.of(context).size.width < 600;
+    final bool isYearView = groupBy == 'year';
 
-    final bool needScroll = dataCount > 6;
-
+    bool needScroll = false;
     double barWidth = 0;
     double chartWidth = 0;
     int labelRotation;
     double labelFontSize;
     double seriesWidth;
 
-    if (needScroll) {
-      if (dataCount <= 8) {
-        barWidth = isMobile ? 80 : 100;
-      } else if (dataCount <= 12) {
-        barWidth = isMobile ? 65 : 85;
-      } else {
-        barWidth = isMobile ? 50 : 70;
-      }
-      chartWidth = barWidth * dataCount;
-      labelRotation = 45;
-      labelFontSize = dataCount > 10 ? 9.0 : 10.0;
-      seriesWidth = 0.75;
-    } else {
+    if (isYearView) {
       labelRotation = 0;
-      labelFontSize = isMobile ? 11 : 12;
-      if (dataCount <= 4) {
+      labelFontSize = isMobile ? 14 : 16;
+      seriesWidth = 0.85;
+      needScroll = dataCount > 8;
+      if (needScroll) {
+        barWidth = isMobile ? 100 : 120;
+        chartWidth = barWidth * dataCount;
+      }
+    } else {
+      if (dataCount <= 6) {
+        labelRotation = 0;
+        labelFontSize = isMobile ? 12 : 13;
         seriesWidth = 0.85;
-      } else {
+      } else if (dataCount <= 12) {
+        labelRotation = 45;
+        labelFontSize = isMobile ? 11 : 12;
         seriesWidth = 0.8;
+      } else {
+        labelRotation = 45;
+        labelFontSize = isMobile ? 10 : 11;
+        seriesWidth = 0.75;
+      }
+      needScroll = dataCount > 7;
+      if (needScroll) {
+        barWidth = isMobile ? 70 : 85;
+        chartWidth = barWidth * dataCount;
       }
     }
 
@@ -1202,10 +1247,10 @@ class _MultiCabangChart extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: SizedBox(
                 width: chartWidth,
-                child: _buildChart(dates, visibleSeries, dataCount, labelRotation, labelFontSize, seriesWidth, true),
+                child: _buildChart(dates, visibleSeries, dataCount, labelRotation, labelFontSize, seriesWidth, true, isYearView),
               ),
             )
-                : _buildChart(dates, visibleSeries, dataCount, labelRotation, labelFontSize, seriesWidth, false),
+                : _buildChart(dates, visibleSeries, dataCount, labelRotation, labelFontSize, seriesWidth, false, isYearView),
           ),
         ],
       ),
@@ -1220,13 +1265,14 @@ class _MultiCabangChart extends StatelessWidget {
       double labelFontSize,
       double seriesWidth,
       bool isScrollable,
+      bool isYearView,
       ) {
     return SfCartesianChart(
       plotAreaBorderWidth: 0,
       margin: EdgeInsets.fromLTRB(10, 20, isScrollable ? 20 : 10, 20),
       primaryXAxis: CategoryAxis(
-        labelRotation: labelRotation,
-        labelStyle: theme.caption.copyWith(fontSize: labelFontSize),
+        labelRotation: isYearView ? 0 : labelRotation,
+        labelStyle: theme.caption.copyWith(fontSize: labelFontSize, fontWeight: isYearView ? FontWeight.w600 : FontWeight.w400),
         majorGridLines: const MajorGridLines(width: 0),
         axisLine: const AxisLine(width: 0),
         labelPlacement: LabelPlacement.betweenTicks,
@@ -1252,7 +1298,7 @@ class _MultiCabangChart extends StatelessWidget {
           color: _colors[index % _colors.length],
           enableTooltip: true,
           width: seriesWidth,
-          spacing: 0.08,
+          spacing: isYearView ? 0.2 : 0.08,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
         );
       }).toList(),
@@ -1338,9 +1384,9 @@ class _SecondaryCharts extends StatelessWidget {
     if (isMobile) {
       return Column(
         children: [
-          _PieChartCard(title: 'Penjualan by Kategori', data: categories.map((e) => (e.category, e.totalAmount)).toList(), theme: theme),
+          _PieChartCard(title: 'Penjualan by Kategori', data: categories.map((e) => (e.category, e.totalAmount)).toList(), theme: theme, currencyFormat: currencyFormat),
           const SizedBox(height: 20),
-          _PieChartCard(title: 'Penjualan by Kasir', data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(), theme: theme),
+          _PieChartCard(title: 'Penjualan by Kasir', data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(), theme: theme, currencyFormat: currencyFormat),
           const SizedBox(height: 20),
           _TopItemsTable(items: topItems, currencyFormat: currencyFormat, numberFormat: numberFormat, theme: theme),
         ],
@@ -1354,9 +1400,9 @@ class _SecondaryCharts extends StatelessWidget {
           flex: 1,
           child: Column(
             children: [
-              _PieChartCard(title: 'Penjualan by Kategori', data: categories.map((e) => (e.category, e.totalAmount)).toList(), theme: theme),
+              _PieChartCard(title: 'Penjualan by Kategori', data: categories.map((e) => (e.category, e.totalAmount)).toList(), theme: theme, currencyFormat: currencyFormat),
               const SizedBox(height: 20),
-              _PieChartCard(title: 'Penjualan by Kasir', data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(), theme: theme),
+              _PieChartCard(title: 'Penjualan by Kasir', data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(), theme: theme, currencyFormat: currencyFormat),
             ],
           ),
         ),
@@ -1374,8 +1420,14 @@ class _PieChartCard extends StatelessWidget {
   final String title;
   final List<(String, double)> data;
   final AppTheme theme;
+  final NumberFormat currencyFormat;
 
-  const _PieChartCard({required this.title, required this.data, required this.theme});
+  const _PieChartCard({
+    required this.title,
+    required this.data,
+    required this.theme,
+    required this.currencyFormat,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1435,7 +1487,7 @@ class _PieChartCard extends StatelessWidget {
               ],
               tooltipBehavior: TooltipBehavior(
                 enable: true,
-                format: 'point.x: \${point.y}',
+                format: 'point.x : Rp {point.y}',
                 textStyle: theme.bodySmall,
                 color: theme.surface,
                 borderColor: theme.border,

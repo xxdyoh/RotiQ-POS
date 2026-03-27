@@ -8,8 +8,19 @@ class DashboardSalesData {
   });
 
   factory DashboardSalesData.fromJson(Map<String, dynamic> json) {
+    dynamic labelValue = json['label'] ?? '';
+    String labelString;
+
+    if (labelValue is int) {
+      labelString = labelValue.toString();
+    } else if (labelValue is double) {
+      labelString = labelValue.toInt().toString();
+    } else {
+      labelString = labelValue.toString();
+    }
+
     return DashboardSalesData(
-      label: json['label'] ?? '',
+      label: labelString,
       totalSales: _toDouble(json['total_sales']),
     );
   }
@@ -122,8 +133,21 @@ class MultiSeriesSalesData {
   });
 
   factory MultiSeriesSalesData.fromJson(Map<String, dynamic> json) {
+    List<String> parsedDates = [];
+    final rawDates = json['dates'] ?? [];
+
+    for (var date in rawDates) {
+      if (date is int) {
+        parsedDates.add(date.toString());
+      } else if (date is double) {
+        parsedDates.add(date.toInt().toString());
+      } else {
+        parsedDates.add(date.toString());
+      }
+    }
+
     return MultiSeriesSalesData(
-      dates: List<String>.from(json['dates'] ?? []),
+      dates: parsedDates,
       series: List<Map<String, dynamic>>.from(json['series'] ?? []),
     );
   }
