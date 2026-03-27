@@ -1147,6 +1147,20 @@ class _MultiCabangChart extends StatelessWidget {
     const Color(0xFF1ABC9C), const Color(0xFFF39C12), const Color(0xFF34495E),
   ];
 
+  double _getTotalPenjualan() {
+    final visibleSeries = data.series.asMap().entries
+        .where((e) => e.key < selectedVisibility.length && selectedVisibility[e.key])
+        .toList();
+
+    double total = 0;
+    for (var entry in visibleSeries) {
+      final cabangData = entry.value;
+      final dataList = List<double>.from(cabangData['data']);
+      total += dataList.reduce((sum, val) => sum + val);
+    }
+    return total;
+  }
+
   @override
   Widget build(BuildContext context) {
     final dates = data.dates;
@@ -1155,6 +1169,7 @@ class _MultiCabangChart extends StatelessWidget {
     final dataCount = dates.length;
     final isMobile = MediaQuery.of(context).size.width < 600;
     final bool isYearView = groupBy == 'year';
+    final double totalPenjualan = _getTotalPenjualan();
 
     bool needScroll = false;
     double barWidth = 0;
@@ -1219,16 +1234,36 @@ class _MultiCabangChart extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-            decoration: BoxDecoration(
-              color: theme.primaryLight,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '${selectedVisibility.where((e) => e).length} dari ${series.length} cabang ditampilkan',
-              style: theme.caption,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: theme.primaryLight,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${selectedVisibility.where((e) => e).length} dari ${series.length} cabang ditampilkan',
+                  style: theme.caption,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: theme.secondary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
+                ),
+                child: Text(
+                  'Total: ${currencyFormat.format(totalPenjualan)}',
+                  style: theme.labelLarge.copyWith(
+                    fontSize: 12,
+                    color: theme.secondary,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           _CabangFilterChips(
@@ -1377,6 +1412,18 @@ class _SecondaryCharts extends StatelessWidget {
     required this.theme,
   });
 
+  double _getTotalCategories() {
+    return categories.fold<double>(0, (sum, item) => sum + item.totalAmount);
+  }
+
+  double _getTotalKasir() {
+    return kasir.fold<double>(0, (sum, item) => sum + item.totalAmount);
+  }
+
+  double _getTotalTopItems() {
+    return topItems.fold<double>(0, (sum, item) => sum + item.totalAmount);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 900;
@@ -1384,11 +1431,29 @@ class _SecondaryCharts extends StatelessWidget {
     if (isMobile) {
       return Column(
         children: [
-          _PieChartCard(title: 'Penjualan by Kategori', data: categories.map((e) => (e.category, e.totalAmount)).toList(), theme: theme, currencyFormat: currencyFormat),
+          _PieChartCard(
+            title: 'Penjualan by Kategori',
+            data: categories.map((e) => (e.category, e.totalAmount)).toList(),
+            total: _getTotalCategories(),
+            theme: theme,
+            currencyFormat: currencyFormat,
+          ),
           const SizedBox(height: 20),
-          _PieChartCard(title: 'Penjualan by Kasir', data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(), theme: theme, currencyFormat: currencyFormat),
+          _PieChartCard(
+            title: 'Penjualan by Kasir',
+            data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(),
+            total: _getTotalKasir(),
+            theme: theme,
+            currencyFormat: currencyFormat,
+          ),
           const SizedBox(height: 20),
-          _TopItemsTable(items: topItems, currencyFormat: currencyFormat, numberFormat: numberFormat, theme: theme),
+          _TopItemsTable(
+            items: topItems,
+            total: _getTotalTopItems(),
+            currencyFormat: currencyFormat,
+            numberFormat: numberFormat,
+            theme: theme,
+          ),
         ],
       );
     }
@@ -1400,16 +1465,34 @@ class _SecondaryCharts extends StatelessWidget {
           flex: 1,
           child: Column(
             children: [
-              _PieChartCard(title: 'Penjualan by Kategori', data: categories.map((e) => (e.category, e.totalAmount)).toList(), theme: theme, currencyFormat: currencyFormat),
+              _PieChartCard(
+                title: 'Penjualan by Kategori',
+                data: categories.map((e) => (e.category, e.totalAmount)).toList(),
+                total: _getTotalCategories(),
+                theme: theme,
+                currencyFormat: currencyFormat,
+              ),
               const SizedBox(height: 20),
-              _PieChartCard(title: 'Penjualan by Kasir', data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(), theme: theme, currencyFormat: currencyFormat),
+              _PieChartCard(
+                title: 'Penjualan by Kasir',
+                data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(),
+                total: _getTotalKasir(),
+                theme: theme,
+                currencyFormat: currencyFormat,
+              ),
             ],
           ),
         ),
         const SizedBox(width: 20),
         Expanded(
           flex: 1,
-          child: _TopItemsTable(items: topItems, currencyFormat: currencyFormat, numberFormat: numberFormat, theme: theme),
+          child: _TopItemsTable(
+            items: topItems,
+            total: _getTotalTopItems(),
+            currencyFormat: currencyFormat,
+            numberFormat: numberFormat,
+            theme: theme,
+          ),
         ),
       ],
     );
@@ -1419,12 +1502,14 @@ class _SecondaryCharts extends StatelessWidget {
 class _PieChartCard extends StatelessWidget {
   final String title;
   final List<(String, double)> data;
+  final double total;
   final AppTheme theme;
   final NumberFormat currencyFormat;
 
   const _PieChartCard({
     required this.title,
     required this.data,
+    required this.total,
     required this.theme,
     required this.currencyFormat,
   });
@@ -1459,6 +1544,22 @@ class _PieChartCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(title, style: theme.titleMedium),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.secondary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
+                ),
+                child: Text(
+                  'Total: ${currencyFormat.format(total)}',
+                  style: theme.caption.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: theme.secondary,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -1487,11 +1588,48 @@ class _PieChartCard extends StatelessWidget {
               ],
               tooltipBehavior: TooltipBehavior(
                 enable: true,
-                format: 'point.x : Rp {point.y}',
-                textStyle: theme.bodySmall,
-                color: theme.surface,
-                borderColor: theme.border,
-                borderWidth: 1,
+                builder: (dynamic data, dynamic point, dynamic series,
+                    int pointIndex, int seriesIndex) {
+                  try {
+                    final category = data[pointIndex].$1;
+                    final value = data[pointIndex].$2;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: theme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                        border: Border.all(color: theme.border),
+                      ),
+                      child: Text(
+                        '$category: ${currencyFormat.format(value)}',
+                        style: theme.bodySmall.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: theme.textPrimary,
+                        ),
+                      ),
+                    );
+                  } catch (e) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: theme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: theme.border),
+                      ),
+                      child: Text(
+                        '${point.x}: ${currencyFormat.format(point.y)}',
+                        style: theme.bodySmall,
+                      ),
+                    );
+                  }
+                },
               ),
             ),
           ),
@@ -1503,12 +1641,14 @@ class _PieChartCard extends StatelessWidget {
 
 class _TopItemsTable extends StatelessWidget {
   final List<DashboardTopItem> items;
+  final double total;
   final NumberFormat currencyFormat;
   final NumberFormat numberFormat;
   final AppTheme theme;
 
   const _TopItemsTable({
     required this.items,
+    required this.total,
     required this.currencyFormat,
     required this.numberFormat,
     required this.theme,
@@ -1542,6 +1682,22 @@ class _TopItemsTable extends StatelessWidget {
               const SizedBox(width: 10),
               Text('10 Item Terlaris', style: theme.titleMedium),
               const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.secondary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
+                ),
+                child: Text(
+                  'Total: ${currencyFormat.format(total)}',
+                  style: theme.caption.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: theme.secondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               Icon(Icons.emoji_events, size: 20, color: theme.warning),
             ],
           ),
