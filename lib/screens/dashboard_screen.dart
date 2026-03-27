@@ -1,10 +1,20 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:animations/animations.dart';
+import 'package:syncfusion_flutter_charts/charts.dart';
+import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
 import '../widgets/base_layout.dart';
-import '../routes/app_routes.dart';
-import '../utils/responsive_helper.dart';
-import '../utils/responsive_patterns.dart';
+import '../services/dashboard_service.dart';
+import '../models/dashboard_model.dart';
+import '../services/session_manager.dart';
+import '../services/api_service.dart';
+
+class ChartData {
+  final String x;
+  final double y;
+  ChartData({required this.x, required this.y});
+}
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -13,327 +23,449 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
+class _DashboardScreenState extends State<DashboardScreen> {
+  bool _isLoading = true;
+  DashboardResponse? _dashboardData;
+
+  DateTime? _startDate;
+  DateTime? _endDate;
+  String _groupBy = 'day';
+  String _selectedJenis = 'all';
+
+  List<Map<String, dynamic>> _cabangList = [];
+  List<String> _jenisList = [];
+  bool _isPusat = false;
+  List<bool> _selectedCabangVisibility = [];
+  List<String> _selectedCabangKodes = [];
+
+  final AppTheme _theme = AppTheme();
+  final NumberFormat _currencyFormat = NumberFormat.currency(
+    locale: 'id_ID',
+    symbol: 'Rp ',
+    decimalDigits: 0,
+  );
+  final NumberFormat _numberFormat = NumberFormat('#,##0');
 
   @override
   void initState() {
     super.initState();
+    _endDate = DateTime.now();
+    _startDate = _endDate!.subtract(const Duration(days: 30));
+    _checkUserRole();
+    _loadInitialData();
+  }
 
-
-    _animationController = AnimationController(
-      duration: Duration(milliseconds: 800),
-      vsync: this,
-    );
-
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
-    );
-
-    _scaleAnimation = Tween<double>(begin: 0.9, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.elasticOut,
-      ),
-    );
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _animationController.forward();
+  void _checkUserRole() {
+    final user = SessionManager.getCurrentUser();
+    final cabang = SessionManager.getCurrentCabang();
+    setState(() {
+      _isPusat = user?.kduser == '00' || cabang?.kode == '00';
     });
   }
 
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
+  Future<void> _loadInitialData() async {
+    if (_isPusat) {
+      await _loadCabangList();
+    } else {
+      await _loadDashboardData();
+    }
+  }
+
+  Future<void> _loadCabangList() async {
+    try {
+      final data = await DashboardService.getCabangList();
+      setState(() {
+        _jenisList = ['all', ...(data['jenis'] as List?)?.cast<String>() ?? []];
+        _cabangList = (data['cabangs'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        _selectedCabangKodes = _cabangList.map((c) => c['kode'] as String).toList();
+        _selectedCabangVisibility = List.generate(_cabangList.length, (index) => true);
+      });
+      await _loadDashboardData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showErrorSnackBar('Gagal memuat data cabang');
+    }
+  }
+
+  Future<void> _loadDashboardData() async {
+    if (_startDate == null || _endDate == null) return;
+
+    setState(() => _isLoading = true);
+    try {
+      String? jenisParam = _selectedJenis != 'all' ? _selectedJenis : null;
+      final data = await DashboardService.getDashboardData(
+        startDate: _startDate!,
+        endDate: _endDate!,
+        groupBy: _groupBy,
+        jenis: jenisParam,
+      );
+
+      print('========== DEBUG DASHBOARD DATA ==========');
+      print('Group By: $_groupBy');
+      print('Sales labels: ${data.sales.map((e) => e.label).toList()}');
+      if (data.multiSeriesSales != null) {
+        print('Multi Series Dates: ${data.multiSeriesSales!.dates}');
+        print('Multi Series Series Count: ${data.multiSeriesSales!.series.length}');
+        for (var i = 0; i < data.multiSeriesSales!.series.length; i++) {
+          print('Series ${i+1}: ${data.multiSeriesSales!.series[i]['cabang_nama']} - data length: ${(data.multiSeriesSales!.series[i]['data'] as List).length}');
+        }
+      }
+      print('==========================================');
+
+      setState(() {
+        _dashboardData = data;
+        _isLoading = false;
+      });
+      if (_isPusat) await _loadSecondaryData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showErrorSnackBar('Gagal memuat data: $e');
+    }
+  }
+
+  Future<Map<String, String>> _getHeaders() async {
+    final token = await ApiService.getToken();
+    final cabang = SessionManager.getCurrentCabang();
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+      if (cabang != null) 'X-Cabang-Kode': cabang.kode,
+    };
+  }
+
+  Future<void> _loadSecondaryData() async {
+    if (!_isPusat) return;
+
+    final selectedKodes = _selectedCabangKodes.isEmpty
+        ? _cabangList.map((c) => c['kode'] as String).toList()
+        : _selectedCabangKodes;
+
+    if (selectedKodes.isEmpty) {
+      setState(() {
+        _dashboardData?.categories.clear();
+        _dashboardData?.kasir.clear();
+        _dashboardData?.topItems.clear();
+        _dashboardData?.multiSeriesSales = MultiSeriesSalesData(dates: [], series: []);
+      });
+      return;
+    }
+
+    try {
+      final headers = await _getHeaders();
+      final startDateStr = DateFormat('yyyy-MM-dd').format(_startDate!);
+      final endDateStr = DateFormat('yyyy-MM-dd').format(_endDate!);
+      final jenisParam = _selectedJenis != 'all' ? _selectedJenis : null;
+
+      final multiUrl = '${ApiService.baseUrl}/dashboard/data?'
+          'start_date=$startDateStr'
+          '&end_date=$endDateStr'
+          '&group_by=$_groupBy'
+          '&cabang_kode=all'
+          '${jenisParam != null ? '&jenis=$jenisParam' : ''}';
+
+      final multiResponse = await http.get(Uri.parse(multiUrl), headers: headers);
+
+      final baseUrl = '${ApiService.baseUrl}/dashboard/data-by-cabang?'
+          'start_date=$startDateStr'
+          '&end_date=$endDateStr'
+          '${jenisParam != null ? '&jenis=$jenisParam' : ''}';
+
+      final results = await Future.wait([
+        http.get(Uri.parse('$baseUrl&data_type=category&cabang_kodes=${selectedKodes.join(',')}'), headers: headers),
+        http.get(Uri.parse('$baseUrl&data_type=kasir&cabang_kodes=${selectedKodes.join(',')}'), headers: headers),
+        http.get(Uri.parse('$baseUrl&data_type=topItems&cabang_kodes=${selectedKodes.join(',')}'), headers: headers),
+      ]);
+
+      if (results.every((r) => r.statusCode == 200)) {
+        final categoryData = jsonDecode(results[0].body);
+        final kasirData = jsonDecode(results[1].body);
+        final topItemsData = jsonDecode(results[2].body);
+
+        Map<String, dynamic> multiData = {};
+        if (multiResponse.statusCode == 200) {
+          multiData = jsonDecode(multiResponse.body);
+        }
+
+        final categories = _aggregateCategoryData(categoryData);
+        final kasir = _aggregateKasirData(kasirData);
+        final topItems = _aggregateTopItemsData(topItemsData);
+
+        MultiSeriesSalesData? multiSeries;
+        if (multiData['success'] == true && multiData['data']['multi_series_sales'] != null) {
+          final originalMulti = multiData['data']['multi_series_sales'];
+          final originalDates = List<String>.from(originalMulti['dates']);
+          final originalSeries = List<Map<String, dynamic>>.from(originalMulti['series']);
+
+          final filteredSeries = originalSeries.where((s) {
+            final cabangNama = s['cabang_nama'] as String;
+            final cabang = _cabangList.firstWhere(
+                  (c) => c['nama'] == cabangNama,
+              orElse: () => {'kode': ''},
+            );
+            return selectedKodes.contains(cabang['kode']);
+          }).toList();
+
+          final dateEntries = originalDates.map((date) => MapEntry(date, date)).toList();
+          dateEntries.sort((a, b) {
+            final dateA = DateTime.tryParse(a.key);
+            final dateB = DateTime.tryParse(b.key);
+            if (dateA == null || dateB == null) return 0;
+            return dateA.compareTo(dateB);
+          });
+
+          final sortedDates = dateEntries.map((e) => e.value).toList();
+
+          final Map<String, List<double>> cabangDataMap = {};
+          for (final series in filteredSeries) {
+            final cabangNama = series['cabang_nama'] as String;
+            final data = List<double>.from(series['data']);
+            cabangDataMap[cabangNama] = data;
+          }
+
+          final sortedSeries = <Map<String, dynamic>>[];
+          cabangDataMap.forEach((cabangNama, oldData) {
+            final newData = <double>[];
+            for (final date in sortedDates) {
+              final index = originalDates.indexOf(date);
+              if (index >= 0 && index < oldData.length) {
+                newData.add(oldData[index]);
+              } else {
+                newData.add(0);
+              }
+            }
+            sortedSeries.add({
+              'cabang_nama': cabangNama,
+              'data': newData,
+            });
+          });
+
+          sortedSeries.sort((a, b) {
+            final totalA = (a['data'] as List<double>).reduce((sum, val) => sum + val);
+            final totalB = (b['data'] as List<double>).reduce((sum, val) => sum + val);
+            return totalB.compareTo(totalA);
+          });
+
+          multiSeries = MultiSeriesSalesData(
+            dates: sortedDates,
+            series: sortedSeries,
+          );
+        }
+
+        setState(() {
+          if (_dashboardData != null) {
+            _dashboardData!.categories = categories;
+            _dashboardData!.kasir = kasir;
+            _dashboardData!.topItems = topItems.take(10).toList();
+            _dashboardData!.multiSeriesSales = multiSeries;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading secondary data: $e');
+    }
+  }
+
+  List<DashboardCategoryData> _aggregateCategoryData(Map<String, dynamic> data) {
+    final aggregated = <String, double>{};
+    if (data['success'] == true) {
+      for (var cabang in data['data']) {
+        for (var item in cabang['data']) {
+          final category = item['category'] as String;
+          final amount = (item['total_amount'] ?? 0).toDouble();
+          aggregated[category] = (aggregated[category] ?? 0) + amount;
+        }
+      }
+    }
+    return aggregated.entries
+        .map((e) => DashboardCategoryData(category: e.key, totalAmount: e.value))
+        .toList()
+      ..sort((a, b) => b.totalAmount.compareTo(a.totalAmount));
+  }
+
+  List<DashboardKasirData> _aggregateKasirData(Map<String, dynamic> data) {
+    final aggregated = <String, double>{};
+    if (data['success'] == true) {
+      for (var cabang in data['data']) {
+        for (var item in cabang['data']) {
+          final kasir = item['kasir'] as String;
+          final amount = (item['total_amount'] ?? 0).toDouble();
+          aggregated[kasir] = (aggregated[kasir] ?? 0) + amount;
+        }
+      }
+    }
+    return aggregated.entries
+        .map((e) => DashboardKasirData(kasir: e.key, totalAmount: e.value))
+        .toList()
+      ..sort((a, b) => b.totalAmount.compareTo(a.totalAmount));
+  }
+
+  List<DashboardTopItem> _aggregateTopItemsData(Map<String, dynamic> data) {
+    final aggregated = <String, Map<String, dynamic>>{};
+    if (data['success'] == true) {
+      for (var cabang in data['data']) {
+        for (var item in cabang['data']) {
+          final itemId = item['item_id'].toString();
+          aggregated.putIfAbsent(itemId, () => {
+            'item_name': item['item_name'],
+            'category': item['category'] ?? '',
+            'total_qty': 0,
+            'total_amount': 0.0,
+          });
+          aggregated[itemId]!['total_qty'] += (item['total_qty'] ?? 0).toInt();
+          aggregated[itemId]!['total_amount'] += (item['total_amount'] ?? 0).toDouble();
+        }
+      }
+    }
+    return aggregated.values
+        .map((e) => DashboardTopItem(
+      itemName: e['item_name'],
+      category: e['category'],
+      totalQty: e['total_qty'],
+      totalAmount: e['total_amount'],
+    ))
+        .toList()
+      ..sort((a, b) => b.totalQty.compareTo(a.totalQty));
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: _theme.caption),
+        backgroundColor: _theme.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(12),
+      ),
+    );
+  }
+
+  Future<void> _selectStartDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(
+              primary: _theme.primary,
+              onPrimary: Colors.white,
+            ),
+            dialogBackgroundColor: Colors.white,
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _startDate) {
+      setState(() {
+        _startDate = picked;
+      });
+      _loadDashboardData();
+    }
+  }
+
+  Future<void> _selectEndDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(
+              primary: _theme.primary,
+              onPrimary: Colors.white,
+            ),
+            dialogBackgroundColor: Colors.white,
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _endDate) {
+      setState(() {
+        _endDate = picked;
+      });
+      _loadDashboardData();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-
+    final isMobile = MediaQuery.of(context).size.width < 600;
     return BaseLayout(
       title: 'Dashboard',
       showBackButton: false,
       showSidebar: true,
       isFormScreen: false,
-      // HAPUS BARIS INI: showBottomNav: ResponsiveHelper.shouldShowBottomNav(context),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isTablet = constraints.maxWidth >= 600;
-          final isLargeTablet = constraints.maxWidth >= 900;
-
-          return FadeScaleTransition(
-            animation: _fadeAnimation,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(isTablet ? 24 : 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // _buildStoreInfoCard(context, colorScheme, isDarkMode),
-
-                  // SizedBox(height: isTablet ? 28 : 20),
-                  // _buildMenuGroups(context, isTablet, isLargeTablet, colorScheme),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-
-  Widget _buildStoreInfoCard(BuildContext context, ColorScheme colorScheme, bool isDarkMode) {
-    return OpenContainer(
-      closedBuilder: (context, action) {
-        return ScaleTransition(
-          scale: _scaleAnimation,
-          child: Container(
-            padding: EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  colorScheme.primary,
-                  colorScheme.primaryContainer,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.primary.withOpacity(0.3),
-                  blurRadius: 16,
-                  offset: Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Hero(
-                  tag: 'store_icon',
-                  child: Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                        width: 2,
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.storefront_rounded,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                ),
-
-                SizedBox(width: 16),
-
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'ROTI-Q',
-                        style: GoogleFonts.montserrat(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Solo Square, Slamet Riyadi, Pajang, Laweyan, Surakarta City',
-                        style: GoogleFonts.montserrat(
-                          color: Colors.white.withOpacity(0.9),
-                          fontSize: 12,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.2),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.trending_up_rounded, size: 14, color: Colors.white),
-                      SizedBox(width: 6),
-                      Text(
-                        'ONLINE',
-                        style: GoogleFonts.montserrat(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-      openBuilder: (context, action) {
-        return Scaffold(
-          appBar: AppBar(
-            title: Text('Store Details'),
-          ),
-          body: Center(
-            child: Text('Store Information Details'),
-          ),
-        );
-      },
-      transitionDuration: Duration(milliseconds: 500),
-      closedColor: Colors.transparent,
-      closedElevation: 0,
-    );
-  }
-
-  Widget _buildMenuGroups(BuildContext context, bool isTablet, bool isLargeTablet, ColorScheme colorScheme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildAnimatedGroupHeader('MASTER', colorScheme, 0),
-        SizedBox(height: 12),
-        _buildMasterGrid(context, isTablet, isLargeTablet, colorScheme),
-        SizedBox(height: isTablet ? 28 : 20),
-
-        // Transaction Group
-        _buildAnimatedGroupHeader('TRANSACTION', colorScheme, 1),
-        SizedBox(height: 12),
-        _buildTransactionGrid(context, isTablet, isLargeTablet, colorScheme),
-        SizedBox(height: isTablet ? 28 : 20),
-
-        // Report Group
-        _buildAnimatedGroupHeader('REPORT', colorScheme, 2),
-        SizedBox(height: 12),
-        _buildReportGrid(context, isTablet, isLargeTablet, colorScheme),
-        SizedBox(height: isTablet ? 28 : 20),
-
-        // Utility Group
-        _buildAnimatedGroupHeader('UTILITY', colorScheme, 3),
-        SizedBox(height: 12),
-        _buildUtilityGrid(context, isTablet, isLargeTablet, colorScheme),
-      ],
-    );
-  }
-
-  Widget _buildGroupCard(BuildContext context, {
-    required String title,
-    required IconData icon,
-    required Color color,
-    required List<Widget> items,
-  }) {
-    return ResponsivePatterns.responsiveCard(
-      context: context,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Group Header
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 18, color: color),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.montserrat(
-                    fontSize: ResponsiveHelper.responsiveFontSize(
-                      context,
-                      mobile: 14,
-                      tablet: 16,
-                      desktop: 18,
-                    ),
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          SizedBox(height: 16),
-
-          // Items Grid
-          GridView.count(
-            shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
-            crossAxisCount: ResponsiveHelper.responsiveGridColumns(
-              context,
-              mobile: 2,
-              tablet: 3,
-              desktop: 4,
-            ),
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.2,
-            children: items,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnimatedGroupHeader(String title, ColorScheme colorScheme, int index) {
-    return FadeInSlide(
-      duration: Duration(milliseconds: 500),
-      offset: Offset(-20, 0),
-      delay: Duration(milliseconds: 100 * index),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 4),
-        child: Row(
+      child: Container(
+        color: _theme.background,
+        child: Column(
           children: [
-            Container(
-              width: 4,
-              height: 16,
-              decoration: BoxDecoration(
-                color: colorScheme.primary,
-                borderRadius: BorderRadius.circular(2),
-              ),
+            _FilterBar(
+              startDate: _startDate,
+              endDate: _endDate,
+              groupBy: _groupBy,
+              selectedJenis: _selectedJenis,
+              jenisList: _jenisList,
+              isPusat: _isPusat,
+              onStartDateTap: () => _selectStartDate(context),
+              onEndDateTap: () => _selectEndDate(context),
+              onGroupByChanged: (value) {
+                if (value != null) {
+                  setState(() => _groupBy = value);
+                  _loadDashboardData();
+                }
+              },
+              onJenisChanged: (value) {
+                if (value != null) {
+                  setState(() => _selectedJenis = value);
+                  _loadDashboardData();
+                }
+              },
+              onRefresh: _loadDashboardData,
+              theme: _theme,
             ),
-            SizedBox(width: 8),
-            Text(
-              title,
-              style: GoogleFonts.montserrat(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: colorScheme.onSurface.withOpacity(0.8),
-                letterSpacing: 1.2,
+            Expanded(
+              child: _isLoading
+                  ? _LoadingState(theme: _theme)
+                  : _dashboardData == null
+                  ? _EmptyState(theme: _theme)
+                  : _DashboardContent(
+                data: _dashboardData!,
+                isPusat: _isPusat,
+                cabangList: _cabangList,
+                selectedVisibility: _selectedCabangVisibility,
+                selectedKodes: _selectedCabangKodes,
+                groupBy: _groupBy,
+                currencyFormat: _currencyFormat,
+                numberFormat: _numberFormat,
+                theme: _theme,
+                onCabangVisibilityChanged: (index, selected) {
+                  setState(() {
+                    if (index < _selectedCabangVisibility.length) {
+                      _selectedCabangVisibility[index] = selected;
+                      final kode = _cabangList.firstWhere(
+                            (c) => c['nama'] == _dashboardData!.multiSeriesSales!.series[index]['cabang_nama'],
+                        orElse: () => {'kode': ''},
+                      )['kode'] as String;
+                      if (selected) {
+                        if (!_selectedCabangKodes.contains(kode)) {
+                          _selectedCabangKodes.add(kode);
+                        }
+                      } else {
+                        _selectedCabangKodes.remove(kode);
+                      }
+                    }
+                  });
+                  _loadSecondaryData();
+                },
+                onLoadSecondaryData: _loadSecondaryData,
               ),
             ),
           ],
@@ -341,535 +473,1104 @@ class _DashboardScreenState extends State<DashboardScreen>
       ),
     );
   }
+}
 
-  Widget _buildMasterGrid(BuildContext context, bool isTablet, bool isLargeTablet, ColorScheme colorScheme) {
-    final menuItems = [
-      DashboardMenuItem(
-        title: 'Item \nSt. Jadi',
-        icon: Icons.construction_rounded,
-        iconColor: colorScheme.tertiary,
-        backgroundColor: colorScheme.tertiaryContainer,
-        routeName: AppRoutes.setengahJadiList,
-      ),
-      DashboardMenuItem(
-        title: 'Item',
-        icon: Icons.inventory_2_outlined,
-        iconColor: colorScheme.secondary,
-        backgroundColor: colorScheme.secondaryContainer,
-        routeName: AppRoutes.itemList,
-      ),
-      DashboardMenuItem(
-        title: 'Category',
-        icon: Icons.category_outlined,
-        iconColor: colorScheme.primary,
-        backgroundColor: colorScheme.primaryContainer,
-        routeName: AppRoutes.categoryList,
-      ),
-      DashboardMenuItem(
-        title: 'Discount',
-        icon: Icons.discount_outlined,
-        iconColor: colorScheme.error,
-        backgroundColor: colorScheme.errorContainer,
-        routeName: AppRoutes.discountList,
-      ),
-    ];
+class AppTheme {
+  // Premium corporate colors
+  final Color primary = const Color(0xFF0F3B5C);
+  final Color primaryDark = const Color(0xFF0A2A42);
+  final Color primaryLight = const Color(0xFFE8F0F7);
+  final Color secondary = const Color(0xFFE67E22);
+  final Color accent = const Color(0xFF3498DB);
+  final Color success = const Color(0xFF27AE60);
+  final Color error = const Color(0xFFE74C3C);
+  final Color warning = const Color(0xFFF39C12);
 
-    return _buildAnimatedGridMenu(menuItems, isTablet, isLargeTablet, 0);
-  }
+  // Neutral colors
+  final Color background = const Color(0xFFF5F7FA);
+  final Color surface = const Color(0xFFFFFFFF);
+  final Color surfaceAlt = const Color(0xFFF8FAFD);
 
-  Widget _buildTransactionGrid(BuildContext context, bool isTablet, bool isLargeTablet, ColorScheme colorScheme) {
-    final menuItems = [
-      DashboardMenuItem(
-        title: 'Point Of Sale',
-        icon: Icons.point_of_sale_rounded,
-        iconColor: colorScheme.primary,
-        backgroundColor: colorScheme.primaryContainer,
-        routeName: AppRoutes.pos,
-      ),
-      DashboardMenuItem(
-        title: 'Tutup Kasir',
-        icon: Icons.lock_clock_rounded,
-        iconColor: colorScheme.secondary,
-        backgroundColor: colorScheme.secondaryContainer,
-        routeName: AppRoutes.tutupKasir,
-      ),
-      DashboardMenuItem(
-        title: 'Stock In',
-        icon: Icons.input_rounded,
-        iconColor: colorScheme.tertiary,
-        backgroundColor: colorScheme.tertiaryContainer,
-        routeName: AppRoutes.stockInList,
-      ),
-      DashboardMenuItem(
-        title: 'Penerimaan\nSetengah Jadi',
-        icon: Icons.swap_horiz_rounded,
-        iconColor: colorScheme.primary,
-        backgroundColor: colorScheme.primaryContainer,
-        routeName: AppRoutes.penerimaanSetengahJadi,
-      ),
-      DashboardMenuItem(
-        title: 'Uang Muka',
-        icon: Icons.account_balance_wallet_rounded,
-        iconColor: colorScheme.secondary,
-        backgroundColor: colorScheme.secondaryContainer,
-        routeName: AppRoutes.uangMukaList,
-      ),
-      DashboardMenuItem(
-        title: 'Return\nProduction',
-        icon: Icons.assignment_return_rounded,
-        iconColor: colorScheme.error,
-        backgroundColor: colorScheme.errorContainer,
-        routeName: AppRoutes.returnProduction,
-      ),
-      DashboardMenuItem(
-        title: 'Biaya Lain',
-        icon: Icons.receipt_long_rounded,
-        iconColor: colorScheme.tertiary,
-        backgroundColor: colorScheme.tertiaryContainer,
-        routeName: AppRoutes.biayaLain,
-      ),
-    ];
+  // Text colors
+  final Color textPrimary = const Color(0xFF2C3E50);
+  final Color textSecondary = const Color(0xFF5D6E7F);
+  final Color textTertiary = const Color(0xFF8A99AA);
 
-    return _buildAnimatedGridMenu(menuItems, isTablet, isLargeTablet, 4);
-  }
+  // Border colors
+  final Color border = const Color(0xFFE4E9F0);
+  final Color borderLight = const Color(0xFFF0F3F8);
 
-  Widget _buildReportGrid(BuildContext context, bool isTablet, bool isLargeTablet, ColorScheme colorScheme) {
-    final menuItems = [
-      DashboardMenuItem(
-        title: 'Sales by Item',
-        icon: Icons.analytics_rounded,
-        iconColor: colorScheme.primary,
-        backgroundColor: colorScheme.primaryContainer,
-        routeName: AppRoutes.salesByItem,
-      ),
-      DashboardMenuItem(
-        title: 'Sales by Invoice',
-        icon: Icons.receipt_long_rounded,
-        iconColor: colorScheme.secondary,
-        backgroundColor: colorScheme.secondaryContainer,
-        routeName: AppRoutes.salesByInvoice,
-      ),
-      DashboardMenuItem(
-        title: 'List Sales Order',
-        icon: Icons.list_alt_rounded,
-        iconColor: colorScheme.tertiary,
-        backgroundColor: colorScheme.tertiaryContainer,
-        routeName: AppRoutes.salesOrderList,
-      ),
-      DashboardMenuItem(
-        title: 'Return\nProduction',
-        icon: Icons.assignment_return_rounded,
-        iconColor: colorScheme.error,
-        backgroundColor: colorScheme.errorContainer,
-        routeName: AppRoutes.returnProductionList,
-      ),
-      DashboardMenuItem(
-        title: 'List Void',
-        icon: Icons.block_rounded,
-        iconColor: colorScheme.error,
-        backgroundColor: colorScheme.errorContainer,
-        routeName: AppRoutes.voidList,
-      ),
-      DashboardMenuItem(
-        title: 'Setoran',
-        icon: Icons.account_balance_wallet_rounded,
-        iconColor: colorScheme.primary,
-        backgroundColor: colorScheme.primaryContainer,
-        routeName: AppRoutes.setoran,
-      ),
-      DashboardMenuItem(
-        title: 'Lap Stock',
-        icon: Icons.inventory_2_rounded,
-        iconColor: colorScheme.secondary,
-        backgroundColor: colorScheme.secondaryContainer,
-        routeName: AppRoutes.lapStock,
-      ),
-      DashboardMenuItem(
-        title: 'Stock\nSetengah Jadi',
-        icon: Icons.construction_rounded,
-        iconColor: colorScheme.tertiary,
-        backgroundColor: colorScheme.tertiaryContainer,
-        routeName: AppRoutes.stockSetengahJadi,
-      ),
-    ];
+  // Shadows
+  List<BoxShadow> get cardShadow => [
+    BoxShadow(
+      color: Colors.black.withOpacity(0.03),
+      blurRadius: 12,
+      offset: const Offset(0, 2),
+    ),
+    BoxShadow(
+      color: Colors.black.withOpacity(0.02),
+      blurRadius: 4,
+      offset: const Offset(0, 1),
+    ),
+  ];
 
-    return _buildAnimatedGridMenu(menuItems, isTablet, isLargeTablet, 11);
-  }
+  // Typography
+  TextStyle get headlineLarge => GoogleFonts.plusJakartaSans(
+    fontSize: 28,
+    fontWeight: FontWeight.w700,
+    color: textPrimary,
+    letterSpacing: -0.5,
+  );
+  TextStyle get headlineMedium => GoogleFonts.plusJakartaSans(
+    fontSize: 24,
+    fontWeight: FontWeight.w700,
+    color: textPrimary,
+    letterSpacing: -0.3,
+  );
+  TextStyle get titleLarge => GoogleFonts.plusJakartaSans(
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    color: textPrimary,
+    letterSpacing: -0.2,
+  );
+  TextStyle get titleMedium => GoogleFonts.plusJakartaSans(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    color: textPrimary,
+  );
+  TextStyle get titleSmall => GoogleFonts.plusJakartaSans(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    color: textPrimary,
+  );
+  TextStyle get bodyLarge => GoogleFonts.plusJakartaSans(
+    fontSize: 14,
+    fontWeight: FontWeight.w500,
+    color: textPrimary,
+  );
+  TextStyle get bodyMedium => GoogleFonts.plusJakartaSans(
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    color: textPrimary,
+  );
+  TextStyle get bodySmall => GoogleFonts.plusJakartaSans(
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    color: textSecondary,
+  );
+  TextStyle get caption => GoogleFonts.plusJakartaSans(
+    fontSize: 11,
+    fontWeight: FontWeight.w400,
+    color: textTertiary,
+  );
+  TextStyle get labelLarge => GoogleFonts.plusJakartaSans(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    color: secondary,
+  );
 
-  Widget _buildUtilityGrid(BuildContext context, bool isTablet, bool isLargeTablet, ColorScheme colorScheme) {
-    final menuItems = [
-      DashboardMenuItem(
-        title: 'Connect\nPrinter',
-        icon: Icons.print_rounded,
-        iconColor: colorScheme.primary,
-        backgroundColor: colorScheme.primaryContainer,
-        routeName: AppRoutes.connectPrinter,
+  BorderRadius get cardRadius => BorderRadius.circular(20);
+  BorderRadius get buttonRadius => BorderRadius.circular(10);
+  BorderRadius get chipRadius => BorderRadius.circular(30);
+
+  BoxDecoration get cardDecoration => BoxDecoration(
+    color: surface,
+    borderRadius: cardRadius,
+    boxShadow: cardShadow,
+  );
+}
+
+class _FilterBar extends StatelessWidget {
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final String groupBy;
+  final String selectedJenis;
+  final List<String> jenisList;
+  final bool isPusat;
+  final VoidCallback onStartDateTap;
+  final VoidCallback onEndDateTap;
+  final ValueChanged<String?> onGroupByChanged;
+  final ValueChanged<String?> onJenisChanged;
+  final VoidCallback onRefresh;
+  final AppTheme theme;
+
+  const _FilterBar({
+    required this.startDate,
+    required this.endDate,
+    required this.groupBy,
+    required this.selectedJenis,
+    required this.jenisList,
+    required this.isPusat,
+    required this.onStartDateTap,
+    required this.onEndDateTap,
+    required this.onGroupByChanged,
+    required this.onJenisChanged,
+    required this.onRefresh,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 12),
+      color: theme.surface,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _DateField(
+              label: 'Dari',
+              date: startDate,
+              onTap: onStartDateTap,
+              theme: theme,
+            ),
+            const SizedBox(width: 8),
+            _DateField(
+              label: 'Sampai',
+              date: endDate,
+              onTap: onEndDateTap,
+              theme: theme,
+            ),
+            const SizedBox(width: 8),
+            _CompactDropdown(
+              value: groupBy,
+              items: const [
+                DropdownMenuItem(value: 'day', child: Text('Harian')),
+                DropdownMenuItem(value: 'month', child: Text('Bulanan')),
+                DropdownMenuItem(value: 'year', child: Text('Tahunan')),
+              ],
+              onChanged: onGroupByChanged,
+              theme: theme,
+            ),
+            if (isPusat) ...[
+              const SizedBox(width: 8),
+              _CompactDropdown(
+                value: selectedJenis,
+                items: jenisList.map((jenis) => DropdownMenuItem(
+                  value: jenis,
+                  child: Text(jenis == 'all' ? 'Semua Jenis' : jenis),
+                )).toList(),
+                onChanged: onJenisChanged,
+                theme: theme,
+              ),
+            ],
+            const SizedBox(width: 8),
+            _RefreshButton(onPressed: onRefresh, theme: theme),
+          ],
+        ),
       ),
-      DashboardMenuItem(
-        title: 'Setting\nPrinter',
-        icon: Icons.settings_rounded,
-        iconColor: colorScheme.onSurfaceVariant,
-        backgroundColor: colorScheme.surfaceVariant,
-        routeName: AppRoutes.settingPrinter,
-      ),
-    ];
-
-    return _buildAnimatedGridMenu(menuItems, isTablet, isLargeTablet, 19);
-  }
-
-  Widget _buildAnimatedGridMenu(List<DashboardMenuItem> menuItems, bool isTablet, bool isLargeTablet, int startIndex) {
-    int crossAxisCount = 3;
-    if (isLargeTablet) {
-      crossAxisCount = 5;
-    } else if (isTablet) {
-      crossAxisCount = 4;
-    }
-
-    double childAspectRatio = 0.85;
-    if (isTablet) {
-      childAspectRatio = 0.9;
-    }
-    if (isLargeTablet) {
-      childAspectRatio = 1.0;
-    }
-
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: isTablet ? 16 : 12,
-        mainAxisSpacing: isTablet ? 16 : 12,
-        childAspectRatio: childAspectRatio,
-      ),
-      itemCount: menuItems.length,
-      itemBuilder: (context, index) {
-        final animationDelay = Duration(milliseconds: 100 * (startIndex + index));
-
-        return _buildAnimatedMenuCard(menuItems[index], animationDelay);
-      },
     );
   }
+}
 
-  Widget _buildAnimatedMenuCard(DashboardMenuItem item, Duration delay) {
-    return FadeInScale(
-      duration: Duration(milliseconds: 500),
-      delay: delay,
-      child: OpenContainer(
-        closedBuilder: (context, action) {
-          return Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: action,
-              splashColor: item.iconColor.withOpacity(0.2),
-              highlightColor: item.backgroundColor.withOpacity(0.3),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Theme.of(context).colorScheme.shadow.withOpacity(0.1),
-                      blurRadius: 8,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Hero(
-                      tag: 'menu_icon_${item.title}',
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: item.backgroundColor,
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              item.backgroundColor,
-                              Color.alphaBlend(
-                                item.iconColor.withOpacity(0.2),
-                                item.backgroundColor,
-                              ),
-                            ],
-                          ),
-                        ),
-                        child: Icon(
-                          item.icon,
-                          color: item.iconColor,
-                          size: 22,
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      item.title,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.montserrat(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSurface,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
+class _DateField extends StatelessWidget {
+  final String label;
+  final DateTime? date;
+  final VoidCallback onTap;
+  final AppTheme theme;
+
+  const _DateField({
+    required this.label,
+    required this.date,
+    required this.onTap,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: theme.buttonRadius,
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: theme.surface,
+          borderRadius: theme.buttonRadius,
+          border: Border.all(color: theme.border, width: 1),
+          boxShadow: theme.cardShadow,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.calendar_today, size: 14, color: theme.secondary),
+            const SizedBox(width: 6),
+            Text(
+              '$label: ${date != null ? DateFormat('dd/MM/yy').format(date!) : 'Pilih'}',
+              style: theme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactDropdown extends StatelessWidget {
+  final String value;
+  final List<DropdownMenuItem<String>> items;
+  final ValueChanged<String?> onChanged;
+  final AppTheme theme;
+
+  const _CompactDropdown({required this.value, required this.items, required this.onChanged, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: theme.surface,
+        borderRadius: theme.buttonRadius,
+        border: Border.all(color: theme.border, width: 1),
+        boxShadow: theme.cardShadow,
+      ),
+      child: DropdownButton<String>(
+        value: value,
+        underline: const SizedBox(),
+        icon: Icon(Icons.arrow_drop_down, size: 18, color: theme.secondary),
+        style: theme.bodySmall,
+        dropdownColor: theme.surface,
+        items: items,
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+class _RefreshButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  final AppTheme theme;
+
+  const _RefreshButton({required this.onPressed, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: theme.buttonRadius,
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: theme.secondary,
+          borderRadius: theme.buttonRadius,
+          boxShadow: [
+            BoxShadow(
+              color: theme.secondary.withOpacity(0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.refresh_rounded, size: 16, color: Colors.white),
+            const SizedBox(width: 6),
+            Text('Muat Ulang', style: theme.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingState extends StatelessWidget {
+  final AppTheme theme;
+  const _LoadingState({required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: theme.primaryLight,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  valueColor: AlwaysStoppedAnimation(theme.primary),
                 ),
               ),
             ),
-          );
-        },
-        openBuilder: (context, action) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            Navigator.pushNamed(context, item.routeName);
-          });
-
-          return Scaffold(
-            appBar: AppBar(
-              title: Text(item.title),
-            ),
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
-        },
-        transitionDuration: Duration(milliseconds: 600),
-        closedColor: Colors.transparent,
-        closedElevation: 0,
-        openColor: Colors.transparent,
-        openElevation: 0,
+          ),
+          const SizedBox(height: 20),
+          Text('Memuat data dashboard...', style: theme.caption),
+        ],
       ),
     );
   }
 }
 
-class DashboardMenuItem {
+class _EmptyState extends StatelessWidget {
+  final AppTheme theme;
+  const _EmptyState({required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              color: theme.surfaceAlt,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.dashboard_outlined, size: 48, color: theme.textTertiary),
+          ),
+          const SizedBox(height: 24),
+          Text('Belum Ada Data', style: theme.titleMedium),
+          const SizedBox(height: 8),
+          Text('Pilih rentang tanggal untuk melihat data', style: theme.caption),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardContent extends StatelessWidget {
+  final DashboardResponse data;
+  final bool isPusat;
+  final List<Map<String, dynamic>> cabangList;
+  final List<bool> selectedVisibility;
+  final List<String> selectedKodes;
+  final String groupBy;
+  final NumberFormat currencyFormat;
+  final NumberFormat numberFormat;
+  final AppTheme theme;
+  final Function(int, bool) onCabangVisibilityChanged;
+  final VoidCallback onLoadSecondaryData;
+
+  const _DashboardContent({
+    required this.data,
+    required this.isPusat,
+    required this.cabangList,
+    required this.selectedVisibility,
+    required this.selectedKodes,
+    required this.groupBy,
+    required this.currencyFormat,
+    required this.numberFormat,
+    required this.theme,
+    required this.onCabangVisibilityChanged,
+    required this.onLoadSecondaryData,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final isMultiCabang = data.isAllCabang && data.multiSeriesSales != null && data.multiSeriesSales!.series.isNotEmpty;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (isMultiCabang)
+            _MultiCabangChart(
+              data: data.multiSeriesSales!,
+              cabangList: cabangList,
+              selectedVisibility: selectedVisibility,
+              currencyFormat: currencyFormat,
+              theme: theme,
+              onVisibilityChanged: onCabangVisibilityChanged,
+            )
+          else
+            _SalesChart(
+              sales: data.sales,
+              groupBy: groupBy,
+              currencyFormat: currencyFormat,
+              theme: theme,
+            ),
+          const SizedBox(height: 24),
+          _SecondaryCharts(
+            categories: data.categories,
+            kasir: data.kasir,
+            topItems: data.topItems,
+            currencyFormat: currencyFormat,
+            numberFormat: numberFormat,
+            theme: theme,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SalesChart extends StatelessWidget {
+  final List<DashboardSalesData> sales;
+  final String groupBy;
+  final NumberFormat currencyFormat;
+  final AppTheme theme;
+
+  const _SalesChart({
+    required this.sales,
+    required this.groupBy,
+    required this.currencyFormat,
+    required this.theme,
+  });
+
+  String get _title {
+    switch(groupBy) {
+      case 'day': return 'Tren Penjualan by Harian';
+      case 'month': return 'Tren Penjualan Bulanan';
+      default: return 'Tren Penjualan Tahunan';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (sales.isEmpty) return _EmptyCard(message: 'Data penjualan tidak tersedia', theme: theme);
+
+    final dataCount = sales.length;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final bool isDayView = groupBy == 'day';
+    final bool needScroll = isDayView && dataCount > 7;
+
+    double barWidth = 0;
+    double chartWidth = 0;
+    int labelRotation;
+    double labelFontSize;
+    double seriesWidth;
+
+    if (isDayView) {
+      if (dataCount <= 7) {
+        barWidth = isMobile ? 90 : 110;
+        labelRotation = 0;
+        labelFontSize = isMobile ? 10 : 11;
+        seriesWidth = 0.85;
+      } else if (dataCount <= 15) {
+        barWidth = isMobile ? 70 : 85;
+        labelRotation = 45;
+        labelFontSize = isMobile ? 9 : 10;
+        seriesWidth = 0.8;
+      } else {
+        barWidth = isMobile ? 55 : 70;
+        labelRotation = 45;
+        labelFontSize = isMobile ? 8 : 9;
+        seriesWidth = 0.75;
+      }
+      chartWidth = barWidth * dataCount;
+    } else if (groupBy == 'month') {
+      if (dataCount <= 6) {
+        labelRotation = 0;
+        labelFontSize = isMobile ? 12 : 13;
+        seriesWidth = 0.85;
+      } else if (dataCount <= 12) {
+        labelRotation = 45;
+        labelFontSize = isMobile ? 11 : 12;
+        seriesWidth = 0.8;
+      } else {
+        labelRotation = 45;
+        labelFontSize = isMobile ? 10 : 11;
+        seriesWidth = 0.75;
+      }
+    } else {
+      labelRotation = 0;
+      labelFontSize = isMobile ? 12 : 13;
+      seriesWidth = 0.9;
+    }
+
+    return Container(
+      width: double.infinity,
+      decoration: theme.cardDecoration,
+      padding: EdgeInsets.all(isMobile ? 20 : 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: theme.secondary,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(_title, style: theme.titleLarge),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            decoration: BoxDecoration(
+              color: theme.primaryLight,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'Total: ${currencyFormat.format(sales.fold<double>(0, (sum, item) => sum + item.totalSales))}',
+              style: theme.labelLarge,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 400,
+            width: double.infinity,
+            child: needScroll
+                ? SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: chartWidth,
+                child: _buildChart(dataCount, labelFontSize, labelRotation, seriesWidth, true),
+              ),
+            )
+                : _buildChart(dataCount, labelFontSize, labelRotation, seriesWidth, false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChart(int dataCount, double labelFontSize, int labelRotation, double seriesWidth, bool isScrollable) {
+    return SfCartesianChart(
+      plotAreaBorderWidth: 0,
+      margin: EdgeInsets.fromLTRB(10, 20, isScrollable ? 20 : 10, 20),
+      primaryXAxis: CategoryAxis(
+        labelRotation: labelRotation,
+        labelStyle: theme.caption.copyWith(fontSize: labelFontSize),
+        majorGridLines: const MajorGridLines(width: 0),
+        axisLine: const AxisLine(width: 0),
+        labelPlacement: LabelPlacement.betweenTicks,
+      ),
+      primaryYAxis: NumericAxis(
+        title: AxisTitle(text: 'Total Penjualan'),
+        numberFormat: currencyFormat,
+        labelStyle: theme.caption,
+        axisLine: const AxisLine(width: 0),
+        majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
+      ),
+      series: [
+        ColumnSeries<DashboardSalesData, String>(
+          dataSource: sales,
+          xValueMapper: (d, _) => d.label,
+          yValueMapper: (d, _) => d.totalSales,
+          color: theme.primary,
+          enableTooltip: true,
+          width: seriesWidth,
+          spacing: 0.1,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+        ),
+      ],
+      tooltipBehavior: TooltipBehavior(
+        enable: true,
+        canShowMarker: false,
+        textStyle: theme.bodySmall,
+        color: theme.surface,
+        borderColor: theme.border,
+        borderWidth: 1,
+      ),
+    );
+  }
+}
+
+class _MultiCabangChart extends StatelessWidget {
+  final MultiSeriesSalesData data;
+  final List<Map<String, dynamic>> cabangList;
+  final List<bool> selectedVisibility;
+  final NumberFormat currencyFormat;
+  final AppTheme theme;
+  final Function(int, bool) onVisibilityChanged;
+
+  const _MultiCabangChart({
+    required this.data,
+    required this.cabangList,
+    required this.selectedVisibility,
+    required this.currencyFormat,
+    required this.theme,
+    required this.onVisibilityChanged,
+  });
+
+  List<Color> get _colors => [
+    const Color(0xFF0F3B5C), const Color(0xFFE67E22), const Color(0xFF3498DB),
+    const Color(0xFF27AE60), const Color(0xFF9B59B6), const Color(0xFFE74C3C),
+    const Color(0xFF1ABC9C), const Color(0xFFF39C12), const Color(0xFF34495E),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final dates = data.dates;
+    final series = data.series;
+
+    print('========== MULTI CABANG CHART ==========');
+    print('Dates received: $dates');
+    print('Series count: ${series.length}');
+    for (var i = 0; i < series.length; i++) {
+      print('Series ${series[i]['cabang_nama']} data: ${series[i]['data']}');
+    }
+    print('========================================');
+
+    final dataCount = dates.length;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    final bool needScroll = dataCount > 6;
+
+    double barWidth = 0;
+    double chartWidth = 0;
+    int labelRotation;
+    double labelFontSize;
+    double seriesWidth;
+
+    if (needScroll) {
+      if (dataCount <= 8) {
+        barWidth = isMobile ? 80 : 100;
+      } else if (dataCount <= 12) {
+        barWidth = isMobile ? 65 : 85;
+      } else {
+        barWidth = isMobile ? 50 : 70;
+      }
+      chartWidth = barWidth * dataCount;
+      labelRotation = 45;
+      labelFontSize = dataCount > 10 ? 9.0 : 10.0;
+      seriesWidth = 0.75;
+    } else {
+      labelRotation = 0;
+      labelFontSize = isMobile ? 11 : 12;
+      if (dataCount <= 4) {
+        seriesWidth = 0.85;
+      } else {
+        seriesWidth = 0.8;
+      }
+    }
+
+    final visibleSeries = series.asMap().entries
+        .where((e) => e.key < selectedVisibility.length && selectedVisibility[e.key])
+        .toList();
+
+    return Container(
+      width: double.infinity,
+      decoration: theme.cardDecoration,
+      padding: EdgeInsets.all(isMobile ? 20 : 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: theme.secondary,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text('Penjualan by Cabang', style: theme.titleLarge),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+            decoration: BoxDecoration(
+              color: theme.primaryLight,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${selectedVisibility.where((e) => e).length} dari ${series.length} cabang ditampilkan',
+              style: theme.caption,
+            ),
+          ),
+          const SizedBox(height: 20),
+          _CabangFilterChips(
+            series: series,
+            selectedVisibility: selectedVisibility,
+            colors: _colors,
+            theme: theme,
+            onVisibilityChanged: onVisibilityChanged,
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 430,
+            width: double.infinity,
+            child: needScroll
+                ? SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: chartWidth,
+                child: _buildChart(dates, visibleSeries, dataCount, labelRotation, labelFontSize, seriesWidth, true),
+              ),
+            )
+                : _buildChart(dates, visibleSeries, dataCount, labelRotation, labelFontSize, seriesWidth, false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChart(
+      List<String> dates,
+      List<MapEntry<int, Map<String, dynamic>>> visibleSeries,
+      int dataCount,
+      int labelRotation,
+      double labelFontSize,
+      double seriesWidth,
+      bool isScrollable,
+      ) {
+    return SfCartesianChart(
+      plotAreaBorderWidth: 0,
+      margin: EdgeInsets.fromLTRB(10, 20, isScrollable ? 20 : 10, 20),
+      primaryXAxis: CategoryAxis(
+        labelRotation: labelRotation,
+        labelStyle: theme.caption.copyWith(fontSize: labelFontSize),
+        majorGridLines: const MajorGridLines(width: 0),
+        axisLine: const AxisLine(width: 0),
+        labelPlacement: LabelPlacement.betweenTicks,
+      ),
+      primaryYAxis: NumericAxis(
+        title: AxisTitle(text: 'Total Penjualan'),
+        numberFormat: currencyFormat,
+        labelStyle: theme.caption,
+        axisLine: const AxisLine(width: 0),
+        majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
+      ),
+      series: visibleSeries.map((entry) {
+        final index = entry.key;
+        final cabangData = entry.value;
+        final points = List.generate(dates.length, (i) =>
+            ChartData(x: dates[i], y: cabangData['data'][i] ?? 0.0));
+
+        return ColumnSeries<ChartData, String>(
+          dataSource: points,
+          xValueMapper: (d, _) => d.x,
+          yValueMapper: (d, _) => d.y,
+          name: cabangData['cabang_nama'],
+          color: _colors[index % _colors.length],
+          enableTooltip: true,
+          width: seriesWidth,
+          spacing: 0.08,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+        );
+      }).toList(),
+      tooltipBehavior: TooltipBehavior(
+        enable: true,
+        canShowMarker: false,
+        textStyle: theme.bodySmall,
+        color: theme.surface,
+        borderColor: theme.border,
+        borderWidth: 1,
+      ),
+    );
+  }
+}
+
+class _CabangFilterChips extends StatelessWidget {
+  final List<Map<String, dynamic>> series;
+  final List<bool> selectedVisibility;
+  final List<Color> colors;
+  final AppTheme theme;
+  final Function(int, bool) onVisibilityChanged;
+
+  const _CabangFilterChips({
+    required this.series,
+    required this.selectedVisibility,
+    required this.colors,
+    required this.theme,
+    required this.onVisibilityChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: series.asMap().entries.map((entry) {
+        final index = entry.key;
+        final cabang = entry.value;
+        final isSelected = index < selectedVisibility.length && selectedVisibility[index];
+        return FilterChip(
+          selected: isSelected,
+          label: Text(
+            cabang['cabang_nama'],
+            style: theme.bodySmall.copyWith(fontWeight: FontWeight.w500),
+          ),
+          backgroundColor: Colors.transparent,
+          selectedColor: colors[index % colors.length].withOpacity(0.1),
+          checkmarkColor: colors[index % colors.length],
+          side: BorderSide(
+            color: isSelected ? colors[index % colors.length] : theme.border,
+            width: 1,
+          ),
+          onSelected: (selected) => onVisibilityChanged(index, selected),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _SecondaryCharts extends StatelessWidget {
+  final List<DashboardCategoryData> categories;
+  final List<DashboardKasirData> kasir;
+  final List<DashboardTopItem> topItems;
+  final NumberFormat currencyFormat;
+  final NumberFormat numberFormat;
+  final AppTheme theme;
+
+  const _SecondaryCharts({
+    required this.categories,
+    required this.kasir,
+    required this.topItems,
+    required this.currencyFormat,
+    required this.numberFormat,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 900;
+
+    if (isMobile) {
+      return Column(
+        children: [
+          _PieChartCard(title: 'Penjualan by Kategori', data: categories.map((e) => (e.category, e.totalAmount)).toList(), theme: theme),
+          const SizedBox(height: 20),
+          _PieChartCard(title: 'Penjualan by Kasir', data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(), theme: theme),
+          const SizedBox(height: 20),
+          _TopItemsTable(items: topItems, currencyFormat: currencyFormat, numberFormat: numberFormat, theme: theme),
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 1,
+          child: Column(
+            children: [
+              _PieChartCard(title: 'Penjualan by Kategori', data: categories.map((e) => (e.category, e.totalAmount)).toList(), theme: theme),
+              const SizedBox(height: 20),
+              _PieChartCard(title: 'Penjualan by Kasir', data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(), theme: theme),
+            ],
+          ),
+        ),
+        const SizedBox(width: 20),
+        Expanded(
+          flex: 1,
+          child: _TopItemsTable(items: topItems, currencyFormat: currencyFormat, numberFormat: numberFormat, theme: theme),
+        ),
+      ],
+    );
+  }
+}
+
+class _PieChartCard extends StatelessWidget {
   final String title;
-  final IconData icon;
-  final Color iconColor;
-  final Color backgroundColor;
-  final String routeName;
+  final List<(String, double)> data;
+  final AppTheme theme;
 
-  DashboardMenuItem({
-    required this.title,
-    required this.icon,
-    required this.iconColor,
-    required this.backgroundColor,
-    required this.routeName,
-  });
-}
-
-class FadeInSlide extends StatefulWidget {
-  final Widget child;
-  final Duration duration;
-  final Duration delay;
-  final Offset offset;
-
-  const FadeInSlide({
-    super.key,
-    required this.child,
-    this.duration = const Duration(milliseconds: 500),
-    this.delay = Duration.zero,
-    this.offset = const Offset(0, 20),
-  });
+  const _PieChartCard({required this.title, required this.data, required this.theme});
 
   @override
-  State<FadeInSlide> createState() => _FadeInSlideState();
-}
-
-class _FadeInSlideState extends State<FadeInSlide>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _opacityAnimation;
-  late Animation<Offset> _offsetAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-
-    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOutCubic,
-      ),
-    );
-
-    _offsetAnimation = Tween<Offset>(
-      begin: widget.offset,
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOutCubic,
-      ),
-    );
-
-    _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _controller.value = 1.0;
-      } else if (status == AnimationStatus.dismissed) {
-        _controller.value = 0.0;
-      }
-    });
-
-    if (widget.delay == Duration.zero) {
-      _controller.forward();
-    } else {
-      Future.delayed(widget.delay, () {
-        if (mounted) {
-          _controller.forward();
-        }
-      });
+  Widget build(BuildContext context) {
+    if (data.isEmpty || data.every((e) => e.$2 == 0)) {
+      return _EmptyCard(message: 'Data $title tidak tersedia', theme: theme);
     }
-  }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+    final colors = [
+      const Color(0xFF0F3B5C), const Color(0xFFE67E22), const Color(0xFF3498DB),
+      const Color(0xFF27AE60), const Color(0xFF9B59B6), const Color(0xFFE74C3C),
+    ];
 
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final opacity = _opacityAnimation.value.clamp(0.0, 1.0);
-
-        return Opacity(
-          opacity: opacity,
-          child: Transform.translate(
-            offset: _offsetAnimation.value,
-            child: child,
+    return Container(
+      width: double.infinity,
+      decoration: theme.cardDecoration,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: theme.secondary,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(title, style: theme.titleMedium),
+            ],
           ),
-        );
-      },
-      child: widget.child,
-    );
-  }
-}
-
-class FadeInScale extends StatefulWidget {
-  final Widget child;
-  final Duration duration;
-  final Duration delay;
-
-  const FadeInScale({
-    super.key,
-    required this.child,
-    this.duration = const Duration(milliseconds: 500),
-    this.delay = Duration.zero,
-  });
-
-  @override
-  State<FadeInScale> createState() => _FadeInScaleState();
-}
-
-class _FadeInScaleState extends State<FadeInScale>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _opacityAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-
-    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOutBack,
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 280,
+            width: double.infinity,
+            child: SfCircularChart(
+              legend: Legend(
+                isVisible: true,
+                position: LegendPosition.right,
+                overflowMode: LegendItemOverflowMode.wrap,
+                textStyle: theme.caption,
+              ),
+              series: [
+                PieSeries<(String, double), String>(
+                  dataSource: data,
+                  xValueMapper: (d, _) => d.$1,
+                  yValueMapper: (d, _) => d.$2,
+                  enableTooltip: true,
+                  dataLabelSettings: const DataLabelSettings(isVisible: false),
+                  explode: true,
+                  explodeIndex: 0,
+                  explodeOffset: '8%',
+                  pointColorMapper: (d, _) => colors[data.indexOf(d) % colors.length],
+                ),
+              ],
+              tooltipBehavior: TooltipBehavior(
+                enable: true,
+                format: 'point.x: \${point.y}',
+                textStyle: theme.bodySmall,
+                color: theme.surface,
+                borderColor: theme.border,
+                borderWidth: 1,
+              ),
+            ),
+          ),
+        ],
       ),
     );
-
-
-    _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _controller.value = 1.0; // Pastikan value = 1.0
-      } else if (status == AnimationStatus.dismissed) {
-        _controller.value = 0.0; // Pastikan value = 0.0
-      }
-    });
-
-    if (widget.delay == Duration.zero) {
-      _controller.forward();
-    } else {
-      Future.delayed(widget.delay, () {
-        if (mounted) {
-          _controller.forward();
-        }
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final opacity = _opacityAnimation.value.clamp(0.0, 1.0);
-        final scale = 0.9 + (0.1 * opacity);
-
-        return Opacity(
-          opacity: opacity,
-          child: Transform.scale(
-            scale: scale,
-            child: child,
-          ),
-        );
-      },
-      child: widget.child,
-    );
   }
 }
 
-class FadeScaleTransition extends StatelessWidget {
-  final Widget child;
-  final Animation<double> animation;
+class _TopItemsTable extends StatelessWidget {
+  final List<DashboardTopItem> items;
+  final NumberFormat currencyFormat;
+  final NumberFormat numberFormat;
+  final AppTheme theme;
 
-  const FadeScaleTransition({
-    super.key,
-    required this.child,
-    required this.animation,
+  const _TopItemsTable({
+    required this.items,
+    required this.currencyFormat,
+    required this.numberFormat,
+    required this.theme,
   });
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (context, child) {
-        return Opacity(
-          opacity: animation.value,
-          child: Transform.scale(
-            scale: 0.95 + (0.05 * animation.value),
-            child: child,
+    if (items.isEmpty) {
+      return _EmptyCard(message: 'Data item terlaris tidak tersedia', theme: theme);
+    }
+
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    return Container(
+      width: double.infinity,
+      decoration: theme.cardDecoration,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: theme.secondary,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text('10 Item Terlaris', style: theme.titleMedium),
+              const Spacer(),
+              Icon(Icons.emoji_events, size: 20, color: theme.warning),
+            ],
           ),
-        );
-      },
-      child: child,
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 580,
+            width: double.infinity,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                border: TableBorder.all(
+                  color: theme.border,
+                  borderRadius: BorderRadius.circular(16),
+                  width: 1,
+                ),
+                columnSpacing: isMobile ? 16 : 24,
+                headingRowColor: WidgetStateProperty.all(theme.surfaceAlt),
+                headingTextStyle: theme.titleSmall.copyWith(fontSize: 12),
+                dataTextStyle: theme.bodySmall,
+                columns: const [
+                  DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
+                  DataColumn(label: Text('Nama Item', style: TextStyle(fontWeight: FontWeight.w600))),
+                  DataColumn(label: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600))),
+                  DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.w600))),
+                ],
+                rows: List.generate(items.length, (index) {
+                  final item = items[index];
+                  return DataRow(
+                    cells: [
+                      DataCell(Container(
+                        width: 40,
+                        child: Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: index < 3 ? theme.warning : theme.textSecondary,
+                          ),
+                        ),
+                      )),
+                      DataCell(SizedBox(
+                        width: isMobile ? 120 : 180,
+                        child: Text(
+                          item.itemName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )),
+                      DataCell(Text(numberFormat.format(item.totalQty))),
+                      DataCell(Text(currencyFormat.format(item.totalAmount))),
+                    ],
+                  );
+                }),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyCard extends StatelessWidget {
+  final String message;
+  final AppTheme theme;
+
+  const _EmptyCard({required this.message, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: theme.cardDecoration,
+      padding: const EdgeInsets.all(40),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.inbox_outlined, size: 48, color: theme.textTertiary),
+          const SizedBox(height: 16),
+          Text(message, style: theme.caption),
+        ],
+      ),
     );
   }
 }
