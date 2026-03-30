@@ -334,7 +334,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       ),
       _buildMenuItem(
         icon: Icons.inventory_rounded,
-        label: 'Stock In',
+        label: 'Mutasi In',
         routeName: AppRoutes.stockInList,
         indent: true,
       ),

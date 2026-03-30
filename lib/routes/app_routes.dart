@@ -8,7 +8,7 @@ import '../screens/category_list_screen.dart';
 import '../screens/discount_list_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/tutup_kasir_form_screen.dart';
-import '../screens/stokin_list_screen.dart';
+import '../screens/mutasi_in_list_screen.dart';
 import '../screens/stokstjin_list_screen.dart';
 import '../screens/uangmuka_list_screen.dart';
 import '../screens/return_list_screen.dart';
@@ -33,6 +33,8 @@ import '../screens/do_form_screen.dart';
 import '../screens/do_list_screen.dart';
 import '../screens/user_permission_screen.dart';
 import '../screens/koreksi_list_screen.dart';
+import '../screens/mutasi_in_form_screen.dart';
+import '../screens/mutasi_in_form_screen.dart';
 
 class AppRoutes {
   static const String dashboard = '/dashboard';
@@ -103,7 +105,7 @@ class AppRoutes {
 
       pos: (context) => POSScreen(),
       tutupKasir: (context) => TutupKasirFormScreen(onTutupKasirSuccess: () {}),
-      stockInList: (context) => StokinListScreen(),
+      stockInList: (context) => MutasiInListScreen(),
       penerimaanSetengahJadi: (context) => StokStjinListScreen(),
       uangMukaList: (context) => UangMukaListScreen(),
       returnProduction: (context) => ReturnListScreen(),
@@ -115,7 +117,7 @@ class AppRoutes {
 
       doList: (context) => DoListScreen(),
       doForm: (context) => DoFormScreen(
-        onDoSaved: () {},
+        onMutasiSaved: () {},
       ),
 
       spkList: (context) => SpkListScreen(),
@@ -137,6 +139,10 @@ class AppRoutes {
       userPermissions: (context) => UserPermissionScreen(),
 
       koreksiList: (context) => KoreksiListScreen(),
+
+      stockInForm: (context) => MutasiInFormScreen(
+        onMutasiInSaved: () {},
+      ),
     };
   }
 

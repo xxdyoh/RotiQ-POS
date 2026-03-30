@@ -22,6 +22,7 @@ import 'services/receipt_service.dart';
 import 'screens/serah_terima_form_screen.dart';
 import 'screens/do_form_screen.dart';
 import 'screens/koreksi_form_screen.dart';
+import 'screens/mutasi_in_form_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -179,9 +180,9 @@ class MyApp extends StatelessWidget {
           case AppRoutes.stockInForm:
             final args = settings.arguments as Map<String, dynamic>?;
             return MaterialPageRoute(
-              builder: (context) => StokinFormScreen(
-                stokinHeader: args?['stokinHeader'],
-                onStokinSaved: args?['onSaved'],
+              builder: (context) => MutasiInFormScreen(
+                mutasiInHeader: args?['stokinHeader'],
+                onMutasiInSaved: args?['onSaved'] ?? () {},
               ),
             );
 
@@ -243,8 +244,8 @@ class MyApp extends StatelessWidget {
             final args = settings.arguments as Map<String, dynamic>?;
             return MaterialPageRoute(
               builder: (context) => DoFormScreen(
-                doHeader: args?['doHeader'],
-                onDoSaved: args?['onSaved'] ?? () {},
+                mutasiHeader: args?['mutasiHeader'],
+                onMutasiSaved: args?['onSaved'] ?? () {},
               ),
             );
 
