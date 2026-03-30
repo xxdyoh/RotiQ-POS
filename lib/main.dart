@@ -21,6 +21,7 @@ import 'services/universal_printer_service.dart';
 import 'services/receipt_service.dart';
 import 'screens/serah_terima_form_screen.dart';
 import 'screens/do_form_screen.dart';
+import 'screens/koreksi_form_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -244,6 +245,15 @@ class MyApp extends StatelessWidget {
               builder: (context) => DoFormScreen(
                 doHeader: args?['doHeader'],
                 onDoSaved: args?['onSaved'] ?? () {},
+              ),
+            );
+
+          case AppRoutes.koreksiForm:
+            final args = settings.arguments as Map<String, dynamic>?;
+            return MaterialPageRoute(
+              builder: (context) => KoreksiFormScreen(
+                koreksiHeader: args?['koreksiHeader'],
+                onKoreksiSaved: args?['onSaved'] ?? () {},
               ),
             );
 

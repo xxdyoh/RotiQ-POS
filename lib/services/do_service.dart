@@ -20,11 +20,10 @@ class DoService {
       headers['X-Cabang-Kode'] = cabang.kode;
       headers['X-Cabang-Nama'] = cabang.nama;
     }
-    print(headers);
     return headers;
   }
 
-  static Future<List<Map<String, dynamic>>> getDoList({
+  static Future<List<Map<String, dynamic>>> getMutasiList({
     String? search,
     String? startDate,
     String? endDate,
@@ -46,9 +45,9 @@ class DoService {
 
       Uri uri;
       if (queryParams.isNotEmpty) {
-        uri = Uri.parse('$baseUrl/do').replace(queryParameters: queryParams);
+        uri = Uri.parse('$baseUrl/mutasi-out').replace(queryParameters: queryParams);
       } else {
-        uri = Uri.parse('$baseUrl/do');
+        uri = Uri.parse('$baseUrl/mutasi-out');
       }
 
       final response = await http.get(
@@ -60,17 +59,17 @@ class DoService {
         final data = jsonDecode(response.body);
         return List<Map<String, dynamic>>.from(data['data']);
       } else {
-        throw Exception('Gagal mengambil data pengiriman');
+        throw Exception('Gagal mengambil data mutasi out');
       }
     } catch (e) {
       throw Exception('Error: ${e.toString()}');
     }
   }
 
-  static Future<Map<String, dynamic>> getDoDetail(String nomor) async {
+  static Future<Map<String, dynamic>> getMutasiDetail(String nomor) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/do/$nomor'),
+        Uri.parse('$baseUrl/mutasi-out/$nomor'),
         headers: await _getHeadersWithCabang(),
       );
 
@@ -78,70 +77,53 @@ class DoService {
         final data = jsonDecode(response.body);
         return data['data'];
       } else {
-        throw Exception('Gagal mengambil detail pengiriman');
+        throw Exception('Gagal mengambil detail mutasi out');
       }
     } catch (e) {
       throw Exception('Error: ${e.toString()}');
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getMintaListByCabang({
-    required String cabangDatabase,
-    required String startDate,
-    required String endDate,
-  }) async {
+  static Future<List<Map<String, dynamic>>> getGudangList() async {
     try {
-      final uri = Uri.parse('$baseUrl/do/minta-by-cabang').replace(queryParameters: {
-        'cabang_database': cabangDatabase,
-        'start_date': startDate,
-        'end_date': endDate,
-      });
-
-      print(cabangDatabase + ' - ' + startDate + ' - ' + endDate);
-
       final response = await http.get(
-        uri,
+        Uri.parse('$baseUrl/mutasi-out/gudang'),
         headers: await _getHeadersWithCabang(),
       );
-
-      print(response);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return List<Map<String, dynamic>>.from(data['data']);
       } else {
-        throw Exception('Gagal mengambil data permintaan');
+        throw Exception('Gagal mengambil data gudang');
       }
     } catch (e) {
       throw Exception('Error: ${e.toString()}');
     }
   }
 
-  static Future<Map<String, dynamic>> getMintaDetailFromCabang({
-    required String cabangDatabase,
-    required String nomor,
-  }) async {
+  static Future<List<Map<String, dynamic>>> getCabangTujuanList(String cabangAsalKode) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/do/minta-detail/$cabangDatabase/$nomor'),
+        Uri.parse('$baseUrl/mutasi-out/cabang-tujuan?cabang_asal=$cabangAsalKode'),
         headers: await _getHeadersWithCabang(),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['data'];
+        return List<Map<String, dynamic>>.from(data['data']);
       } else {
-        throw Exception('Gagal mengambil detail permintaan');
+        throw Exception('Gagal mengambil data cabang tujuan');
       }
     } catch (e) {
       throw Exception('Error: ${e.toString()}');
     }
   }
 
-  static Future<Map<String, dynamic>> createDo(Map<String, dynamic> data) async {
+  static Future<Map<String, dynamic>> createMutasi(Map<String, dynamic> data) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/do'),
+        Uri.parse('$baseUrl/mutasi-out'),
         headers: await _getHeadersWithCabang(),
         body: jsonEncode(data),
       );
@@ -157,7 +139,7 @@ class DoService {
       } else {
         return {
           'success': false,
-          'message': result['message'] ?? 'Gagal menambah pengiriman',
+          'message': result['message'] ?? 'Gagal menambah mutasi out',
         };
       }
     } catch (e) {
@@ -168,10 +150,10 @@ class DoService {
     }
   }
 
-  static Future<Map<String, dynamic>> updateDo(String nomor, Map<String, dynamic> data) async {
+  static Future<Map<String, dynamic>> updateMutasi(String nomor, Map<String, dynamic> data) async {
     try {
       final response = await http.put(
-        Uri.parse('$baseUrl/do/$nomor'),
+        Uri.parse('$baseUrl/mutasi-out/$nomor'),
         headers: await _getHeadersWithCabang(),
         body: jsonEncode(data),
       );
@@ -187,7 +169,7 @@ class DoService {
       } else {
         return {
           'success': false,
-          'message': result['message'] ?? 'Gagal update pengiriman',
+          'message': result['message'] ?? 'Gagal update mutasi out',
         };
       }
     } catch (e) {
@@ -198,10 +180,10 @@ class DoService {
     }
   }
 
-  static Future<Map<String, dynamic>> deleteDo(String nomor) async {
+  static Future<Map<String, dynamic>> deleteMutasi(String nomor) async {
     try {
       final response = await http.delete(
-        Uri.parse('$baseUrl/do/$nomor'),
+        Uri.parse('$baseUrl/mutasi-out/$nomor'),
         headers: await _getHeadersWithCabang(),
       );
 
@@ -215,7 +197,7 @@ class DoService {
       } else {
         return {
           'success': false,
-          'message': data['message'] ?? 'Gagal hapus pengiriman',
+          'message': data['message'] ?? 'Gagal hapus mutasi out',
         };
       }
     } catch (e) {
@@ -226,46 +208,23 @@ class DoService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getDoForStokIn() async {
+  static Future<List<Map<String, dynamic>>> getItemsForMutasi({String? search}) async {
     try {
-      final url = '$baseUrl/do/available-for-stokin';
-      print('🌐 Calling URL: $url');
-
-      final headers = await _getHeadersWithCabang();
-      print('📋 Headers: $headers');
+      String url = '$baseUrl/mutasi-out/items';
+      if (search != null && search.isNotEmpty) {
+        url += '?search=$search';
+      }
 
       final response = await http.get(
         Uri.parse(url),
-        headers: headers,
-      );
-
-      print('📡 Response status: ${response.statusCode}');
-      print('📦 Response body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data['data']);
-      } else {
-        throw Exception('Gagal mengambil data pengiriman');
-      }
-    } catch (e) {
-      print('❌ Error in getDoForStokIn: $e');
-      throw Exception('Error: ${e.toString()}');
-    }
-  }
-
-  static Future<Map<String, dynamic>> getDoDetailForStokIn(String nomor) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/do/$nomor/for-stokin'),
         headers: await _getHeadersWithCabang(),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['data'];
+        return List<Map<String, dynamic>>.from(data['data']);
       } else {
-        throw Exception('Gagal mengambil detail pengiriman');
+        throw Exception('Gagal mengambil data items');
       }
     } catch (e) {
       throw Exception('Error: ${e.toString()}');

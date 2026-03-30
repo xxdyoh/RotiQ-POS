@@ -5,18 +5,19 @@ import 'package:intl/intl.dart';
 import 'dart:async';
 import '../services/do_service.dart';
 import '../services/cabang_service.dart';
+import '../services/session_manager.dart';
 import '../models/cabang_model.dart';
 import '../models/do_model.dart';
 import '../widgets/base_layout.dart';
 
 class DoFormScreen extends StatefulWidget {
-  final Map<String, dynamic>? doHeader;
-  final VoidCallback onDoSaved;
+  final Map<String, dynamic>? mutasiHeader;
+  final VoidCallback onMutasiSaved;
 
   const DoFormScreen({
     super.key,
-    this.doHeader,
-    required this.onDoSaved,
+    this.mutasiHeader,
+    required this.onMutasiSaved,
   });
 
   @override
@@ -25,10 +26,9 @@ class DoFormScreen extends StatefulWidget {
 
 class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _memoController = TextEditingController();
+  final TextEditingController _keteranganController = TextEditingController();
   final TextEditingController _barcodeController = TextEditingController();
   final Map<int, TextEditingController> _qtyControllers = {};
-  final Map<int, TextEditingController> _ketControllers = {};
   final FocusNode _barcodeFocusNode = FocusNode();
 
   Timer? _barcodeDebounce;
@@ -56,20 +56,21 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
   bool _isSaving = false;
-  bool _isLoadingMinta = false;
+  bool _isLoadingGudang = false;
+  bool _isLoadingCabang = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  String? _nomorDo;
-  Cabang? _selectedCabang;
-  Map<String, dynamic>? _selectedMinta;
-  List<DoItem> _items = [];
-  List<DoItem> _filteredItems = [];
+  String? _nomorMutasi;
+  Gudang? _selectedGudangAsal;
+  Cabang? _selectedCabangTujuan;
+  List<MutasiItem> _items = [];
+  List<MutasiItem> _filteredItems = [];
 
-  List<Cabang> _cabangList = [];
-  List<Map<String, dynamic>> _mintaList = [];
+  List<Gudang> _gudangList = [];
+  List<Cabang> _cabangTujuanList = [];
 
   @override
   void initState() {
@@ -89,13 +90,14 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
 
     _animationController.forward();
 
-    _loadCabangList();
+    _loadGudangList();
+    _loadCabangTujuanList();
 
-    if (widget.doHeader != null) {
-      _nomorDo = widget.doHeader!['do_nomor'];
-      _selectedDate = DateTime.parse(widget.doHeader!['do_tanggal']);
-      _memoController.text = widget.doHeader!['do_memo'] ?? '';
-      _loadDoDetail();
+    if (widget.mutasiHeader != null) {
+      _nomorMutasi = widget.mutasiHeader!['mutc_nomor'];
+      _selectedDate = DateTime.parse(widget.mutasiHeader!['mutc_tanggal']);
+      _keteranganController.text = widget.mutasiHeader!['mutc_keterangan'] ?? '';
+      _loadMutasiDetail();
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -108,11 +110,10 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
     _barcodeDebounce?.cancel();
     _animationController.dispose();
     _searchController.dispose();
-    _memoController.dispose();
+    _keteranganController.dispose();
     _barcodeController.dispose();
     _barcodeFocusNode.dispose();
     _qtyControllers.values.forEach((controller) => controller.dispose());
-    _ketControllers.values.forEach((controller) => controller.dispose());
     super.dispose();
   }
 
@@ -142,20 +143,16 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
     for (int i = 0; i < _filteredItems.length; i++) {
       if (_filteredItems[i].itemId == itemId) {
         setState(() {
-          final newQty = _filteredItems[i].qtyKirim + 1;
-
-          _filteredItems[i] = _filteredItems[i].copyWith(qtyKirim: newQty);
-
+          final newQty = _filteredItems[i].qty + 1;
+          _filteredItems[i] = _filteredItems[i].copyWith(qty: newQty);
           final itemIndex = _items.indexWhere((item) => item.itemId == itemId);
           if (itemIndex != -1) {
-            _items[itemIndex] = _items[itemIndex].copyWith(qtyKirim: newQty);
+            _items[itemIndex] = _items[itemIndex].copyWith(qty: newQty);
           }
-
           if (_qtyControllers.containsKey(itemId)) {
             _qtyControllers[itemId]?.text = newQty.toString();
           }
         });
-
         _showToast('${_filteredItems[i].itemNama} +1', type: ToastType.success);
         HapticFeedback.lightImpact();
         found = true;
@@ -172,49 +169,71 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
     _barcodeFocusNode.requestFocus();
   }
 
-  Future<void> _loadCabangList() async {
+  Future<void> _loadGudangList() async {
+    setState(() => _isLoadingGudang = true);
     try {
-      final cabangList = await CabangService.getCabangList();
+      final gudangData = await DoService.getGudangList();
       setState(() {
-        _cabangList = cabangList;
+        _gudangList = gudangData.map((g) => Gudang.fromJson(g)).toList();
       });
     } catch (e) {
-      _showToast('Gagal memuat data cabang: ${e.toString()}', type: ToastType.error);
+      _showToast('Gagal memuat data gudang: ${e.toString()}', type: ToastType.error);
+    } finally {
+      setState(() => _isLoadingGudang = false);
     }
   }
 
-  Future<void> _loadDoDetail() async {
-    if (_nomorDo == null) return;
+  Future<void> _loadCabangTujuanList() async {
+    final currentCabang = SessionManager.getCurrentCabang();
+    if (currentCabang == null) return;
+
+    setState(() => _isLoadingCabang = true);
+    try {
+      final cabangData = await DoService.getCabangTujuanList(currentCabang.kode);
+      setState(() {
+        _cabangTujuanList = cabangData.map((c) => Cabang.fromJson(c)).toList();
+      });
+    } catch (e) {
+      _showToast('Gagal memuat data cabang tujuan: ${e.toString()}', type: ToastType.error);
+    } finally {
+      setState(() => _isLoadingCabang = false);
+    }
+  }
+
+  Future<void> _loadMutasiDetail() async {
+    if (_nomorMutasi == null) return;
 
     setState(() => _isLoading = true);
 
     try {
-      final detail = await DoService.getDoDetail(_nomorDo!);
+      final detail = await DoService.getMutasiDetail(_nomorMutasi!);
       final header = detail['header'];
       final details = List<Map<String, dynamic>>.from(detail['details']);
 
       setState(() {
-        _selectedMinta = {
-          'mt_nomor': header['do_mt_nomor'],
-        };
-
+        _selectedGudangAsal = _gudangList.firstWhere(
+              (g) => g.kode == header['mutc_gdg_kode'],
+          orElse: () => Gudang(kode: '', nama: ''),
+        );
+        _selectedCabangTujuan = _cabangTujuanList.firstWhere(
+              (c) => c.kode == header['mutc_cbg_tujuan'],
+          orElse: () => Cabang(kode: '', nama: '', database: '', host: '', user: '', password: '', port: '', jenis: '', aktif: 0),
+        );
         _items = details.map((detail) {
           int qty = 0;
-          final rawQty = detail['dod_qty'];
+          final rawQty = detail['mutcd_qty'];
           if (rawQty is int) qty = rawQty;
           else if (rawQty is double) qty = rawQty.toInt();
           else if (rawQty is String) qty = int.tryParse(rawQty) ?? 0;
 
-          return DoItem(
-            itemId: detail['dod_brg_kode'],
+          return MutasiItem(
+            itemId: detail['mutcd_brg_kode'],
             itemNama: detail['item_nama'] ?? '',
-            qtyMinta: 0,
-            qtyKirim: qty,
-            keterangan: detail['dod_keterangan'] ?? '',
-            nourut: detail['dod_nourut'],
+            qty: qty,
+            keterangan: detail['mutcd_keterangan'] ?? '',
+            nourut: detail['mutcd_nourut'],
           );
         }).toList();
-
         _filteredItems = List.from(_items);
         _initializeControllers();
       });
@@ -225,89 +244,10 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
     }
   }
 
-  Future<void> _loadMintaList() async {
-    if (_selectedCabang == null) return;
-
-    setState(() => _isLoadingMinta = true);
-
-    try {
-      final mintaData = await DoService.getMintaListByCabang(
-        cabangDatabase: _selectedCabang!.database,
-        startDate: DateFormat('yyyy-MM-dd').format(DateTime(2020, 1, 1)),
-        endDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
-      );
-      setState(() {
-        _mintaList = mintaData;
-      });
-    } catch (e) {
-      _showToast('Gagal memuat data permintaan: ${e.toString()}', type: ToastType.error);
-    } finally {
-      setState(() => _isLoadingMinta = false);
-    }
-  }
-
-  Future<void> _loadMintaDetail(String nomor) async {
-    if (_selectedCabang == null) return;
-
-    setState(() {
-      _isLoadingMinta = true;
-      _items.clear();
-      _qtyControllers.clear();
-      _ketControllers.clear();
-    });
-
-    try {
-      final mintaDetail = await DoService.getMintaDetailFromCabang(
-        cabangDatabase: _selectedCabang!.database,
-        nomor: nomor,
-      );
-
-      final details = List<Map<String, dynamic>>.from(mintaDetail['details']);
-
-      setState(() {
-        _items = details.map((detail) {
-          int qtyMinta = 0;
-          int stock = 0;
-
-          final rawQty = detail['mtd_qty'];
-          if (rawQty is int) qtyMinta = rawQty;
-          else if (rawQty is double) qtyMinta = rawQty.toInt();
-          else if (rawQty is String) qtyMinta = int.tryParse(rawQty) ?? 0;
-
-          final rawStock = detail['stock_tersedia'];
-          if (rawStock is int) stock = rawStock;
-          else if (rawStock is double) stock = rawStock.toInt();
-          else if (rawStock is String) stock = int.tryParse(rawStock) ?? 0;
-
-          return DoItem(
-            itemId: detail['mtd_brg_kode'],
-            itemNama: detail['item_nama'] ?? '',
-            qtyMinta: qtyMinta,
-            qtyKirim: 0,
-            keterangan: '',
-            stockTersedia: stock,
-          );
-        }).toList();
-
-        _filteredItems = List.from(_items);
-        _initializeControllers();
-      });
-
-      _showToast('Berhasil load ${_items.length} item dari permintaan', type: ToastType.success);
-    } catch (e) {
-      _showToast('Gagal memuat detail permintaan: ${e.toString()}', type: ToastType.error);
-    } finally {
-      setState(() => _isLoadingMinta = false);
-    }
-  }
-
   void _initializeControllers() {
     for (var item in _items) {
       _qtyControllers[item.itemId] = TextEditingController(
-          text: item.qtyKirim > 0 ? item.qtyKirim.toString() : ''
-      );
-      _ketControllers[item.itemId] = TextEditingController(
-          text: item.keterangan ?? ''
+          text: item.qty > 0 ? item.qty.toString() : ''
       );
     }
   }
@@ -329,34 +269,16 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
     setState(() {
       final itemIndex = _items.indexWhere((item) => item.itemId == itemId);
       if (itemIndex != -1) {
-        _items[itemIndex] = _items[itemIndex].copyWith(qtyKirim: newQty);
+        _items[itemIndex] = _items[itemIndex].copyWith(qty: newQty);
       }
 
       final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
       if (filteredIndex != -1) {
-        _filteredItems[filteredIndex] = _filteredItems[filteredIndex].copyWith(qtyKirim: newQty);
+        _filteredItems[filteredIndex] = _filteredItems[filteredIndex].copyWith(qty: newQty);
       }
 
       if (_qtyControllers.containsKey(itemId)) {
         _qtyControllers[itemId]?.text = newQty.toString();
-      }
-    });
-  }
-
-  void _updateItemKeterangan(int itemId, String keterangan) {
-    setState(() {
-      final itemIndex = _items.indexWhere((item) => item.itemId == itemId);
-      if (itemIndex != -1) {
-        _items[itemIndex] = _items[itemIndex].copyWith(keterangan: keterangan);
-      }
-
-      final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
-      if (filteredIndex != -1) {
-        _filteredItems[filteredIndex] = _filteredItems[filteredIndex].copyWith(keterangan: keterangan);
-      }
-
-      if (_ketControllers.containsKey(itemId)) {
-        _ketControllers[itemId]?.text = keterangan;
       }
     });
   }
@@ -388,246 +310,37 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
     }
   }
 
-  void _showSelectMintaDialog() {
-    if (_selectedCabang == null) {
-      _showToast('Pilih cabang terlebih dahulu!', type: ToastType.error);
-      return;
-    }
-
-    _barcodeFocusNode.unfocus();
-
-    showDialog(
+  void _showAddItemModal() async {
+    HapticFeedback.selectionClick();
+    final selectedItems = await showModalBottomSheet<List<MutasiItem>>(
       context: context,
-      barrierDismissible: true,
-      builder: (context) => WillPopScope(
-        onWillPop: () async {
-          _barcodeFocusNode.requestFocus();
-          return true;
-        },
-        child: Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Container(
-            width: 500,
-            constraints: const BoxConstraints(maxHeight: 600),
-            decoration: BoxDecoration(
-              color: _surfaceWhite,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [_primaryDark, _primaryLight],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      topRight: Radius.circular(16),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(Icons.assignment_rounded, size: 18, color: Colors.white),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Pilih No. Permintaan',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    child: _isLoadingMinta
-                        ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 32,
-                            height: 32,
-                            child: CircularProgressIndicator(
-                              color: _accentGold,
-                              strokeWidth: 2,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Memuat data permintaan...',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 11,
-                              color: _textMedium,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                        : _mintaList.isEmpty
-                        ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              color: _bgSoft,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(Icons.inbox_rounded, size: 32, color: _textLight),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Tidak ada data permintaan',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: _textDark,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                        : ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: _mintaList.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final minta = _mintaList[index];
-                        return InkWell(
-                          onTap: () {
-                            Navigator.pop(context);
-                            setState(() {
-                              _selectedMinta = minta;
-                            });
-                            _loadMintaDetail(minta['mt_nomor']);
-                            _barcodeFocusNode.requestFocus();
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: _surfaceWhite,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: _borderSoft),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: _accentGoldSoft,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(Icons.assignment_rounded, size: 18, color: _accentGold),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        minta['mt_nomor'],
-                                        style: GoogleFonts.montserrat(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: _textDark,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        minta['mt_keterangan'] ?? '-',
-                                        style: GoogleFonts.montserrat(
-                                          fontSize: 10,
-                                          color: _textMedium,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: _bgSoft,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: _borderSoft),
-                                  ),
-                                  child: Text(
-                                    DateFormat('dd/MM/yy').format(DateTime.parse(minta['mt_tanggal'])),
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 10,
-                                      color: _textMedium,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: _bgSoft,
-                    border: Border(top: BorderSide(color: _borderSoft)),
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _barcodeFocusNode.requestFocus();
-                        },
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                        ),
-                        child: Text(
-                          'Tutup',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: _textMedium,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.transparent,
+        ),
+        child: AddItemModalMutasi(
+          existingItems: _items,
         ),
       ),
     );
+
+    if (selectedItems != null && selectedItems.isNotEmpty) {
+      setState(() {
+        for (var newItem in selectedItems) {
+          final existingIndex = _items.indexWhere((item) => item.itemId == newItem.itemId);
+          if (existingIndex >= 0) {
+            _items[existingIndex].qty += newItem.qty;
+          } else {
+            _items.add(newItem);
+          }
+        }
+        _filteredItems = List.from(_items);
+        _initializeControllers();
+      });
+      _showToast('${selectedItems.length} item ditambahkan', type: ToastType.success);
+    }
   }
 
   void _showToast(String message, {required ToastType type}) {
@@ -681,37 +394,28 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
     }
   }
 
-  void _updateAllKeteranganFromControllers() {
-    for (var entry in _ketControllers.entries) {
-      final itemId = entry.key;
-      final controller = entry.value;
-      _updateItemKeterangan(itemId, controller.text);
-    }
-  }
-
-  Future<void> _saveDo() async {
-    if (_selectedCabang == null) {
-      _showToast('Cabang harus dipilih!', type: ToastType.error);
+  Future<void> _saveMutasi() async {
+    if (_selectedGudangAsal == null || _selectedGudangAsal!.kode.isEmpty) {
+      _showToast('Gudang asal harus dipilih!', type: ToastType.error);
       return;
     }
 
-    if (_selectedMinta == null) {
-      _showToast('No. Permintaan harus dipilih!', type: ToastType.error);
+    if (_selectedCabangTujuan == null || _selectedCabangTujuan!.kode.isEmpty) {
+      _showToast('Cabang tujuan harus dipilih!', type: ToastType.error);
       return;
     }
 
-    if (_memoController.text.trim().isEmpty) {
-      _showToast('Memo harus diisi!', type: ToastType.error);
+    if (_keteranganController.text.trim().isEmpty) {
+      _showToast('Keterangan harus diisi!', type: ToastType.error);
       return;
     }
 
     _updateAllQtyFromControllers();
-    _updateAllKeteranganFromControllers();
 
-    final itemsWithQty = _items.where((item) => item.qtyKirim > 0).toList();
+    final itemsWithQty = _items.where((item) => item.qty > 0).toList();
 
     if (itemsWithQty.isEmpty) {
-      _showToast('Minimal satu item harus memiliki quantity kirim!', type: ToastType.error);
+      _showToast('Minimal satu item harus memiliki quantity!', type: ToastType.error);
       return;
     }
 
@@ -719,24 +423,23 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
     HapticFeedback.mediumImpact();
 
     try {
-      final tanggalStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final tanggalStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(_selectedDate);
 
       final Map<String, dynamic> requestData = {
         'tanggal': tanggalStr,
-        'mt_nomor': _selectedMinta!['mt_nomor'],
-        'cabang_database': _selectedCabang!.database,
-        'memo': _memoController.text.trim(),
+        'gdg_kode': _selectedGudangAsal!.kode,
+        'cbg_tujuan': _selectedCabangTujuan!.kode,
+        'keterangan': _keteranganController.text.trim(),
         'items': itemsWithQty.map((item) => item.toJson()).toList(),
-        'kode_cabang': _selectedCabang!.kode,
       };
 
-      final result = widget.doHeader == null
-          ? await DoService.createDo(requestData)
-          : await DoService.updateDo(_nomorDo!, requestData);
+      final result = widget.mutasiHeader == null
+          ? await DoService.createMutasi(requestData)
+          : await DoService.updateMutasi(_nomorMutasi!, requestData);
 
       if (result['success']) {
         _showToast(result['message'], type: ToastType.success);
-        widget.onDoSaved();
+        widget.onMutasiSaved();
         Navigator.pop(context);
       } else {
         _showToast(result['message'], type: ToastType.error);
@@ -749,19 +452,19 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
   }
 
   int get _totalItemsWithQty {
-    return _items.where((item) => item.qtyKirim > 0).length;
+    return _items.where((item) => item.qty > 0).length;
   }
 
   int get _totalQuantity {
-    return _items.fold(0, (sum, item) => sum + item.qtyKirim);
+    return _items.fold(0, (sum, item) => sum + item.qty);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isEdit = widget.doHeader != null;
+    final isEdit = widget.mutasiHeader != null;
 
     return BaseLayout(
-      title: isEdit ? 'Edit Pengiriman' : 'Tambah Pengiriman',
+      title: isEdit ? 'Edit Mutasi Out' : 'Tambah Mutasi Out',
       showBackButton: true,
       showSidebar: true,
       isFormScreen: true,
@@ -781,9 +484,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                       children: [
                         _buildInfoCard(isEdit),
                         const SizedBox(height: 12),
-                        _buildCabangCard(),
-                        const SizedBox(height: 12),
-                        _buildMintaCard(),
+                        _buildGudangCabangCard(),
                         const SizedBox(height: 12),
                         _buildItemsCard(),
                       ],
@@ -817,7 +518,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
         padding: const EdgeInsets.all(12),
         child: Column(
           children: [
-            if (_nomorDo != null) ...[
+            if (_nomorMutasi != null) ...[
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
@@ -831,7 +532,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        _nomorDo!,
+                        _nomorMutasi!,
                         style: GoogleFonts.montserrat(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -879,7 +580,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                                   ),
                                 ),
                                 Text(
-                                  DateFormat('dd/MM/yyyy').format(_selectedDate),
+                                  DateFormat('dd/MM/yyyy HH:mm').format(_selectedDate),
                                   style: GoogleFonts.montserrat(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -906,7 +607,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                     ),
                     child: Center(
                       child: TextFormField(
-                        controller: _memoController,
+                        controller: _keteranganController,
                         textAlignVertical: TextAlignVertical.center,
                         textAlign: TextAlign.left,
                         style: GoogleFonts.montserrat(
@@ -915,7 +616,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                           fontWeight: FontWeight.w500,
                         ),
                         decoration: InputDecoration(
-                          hintText: 'Memo pengiriman...',
+                          hintText: 'Keterangan mutasi...',
                           hintStyle: GoogleFonts.montserrat(
                             fontSize: 11,
                             color: _textLight,
@@ -941,7 +642,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildCabangCard() {
+  Widget _buildGudangCabangCard() {
     return Container(
       decoration: BoxDecoration(
         color: _surfaceWhite,
@@ -957,179 +658,158 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Row(
+        child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: _accentSkySoft,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(
-                Icons.business_rounded,
-                color: _accentSky,
-                size: 14,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Cabang Tujuan',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 9,
-                      color: _textLight,
-                    ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: _accentSkySoft,
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  const SizedBox(height: 2),
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<Cabang>(
-                      value: _selectedCabang,
-                      isExpanded: true,
-                      hint: Text(
-                        'Pilih Cabang',
+                  child: Icon(
+                    Icons.warehouse_rounded,
+                    color: _accentSky,
+                    size: 14,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Gudang Asal',
                         style: GoogleFonts.montserrat(
-                          fontSize: 11,
+                          fontSize: 9,
                           color: _textLight,
                         ),
                       ),
-                      items: _cabangList.map((cabang) {
-                        return DropdownMenuItem<Cabang>(
-                          value: cabang,
-                          child: Text(
-                            '${cabang.kode} - ${cabang.nama}',
+                      const SizedBox(height: 2),
+                      _isLoadingGudang
+                          ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _accentGold,
+                        ),
+                      )
+                          : DropdownButtonHideUnderline(
+                        child: DropdownButton<Gudang>(
+                          value: _selectedGudangAsal,
+                          isExpanded: true,
+                          hint: Text(
+                            'Pilih Gudang',
                             style: GoogleFonts.montserrat(
                               fontSize: 11,
-                              color: _textDark,
+                              color: _textLight,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        );
-                      }).toList(),
-                      onChanged: (cabang) {
-                        setState(() {
-                          _selectedCabang = cabang;
-                          _selectedMinta = null;
-                          _items.clear();
-                          _filteredItems.clear();
-                          _mintaList.clear();
-                          _qtyControllers.clear();
-                          _ketControllers.clear();
-                        });
-                        _loadMintaList();
-                        _barcodeFocusNode.requestFocus();
-                      },
-                      icon: Icon(Icons.arrow_drop_down, color: _accentSky, size: 20),
-                      style: GoogleFonts.montserrat(fontSize: 11, color: _textDark),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMintaCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: _surfaceWhite,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _borderSoft),
-        boxShadow: [
-          BoxShadow(
-            color: _shadowColor,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: _accentGoldSoft,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(
-                Icons.assignment_rounded,
-                color: _accentGold,
-                size: 14,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'No. Permintaan',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 9,
-                      color: _textLight,
-                    ),
-                  ),
-                  Text(
-                    _selectedMinta != null ? _selectedMinta!['mt_nomor'] : 'Belum dipilih',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _selectedMinta != null ? _accentGold : _textLight,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              height: 32,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [_accentGold, _accentGold.withOpacity(0.8)],
-                ),
-                borderRadius: BorderRadius.circular(6),
-                boxShadow: [
-                  BoxShadow(
-                    color: _accentGold.withOpacity(0.2),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    _barcodeFocusNode.unfocus();
-                    _showSelectMintaDialog();
-                  },
-                  borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Row(
-                      children: [
-                        Icon(Icons.search_rounded, size: 12, color: Colors.white),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Pilih',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
+                          items: _gudangList.map((gudang) {
+                            return DropdownMenuItem<Gudang>(
+                              value: gudang,
+                              child: Text(
+                                '${gudang.kode} - ${gudang.nama}',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  color: _textDark,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (gudang) {
+                            setState(() {
+                              _selectedGudangAsal = gudang;
+                            });
+                          },
+                          icon: Icon(Icons.arrow_drop_down, color: _accentSky, size: 20),
+                          style: GoogleFonts.montserrat(fontSize: 11, color: _textDark),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: _accentGoldSoft,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    Icons.business_rounded,
+                    color: _accentGold,
+                    size: 14,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Cabang Tujuan',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 9,
+                          color: _textLight,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      _isLoadingCabang
+                          ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _accentGold,
+                        ),
+                      )
+                          : DropdownButtonHideUnderline(
+                        child: DropdownButton<Cabang>(
+                          value: _selectedCabangTujuan,
+                          isExpanded: true,
+                          hint: Text(
+                            'Pilih Cabang Tujuan',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 11,
+                              color: _textLight,
+                            ),
+                          ),
+                          items: _cabangTujuanList.map((cabang) {
+                            return DropdownMenuItem<Cabang>(
+                              value: cabang,
+                              child: Text(
+                                '${cabang.kode} - ${cabang.nama}',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  color: _textDark,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (cabang) {
+                            setState(() {
+                              _selectedCabangTujuan = cabang;
+                            });
+                          },
+                          icon: Icon(Icons.arrow_drop_down, color: _accentGold, size: 20),
+                          style: GoogleFonts.montserrat(fontSize: 11, color: _textDark),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1179,7 +859,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                   ),
                 ),
                 const Spacer(),
-                if (_isLoading || _isLoadingMinta)
+                if (_isLoading)
                   SizedBox(
                     width: 16,
                     height: 16,
@@ -1293,6 +973,12 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                 const SizedBox(height: 10),
                 Row(
                   children: [
+                    _buildModernActionButton(
+                      label: 'Add',
+                      icon: Icons.add_rounded,
+                      color: _accentSky,
+                      onPressed: _showAddItemModal,
+                    ),
                     const Spacer(),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1300,49 +986,13 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                         color: _primarySoft,
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.inventory_rounded,
-                            size: 10,
-                            color: _primaryDark,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${_items.length}',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: _primaryDark,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _accentGoldSoft,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.shopping_cart_rounded,
-                            size: 10,
-                            color: _accentGold,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$_totalQuantity',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: _accentGold,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        '${_items.length}',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: _primaryDark,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -1352,31 +1002,21 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                         color: _accentMintSoft,
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.check_circle_rounded,
-                            size: 10,
-                            color: _accentMint,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$_totalItemsWithQty',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: _accentMint,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        '$_totalQuantity',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: _accentMint,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                if (_filteredItems.isEmpty && !_isLoading && !_isLoadingMinta)
+                if (_filteredItems.isEmpty && !_isLoading)
                   _buildEmptyState()
-                else if (!_isLoading && !_isLoadingMinta)
+                else if (!_isLoading)
                   Container(
                     constraints: const BoxConstraints(maxHeight: 400),
                     child: Scrollbar(
@@ -1399,22 +1039,59 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildModernItemCard(DoItem item) {
+  Widget _buildModernActionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback? onPressed,
+  }) {
+    return Container(
+      height: 28,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color, color.withOpacity(0.8)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 11, color: Colors.white),
+                const SizedBox(width: 4),
+                Text(label, style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernItemCard(MutasiItem item) {
     if (!_qtyControllers.containsKey(item.itemId)) {
       _qtyControllers[item.itemId] = TextEditingController(
-          text: item.qtyKirim > 0 ? item.qtyKirim.toString() : ''
-      );
-    }
-    if (!_ketControllers.containsKey(item.itemId)) {
-      _ketControllers[item.itemId] = TextEditingController(
-          text: item.keterangan ?? ''
+          text: item.qty > 0 ? item.qty.toString() : ''
       );
     }
 
-    final qtyController = _qtyControllers[item.itemId]!;
-    final ketController = _ketControllers[item.itemId]!;
-    final hasQty = item.qtyKirim > 0;
-    final isLowStock = item.stockTersedia < item.qtyMinta;
+    final controller = _qtyControllers[item.itemId]!;
+    final hasQty = item.qty > 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -1427,195 +1104,146 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
       ),
       child: Padding(
         padding: const EdgeInsets.all(8),
-        child: Column(
+        child: Row(
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: hasQty ? _primaryDark : _bgSoft,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Center(
-                    child: Icon(
-                      Icons.inventory_2_outlined,
-                      color: hasQty ? Colors.white : _textLight,
-                      size: 16,
-                    ),
-                  ),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: hasQty ? _primaryDark : _bgSoft,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.inventory_2_outlined,
+                  color: hasQty ? Colors.white : _textLight,
+                  size: 16,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.itemNama,
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: _textDark,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: _bgSoft,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'ID: ${item.itemId}',
-                              style: GoogleFonts.montserrat(
-                                fontSize: 8,
-                                color: _textMedium,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: _accentSkySoft,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'Minta: ${item.qtyMinta}',
-                              style: GoogleFonts.montserrat(
-                                fontSize: 8,
-                                fontWeight: FontWeight.w600,
-                                color: _accentSky,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: isLowStock ? _accentCoralSoft : _accentMintSoft,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'Stock: ${item.stockTersedia}',
-                              style: GoogleFonts.montserrat(
-                                fontSize: 8,
-                                fontWeight: FontWeight.w600,
-                                color: isLowStock ? _accentCoral : _accentMint,
-                              ),
-                            ),
-                          ),
-                          if (hasQty) ...[
-                            const SizedBox(width: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: _accentGoldSoft,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                'Kirim: ${item.qtyKirim}',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w600,
-                                  color: _accentGold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 60,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: _bgSoft,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: hasQty ? _primaryDark.withOpacity(0.3) : _borderSoft,
-                    ),
-                  ),
-                  child: TextField(
-                    controller: qtyController,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.itemNama,
                     style: GoogleFonts.montserrat(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: hasQty ? _primaryDark : _textLight,
+                      color: _textDark,
                     ),
-                    decoration: InputDecoration(
-                      hintText: '0',
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
-                      isDense: true,
-                      hintStyle: GoogleFonts.montserrat(
-                        fontSize: 11,
-                        color: _textLight,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: _bgSoft,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'ID: ${item.itemId}',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 8,
+                            color: _textMedium,
+                          ),
+                        ),
                       ),
-                    ),
-                    onChanged: (value) {
-                      if (value.isEmpty) {
-                        _updateItemQty(item.itemId, 0);
-                      } else {
-                        final intValue = int.tryParse(value);
-                        if (intValue != null) {
-                          _updateItemQty(item.itemId, intValue);
-                        }
-                      }
-                    },
-                    onTap: () {
-                      _barcodeFocusNode.unfocus();
-                      qtyController.selection = TextSelection(
-                        baseOffset: 0,
-                        extentOffset: qtyController.text.length,
-                      );
-                    },
+                      if (hasQty) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: _accentMintSoft,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Qty: ${item.qty}',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w600,
+                              color: _accentMint,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Container(
-              height: 28,
-              decoration: BoxDecoration(
-                color: _bgSoft,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: _borderSoft),
+                ],
               ),
-              child: TextField(
-                controller: ketController,
-                style: GoogleFonts.montserrat(fontSize: 10, color: _textDark),
-                decoration: InputDecoration(
-                  hintText: 'Keterangan item (opsional)',
-                  hintStyle: GoogleFonts.montserrat(
-                    fontSize: 9,
-                    color: _textLight,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.notes_rounded,
-                    color: _textLight,
-                    size: 12,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  isDense: true,
+            ),
+            SizedBox(
+              width: 60,
+              height: 32,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _bgSoft,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: hasQty ? _primaryDark.withOpacity(0.3) : _borderSoft),
                 ),
-                onTap: () {
-                  _barcodeFocusNode.unfocus();
-                },
-                onChanged: (value) {
-                  _updateItemKeterangan(item.itemId, value);
-                },
+                child: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: GoogleFonts.montserrat(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: hasQty ? _primaryDark : _textLight,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '0',
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
+                    isDense: true,
+                    hintStyle: GoogleFonts.montserrat(
+                      fontSize: 11,
+                      color: _textLight,
+                    ),
+                  ),
+                  onChanged: (value) {
+                    if (value.isEmpty) {
+                      _updateItemQty(item.itemId, 0);
+                    } else {
+                      final intValue = int.tryParse(value);
+                      if (intValue != null) {
+                        _updateItemQty(item.itemId, intValue);
+                      }
+                    }
+                  },
+                  onTap: () {
+                    _barcodeFocusNode.unfocus();
+                    controller.selection = TextSelection(
+                      baseOffset: 0,
+                      extentOffset: controller.text.length,
+                    );
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _items.removeWhere((i) => i.itemId == item.itemId);
+                  _filteredItems = List.from(_items);
+                  _qtyControllers[item.itemId]?.dispose();
+                  _qtyControllers.remove(item.itemId);
+                });
+                _showToast('${item.itemNama} dihapus', type: ToastType.info);
+              },
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: _accentCoral.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(Icons.delete_outline, size: 14, color: _accentCoral),
               ),
             ),
           ],
@@ -1637,22 +1265,18 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
               shape: BoxShape.circle,
             ),
             child: Icon(
-              _selectedMinta == null
-                  ? Icons.assignment_rounded
-                  : (_searchController.text.isEmpty
+              _searchController.text.isEmpty
                   ? Icons.inventory_2_outlined
-                  : Icons.search_off_rounded),
+                  : Icons.search_off_rounded,
               size: 32,
               color: _textLight,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            _selectedMinta == null
-                ? 'Pilih No. Permintaan terlebih dahulu'
-                : (_searchController.text.isEmpty
-                ? 'Tidak ada item dari permintaan'
-                : 'Item tidak ditemukan'),
+            _searchController.text.isEmpty
+                ? 'Belum ada item'
+                : 'Item tidak ditemukan',
             style: GoogleFonts.montserrat(
               fontSize: 12,
               fontWeight: FontWeight.w500,
@@ -1661,11 +1285,9 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
           ),
           const SizedBox(height: 2),
           Text(
-            _selectedMinta == null
-                ? 'Klik tombol Pilih untuk memilih permintaan'
-                : (_searchController.text.isEmpty
-                ? 'Item akan muncul setelah permintaan dipilih'
-                : 'Coba kata kunci lain'),
+            _searchController.text.isEmpty
+                ? 'Tambah item dengan tombol Add atau scan barcode'
+                : 'Coba kata kunci lain',
             style: GoogleFonts.montserrat(
               fontSize: 10,
               color: _textLight,
@@ -1747,7 +1369,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: _isSaving ? null : _saveDo,
+                  onTap: _isSaving ? null : _saveMutasi,
                   borderRadius: BorderRadius.circular(8),
                   child: Center(
                     child: _isSaving
@@ -1790,3 +1412,334 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
 }
 
 enum ToastType { success, error, info }
+
+class AddItemModalMutasi extends StatefulWidget {
+  final List<MutasiItem> existingItems;
+
+  const AddItemModalMutasi({
+    super.key,
+    required this.existingItems,
+  });
+
+  @override
+  State<AddItemModalMutasi> createState() => _AddItemModalMutasiState();
+}
+
+class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
+  final Map<int, TextEditingController> _qtyControllers = {};
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _qtyControllers.values.forEach((c) => c.dispose());
+    super.dispose();
+  }
+
+  Future<void> _loadItems() async {
+    try {
+      final items = await DoService.getItemsForMutasi();
+      setState(() {
+        _items = items;
+        _filteredItems = items;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading items: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _filterItems(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredItems = List.from(_items);
+      } else {
+        final searchLower = query.toLowerCase();
+        _filteredItems = _items.where((item) {
+          return item['item_nama'].toString().toLowerCase().contains(searchLower);
+        }).toList();
+      }
+    });
+  }
+
+  void _addSelectedItems() {
+    final selectedItems = <MutasiItem>[];
+    for (var item in _items) {
+      final controller = _qtyControllers[item['item_id']];
+      if (controller != null && controller.text.isNotEmpty) {
+        final qty = int.tryParse(controller.text) ?? 0;
+        if (qty > 0) {
+          selectedItems.add(MutasiItem(
+            itemId: item['item_id'],
+            itemNama: item['item_nama'],
+            qty: qty,
+          ));
+        }
+      }
+    }
+
+    Navigator.pop(context, selectedItems);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.8,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2C3E50),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.add_shopping_cart, size: 18, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Tambah Item',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.close, size: 16, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                    padding: const EdgeInsets.all(8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Container(
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Center(
+                child: TextField(
+                  controller: _searchController,
+                  textAlignVertical: TextAlignVertical.center,
+                  style: GoogleFonts.montserrat(fontSize: 11),
+                  onChanged: _filterItems,
+                  decoration: InputDecoration(
+                    hintText: 'Cari item...',
+                    hintStyle: GoogleFonts.montserrat(fontSize: 11, color: const Color(0xFFA0AEC0)),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 14, color: Color(0xFF2C3E50)),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                    isDense: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredItems.isEmpty
+                ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.inbox, size: 48, color: const Color(0xFFA0AEC0)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tidak ada item',
+                    style: GoogleFonts.montserrat(fontSize: 12, color: const Color(0xFF718096)),
+                  ),
+                ],
+              ),
+            )
+                : ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: _filteredItems.length,
+              itemBuilder: (context, index) {
+                final item = _filteredItems[index];
+                final itemId = item['item_id'];
+                final isExisting = widget.existingItems.any((i) => i.itemId == itemId);
+
+                if (!_qtyControllers.containsKey(itemId)) {
+                  _qtyControllers[itemId] = TextEditingController();
+                }
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2C3E50).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFF2C3E50)),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item['item_nama'],
+                              style: GoogleFonts.montserrat(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF1A202C),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (isExisting)
+                              Container(
+                                margin: const EdgeInsets.only(top: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF6A918).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Sudah ada di daftar',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 8,
+                                    color: const Color(0xFFF6A918),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(
+                        width: 70,
+                        child: TextField(
+                          controller: _qtyControllers[itemId],
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          style: GoogleFonts.montserrat(fontSize: 11),
+                          decoration: InputDecoration(
+                            hintText: 'Qty',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              border: const Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(
+                        'Batal',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF718096),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF2C3E50), Color(0xFF34495E)],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ElevatedButton(
+                      onPressed: _addSelectedItems,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        'Tambah',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

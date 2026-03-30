@@ -27,7 +27,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   };
 
   final Map<String, String> _menuNameMap = {
-    AppRoutes.dashboard: 'frmsalestype',
+    // AppRoutes.dashboard: 'frmsalestype',
     AppRoutes.categoryList: 'frmCategory',
     AppRoutes.itemList: 'frmItem',
     AppRoutes.pos: 'frmPos',
@@ -339,6 +339,12 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         indent: true,
       ),
       _buildMenuItem(
+        icon: Icons.inventory_rounded,
+        label: 'Koreksi Stok',
+        routeName: AppRoutes.koreksiList,
+        indent: true,
+      ),
+      _buildMenuItem(
         icon: Icons.swap_horizontal_circle_outlined,
         label: 'Penerimaan St. Jadi',
         routeName: AppRoutes.penerimaanSetengahJadi,
@@ -382,7 +388,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       ),
       _buildMenuItem(
         icon: Icons.local_shipping_rounded,
-        label: 'Pengiriman (DO)',
+        label: 'Mutasi Out',
         routeName: AppRoutes.doList,
         indent: true,
       ),

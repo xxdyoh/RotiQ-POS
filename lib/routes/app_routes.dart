@@ -32,6 +32,7 @@ import '../screens/spk_list_screen.dart';
 import '../screens/do_form_screen.dart';
 import '../screens/do_list_screen.dart';
 import '../screens/user_permission_screen.dart';
+import '../screens/koreksi_list_screen.dart';
 
 class AppRoutes {
   static const String dashboard = '/dashboard';
@@ -87,18 +88,19 @@ class AppRoutes {
 
   static const String userPermissions = '/user-permissions';
 
+  static const String koreksiList = '/koreksi';
+  static const String koreksiForm = '/koreksi-form';
+
   static Map<String, WidgetBuilder> get routes {
     return {
       dashboard: (context) => DashboardScreen(),
       login: (context) => LoginScreen(),
 
-      // Master Data
       setengahJadiList: (context) => SetengahJadiListScreen(),
       itemList: (context) => ItemListScreen(),
       categoryList: (context) => CategoryListScreen(),
       discountList: (context) => DiscountListScreen(),
 
-      // Transaksi
       pos: (context) => POSScreen(),
       tutupKasir: (context) => TutupKasirFormScreen(onTutupKasirSuccess: () {}),
       stockInList: (context) => StokinListScreen(),
@@ -118,7 +120,6 @@ class AppRoutes {
 
       spkList: (context) => SpkListScreen(),
 
-      // Laporan
       salesByItem: (context) => SalesByItemScreen(),
       salesByInvoice: (context) => SalesByInvoiceScreen(),
       salesOrderList: (context) => SalesOrderScreen(),
@@ -130,14 +131,12 @@ class AppRoutes {
       mintaReport: (context) => MintaReportScreen(),
 
       serahTerimaList: (context) => SerahTerimaListScreen(),
-      // serahTerimaForm: (context) => SerahTerimaFormScreen(
-      //   onSerahTerimaSaved: () {},
-      // ),
 
-      // Utility
       connectPrinter: (context) => PrinterSettingsScreen(),
       settingPrinter: (context) => PrinterConfigScreen(),
       userPermissions: (context) => UserPermissionScreen(),
+
+      koreksiList: (context) => KoreksiListScreen(),
     };
   }
 

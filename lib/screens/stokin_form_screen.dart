@@ -35,21 +35,16 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
   final Map<int, TextEditingController> _qtyControllers = {};
   final FocusNode _barcodeFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
+  final FocusNode _keteranganFocusNode = FocusNode();
+  final FocusNode _globalFocusNode = FocusNode();
 
-  // Warna utama dari POS screen - Navy/Dark Blue
-  final Color _primaryDark = const Color(0xFF2C3E50); // Navy utama
-  final Color _primaryLight = const Color(0xFF34495E); // Navy lebih terang
-  final Color _accentGold = const Color(0xFFF6A918); // Gold aksen
-  final Color _accentMint = const Color(0xFF06D6A0); // Mint
-  final Color _accentCoral = const Color(0xFFFF6B6B); // Coral
-  final Color _accentSky = const Color(0xFF4CC9F0); // Sky Blue
-
-  // Soft version untuk background
-  final Color _primarySoft = const Color(0xFF2C3E50).withOpacity(0.1);
-  final Color _accentGoldSoft = const Color(0xFFF6A918).withOpacity(0.1);
-  final Color _accentMintSoft = const Color(0xFF06D6A0).withOpacity(0.1);
-
-  final Color _bgSoft = const Color(0xFFF8FAFC); // Light background
+  final Color _primaryDark = const Color(0xFF2C3E50);
+  final Color _primaryLight = const Color(0xFF34495E);
+  final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _accentCoral = const Color(0xFFFF6B6B);
+  final Color _accentSky = const Color(0xFF4CC9F0);
+  final Color _bgSoft = const Color(0xFFF8FAFC);
   final Color _surfaceWhite = Colors.white;
   final Color _textDark = const Color(0xFF1A202C);
   final Color _textMedium = const Color(0xFF718096);
@@ -57,11 +52,15 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
   final Color _borderSoft = const Color(0xFFE2E8F0);
   final Color _shadowColor = const Color(0xFF2C3E50).withOpacity(0.1);
 
+  final Color _primarySoft = const Color(0xFF2C3E50).withOpacity(0.1);
+  final Color _accentGoldSoft = const Color(0xFFF6A918).withOpacity(0.1);
+  final Color _accentMintSoft = const Color(0xFF06D6A0).withOpacity(0.1);
+
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
   bool _isSaving = false;
+  bool _scannerActive = true;
 
-  // Animation
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -81,7 +80,6 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
   String _barcodeBuffer = '';
   Timer? _barcodeTimer;
 
-  // Search state
   bool _isSearching = false;
 
   final currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
@@ -90,7 +88,6 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
   void initState() {
     super.initState();
 
-    // Setup animations
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -105,18 +102,15 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
 
     _animationController.forward();
 
-    _setupAutoScanner();
-
     if (widget.stokinHeader != null) {
       _nomorStokin = widget.stokinHeader!['sti_nomor'];
       _selectedDate = DateTime.parse(widget.stokinHeader!['sti_tanggal']);
       _keteranganController.text = widget.stokinHeader!['sti_keterangan'] ?? '';
-
       _loadStokinDetail();
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _barcodeFocusNode.requestFocus();
+      FocusScope.of(context).requestFocus(_globalFocusNode);
     });
   }
 
@@ -128,21 +122,37 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
     _barcodeController.dispose();
     _barcodeFocusNode.dispose();
     _searchFocusNode.dispose();
+    _keteranganFocusNode.dispose();
+    _globalFocusNode.dispose();
     _qtyControllers.values.forEach((controller) => controller.dispose());
     _barcodeTimer?.cancel();
-    RawKeyboard.instance.removeListener(_handleRawKeyEvent);
     super.dispose();
-  }
-
-  void _setupAutoScanner() {
-    RawKeyboard.instance.addListener(_handleRawKeyEvent);
   }
 
   void _handleRawKeyEvent(RawKeyEvent event) {
     if (event is! RawKeyDownEvent) return;
+    if (!_scannerActive) return;
+
+    final focusedNode = FocusScope.of(context).focusedChild;
+    if (focusedNode != null) {
+      final isSearchField = focusedNode == _searchFocusNode;
+      final isKeteranganField = focusedNode == _keteranganFocusNode;
+      final isBarcodeField = focusedNode == _barcodeFocusNode;
+
+      if (isSearchField || isKeteranganField) {
+        if (!isBarcodeField) {
+          return;
+        }
+      }
+    }
 
     final logicalKey = event.logicalKey;
     final keyLabel = logicalKey.keyLabel;
+
+    if (logicalKey == LogicalKeyboardKey.enter || logicalKey == LogicalKeyboardKey.tab) {
+      _processBarcodeFromBuffer();
+      return;
+    }
 
     if (_isValidBarcodeCharacter(keyLabel)) {
       _barcodeBuffer += keyLabel;
@@ -152,7 +162,6 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
 
   bool _isValidBarcodeCharacter(String char) {
     if (char.isEmpty || char.length > 1) return false;
-
     if (char == 'Enter' || char == 'Tab' || char == 'Escape') return false;
 
     final code = char.codeUnitAt(0);
@@ -166,114 +175,116 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
     _barcodeTimer?.cancel();
     _barcodeTimer = Timer(const Duration(milliseconds: 100), () {
       if (_barcodeBuffer.isNotEmpty && _barcodeBuffer.length >= 3) {
-        final barcodeToProcess = _barcodeBuffer;
-        _barcodeBuffer = '';
-        _processBarcode(barcodeToProcess);
+        _processBarcodeFromBuffer();
       } else {
         _barcodeBuffer = '';
       }
     });
   }
 
-  void _processBarcode(String barcode) {
+  void _processBarcodeFromBuffer() {
+    if (_barcodeBuffer.isEmpty) return;
+    final barcode = _barcodeBuffer.trim();
+    _barcodeBuffer = '';
+    _processBarcode(barcode);
+  }
+
+  Future<void> _processBarcode(String barcode) async {
     final cleanBarcode = barcode.trim();
     if (cleanBarcode.isEmpty) return;
 
-    _updateQtyFromBarcode(cleanBarcode);
-  }
-
-  void _updateQtyFromBarcode(String barcode) {
-    final itemId = int.tryParse(barcode);
+    final itemId = int.tryParse(cleanBarcode);
     if (itemId == null) {
       _showToast('Format barcode tidak valid', type: ToastType.error);
       return;
     }
 
-    final existingIndices = <int>[];
-    for (int i = 0; i < _selectedItems.length; i++) {
-      if (_selectedItems[i].itemId == itemId) {
-        existingIndices.add(i);
-      }
-    }
+    setState(() => _isLoading = true);
 
-    if (existingIndices.isNotEmpty) {
-      setState(() {
-        final index = existingIndices[0];
-        _selectedItems[index].qty += 1;
+    try {
+      final existingIndex = _selectedItems.indexWhere((item) => item.itemId == itemId);
 
-        final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
-        if (filteredIndex >= 0) {
-          _filteredItems[filteredIndex].qty = _selectedItems[index].qty;
-        }
-
-        if (_qtyControllers.containsKey(itemId)) {
-          _qtyControllers[itemId]?.text = _selectedItems[index].qty.toString();
+      if (existingIndex >= 0) {
+        final existingItem = _selectedItems[existingIndex];
+        final newQty = existingItem.qty + 1;
+        _qtyControllers[itemId]?.text = newQty.toString();
+        _updateItemQty(itemId, newQty);
+        _showToast('${existingItem.itemNama} +1 (Qty: $newQty)', type: ToastType.success);
+        HapticFeedback.lightImpact();
+      } else {
+        if (_isFromDo) {
+          _showToast('Tidak bisa menambah item baru karena berasal dari DO', type: ToastType.info);
+          HapticFeedback.heavyImpact();
         } else {
-          _qtyControllers[itemId] = TextEditingController(text: _selectedItems[index].qty.toString());
-        }
-      });
+          final items = await StokinService.getItemsForStokIn();
+          Map<String, dynamic>? itemData;
 
-      _showToast('${_selectedItems[existingIndices[0]].itemNama} +1', type: ToastType.success);
-      HapticFeedback.lightImpact();
-    } else {
-      _showToast('Item tidak ada dalam daftar', type: ToastType.error);
-      HapticFeedback.heavyImpact();
+          for (var item in items) {
+            if (item['item_id'] == itemId) {
+              itemData = item;
+              break;
+            }
+          }
+
+          if (itemData != null) {
+            final newItem = StokinItem(
+              itemId: itemId,
+              itemNama: itemData['item_nama']?.toString() ?? '',
+              qty: 1,
+            );
+
+            setState(() {
+              _selectedItems.add(newItem);
+              _filteredItems = List.from(_selectedItems);
+            });
+
+            _qtyControllers[itemId] = TextEditingController(text: '1');
+
+            _showToast('Item ditambahkan: ${newItem.itemNama} (Qty: 1)', type: ToastType.success);
+            HapticFeedback.mediumImpact();
+          } else {
+            _showToast('Item dengan ID $itemId tidak ditemukan', type: ToastType.error);
+            HapticFeedback.heavyImpact();
+          }
+        }
+      }
+    } catch (e) {
+      _showToast('Error: ${e.toString()}', type: ToastType.error);
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
-  // Modern Toast dengan SnackBar (lebih simple)
   void _showToast(String message, {required ToastType type}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Container(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              Icon(
-                type == ToastType.success ? Icons.check_circle_rounded :
-                type == ToastType.error ? Icons.error_rounded :
-                Icons.info_rounded,
-                color: Colors.white,
-                size: 18,
+        content: Row(
+          children: [
+            Icon(
+              type == ToastType.success ? Icons.check_circle_rounded :
+              type == ToastType.error ? Icons.error_rounded :
+              Icons.info_rounded,
+              color: Colors.white,
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: GoogleFonts.montserrat(color: Colors.white, fontSize: 11),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: GoogleFonts.montserrat(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
         backgroundColor: type == ToastType.success ? _accentMint :
-        type == ToastType.error ? _accentCoral :
-        _accentSky,
+        type == ToastType.error ? _accentCoral : _accentSky,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 2),
       ),
     );
-  }
-
-  void _showSuccessSnackbar(String message) {
-    _showToast(message, type: ToastType.success);
-  }
-
-  void _showErrorSnackbar(String message) {
-    _showToast(message, type: ToastType.error);
-  }
-
-  void _showInfoSnackbar(String message) {
-    _showToast(message, type: ToastType.info);
   }
 
   Future<Map<String, String>> _getHeaders() async {
@@ -286,7 +297,6 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
 
   Future<void> _loadStokinDetail() async {
     if (_nomorStokin == null) return;
-
     setState(() => _isLoading = true);
 
     try {
@@ -307,7 +317,7 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
         _initializeControllers();
       });
     } catch (e) {
-      _showErrorSnackbar('Gagal memuat detail: ${e.toString()}');
+      _showToast('Gagal memuat detail: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -354,6 +364,44 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
         }
       }
     });
+  }
+
+  void _deleteItem(StokinItem item) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('Hapus Item', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600)),
+        content: Text(
+          'Hapus ${item.itemNama} dari daftar?',
+          style: GoogleFonts.montserrat(fontSize: 11, color: _textMedium),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 10, color: _textMedium)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _selectedItems.removeWhere((i) => i.itemId == item.itemId);
+                _filteredItems = List.from(_selectedItems);
+                _qtyControllers[item.itemId]?.dispose();
+                _qtyControllers.remove(item.itemId);
+              });
+              Navigator.pop(context);
+              _showToast('${item.itemNama} dihapus', type: ToastType.info);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _accentCoral,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            ),
+            child: Text('Hapus', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAddItemModal() async {
@@ -612,7 +660,6 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
       });
 
       _showToast('Berhasil load ${newItems.length} item dari DO', type: ToastType.success);
-      _barcodeFocusNode.requestFocus();
       HapticFeedback.lightImpact();
     } catch (e) {
       _showToast('Error: $e', type: ToastType.error);
@@ -625,46 +672,44 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isEdit = widget.stokinHeader != null;
-
-    return BaseLayout(
-      title: isEdit ? 'Edit Stock In' : 'Tambah Stock In',
-      showBackButton: true,
-      showSidebar: true,
-      isFormScreen: true,
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: Container(
-            color: _bgSoft,
-            child: Column(
+  Widget _buildScanToggle() {
+    return Container(
+      height: 28,
+      margin: const EdgeInsets.only(right: 8),
+      child: Material(
+        color: _scannerActive ? _accentMint : _bgSoft,
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          onTap: () {
+            setState(() {
+              _scannerActive = !_scannerActive;
+              if (_scannerActive) {
+                _globalFocusNode.requestFocus();
+                _showToast('Mode scan aktif', type: ToastType.success);
+              } else {
+                _showToast('Mode scan nonaktif', type: ToastType.info);
+              }
+            });
+          },
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
               children: [
-                // HAPUS HEADER "Stock In Baru" - langsung ke konten
-
-                // Main Content
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      children: [
-                        // Info Card
-                        _buildInfoCard(),
-
-                        const SizedBox(height: 12),
-
-                        // Items Card
-                        _buildItemsCard(),
-                      ],
-                    ),
+                Icon(
+                  _scannerActive ? Icons.qr_code_scanner : Icons.keyboard_hide,
+                  size: 14,
+                  color: _scannerActive ? Colors.white : _textDark,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _scannerActive ? 'Scan ON' : 'Scan OFF',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w500,
+                    color: _scannerActive ? Colors.white : _textDark,
                   ),
                 ),
-
-                // Modern Bottom Bar
-                _buildModernBottomBar(isEdit),
               ],
             ),
           ),
@@ -673,88 +718,48 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildModernHeader(bool isEdit) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [_primaryDark, _primaryLight],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(16),
-          bottomRight: Radius.circular(16),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: _primaryDark.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+  @override
+  Widget build(BuildContext context) {
+    final isEdit = widget.stokinHeader != null;
+
+    return RawKeyboardListener(
+      focusNode: _globalFocusNode,
+      onKey: _handleRawKeyEvent,
+      child: BaseLayout(
+        title: isEdit ? 'Edit Stock In' : 'Tambah Stock In',
+        showBackButton: true,
+        showSidebar: true,
+        isFormScreen: true,
+        actions: [
+          _buildScanToggle(),
         ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white.withOpacity(0.2)),
-            ),
-            child: Icon(
-              isEdit ? Icons.edit_note_rounded : Icons.inventory_rounded,
-              size: 18,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isEdit ? 'Edit Stock In' : 'Stock In Baru',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-                if (_nomorStokin != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    _nomorStokin!,
-                    style: GoogleFonts.montserrat(
-                      fontSize: 11,
-                      color: Colors.white.withOpacity(0.8),
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: Container(
+              color: _bgSoft,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        children: [
+                          _buildInfoCard(),
+                          const SizedBox(height: 12),
+                          _buildItemsCard(),
+                        ],
+                      ),
                     ),
                   ),
+                  _buildModernBottomBar(isEdit),
                 ],
-              ],
+              ),
             ),
           ),
-          if (_isLoading)
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Center(
-                child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                ),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -777,13 +782,12 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            // Date Picker
             Expanded(
               child: InkWell(
                 onTap: () => _selectDate(context),
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  height: 40, // Fixed height
+                  height: 40,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
                     color: _bgSoft,
@@ -792,31 +796,17 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.calendar_today_rounded,
-                        color: _primaryDark,
-                        size: 14,
-                      ),
+                      Icon(Icons.calendar_today_rounded, color: _primaryDark, size: 14),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Tanggal',
-                              style: GoogleFonts.montserrat(
-                                fontSize: 9,
-                                color: _textMedium,
-                              ),
-                            ),
+                            Text('Tanggal', style: GoogleFonts.montserrat(fontSize: 9, color: _textMedium)),
                             Text(
                               DateFormat('dd/MM/yyyy').format(_selectedDate),
-                              style: GoogleFonts.montserrat(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: _textDark,
-                              ),
+                              style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _textDark),
                             ),
                           ],
                         ),
@@ -826,45 +816,37 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
                 ),
               ),
             ),
-
             const SizedBox(width: 8),
-
-            // Keterangan Field - Height lebih kecil (40)
             Expanded(
               flex: 2,
               child: Container(
-                height: 40, // Sama dengan date picker
+                height: 40,
                 decoration: BoxDecoration(
                   color: _bgSoft,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: _borderSoft),
                 ),
-                child: Center(
-                  child: TextFormField(
-                    controller: _keteranganController,
-                    textAlignVertical: TextAlignVertical.center,
-                    textAlign: TextAlign.left,
-                    style: GoogleFonts.montserrat(
-                      fontSize: 11,
-                      color: _textDark,
-                      fontWeight: FontWeight.w500,
+                child: Row(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Icon(Icons.description_rounded, color: _primaryDark, size: 14),
                     ),
-                    decoration: InputDecoration(
-                      hintText: 'Keterangan...',
-                      hintStyle: GoogleFonts.montserrat(
-                        fontSize: 11,
-                        color: _textLight,
+                    Expanded(
+                      child: TextFormField(
+                        controller: _keteranganController,
+                        focusNode: _keteranganFocusNode,
+                        style: GoogleFonts.montserrat(fontSize: 11, color: _textDark),
+                        decoration: InputDecoration(
+                          hintText: 'Keterangan...',
+                          hintStyle: GoogleFonts.montserrat(fontSize: 11, color: _textLight),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          isDense: true,
+                        ),
                       ),
-                      prefixIcon: Icon(
-                        Icons.description_rounded,
-                        color: _primaryDark,
-                        size: 14,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                      isDense: true,
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -890,7 +872,6 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
       ),
       child: Column(
         children: [
-          // Header
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -901,21 +882,10 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
                     color: _primarySoft,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(
-                    Icons.inventory_2_rounded,
-                    color: _primaryDark,
-                    size: 14,
-                  ),
+                  child: Icon(Icons.inventory_2_rounded, color: _primaryDark, size: 14),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'Daftar Item',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: _textDark,
-                  ),
-                ),
+                Text('Daftar Item', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600, color: _textDark)),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -926,35 +896,21 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.shopping_bag_rounded,
-                        size: 10,
-                        color: _primaryDark,
-                      ),
+                      Icon(Icons.shopping_bag_rounded, size: 10, color: _primaryDark),
                       const SizedBox(width: 4),
-                      Text(
-                        '${_selectedItems.length} items',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: _textDark,
-                        ),
-                      ),
+                      Text('${_selectedItems.length} items', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w500, color: _textDark)),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             child: Column(
               children: [
-                // Search & Barcode Row - dengan center rata kiri
                 Row(
                   children: [
-                    // Search Field
                     Expanded(
                       flex: 3,
                       child: Container(
@@ -964,34 +920,32 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: _borderSoft),
                         ),
-                        child: Center(
-                          child: TextField(
-                            controller: _searchController,
-                            textAlignVertical: TextAlignVertical.center,
-                            textAlign: TextAlign.left,
-                            style: GoogleFonts.montserrat(fontSize: 11),
-                            onChanged: _filterItems,
-                            decoration: InputDecoration(
-                              hintText: 'Cari item...',
-                              hintStyle: GoogleFonts.montserrat(
-                                fontSize: 11,
-                                color: _textLight,
-                              ),
-                              prefixIcon: Icon(
-                                Icons.search_rounded,
-                                color: _primaryDark,
-                                size: 14,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                              isDense: true,
+                        child: Row(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: Icon(Icons.search_rounded, color: _primaryDark, size: 14),
                             ),
-                          ),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                focusNode: _searchFocusNode,
+                                style: GoogleFonts.montserrat(fontSize: 11),
+                                onChanged: _filterItems,
+                                decoration: InputDecoration(
+                                  hintText: 'Cari item...',
+                                  hintStyle: GoogleFonts.montserrat(fontSize: 11, color: _textLight),
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    // Barcode Field
                     Expanded(
                       flex: 2,
                       child: Container(
@@ -1001,60 +955,49 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: _borderSoft),
                         ),
-                        child: Center(
-                          child: TextField(
-                            controller: _barcodeController,
-                            focusNode: _barcodeFocusNode,
-                            textAlignVertical: TextAlignVertical.center,
-                            textAlign: TextAlign.left,
-                            style: GoogleFonts.montserrat(fontSize: 11),
-                            onSubmitted: (value) {
-                              if (value.isNotEmpty) {
-                                _processBarcode(value);
-                                _barcodeController.clear();
-                              }
-                            },
-                            decoration: InputDecoration(
-                              hintText: 'Scan barcode...',
-                              hintStyle: GoogleFonts.montserrat(
-                                fontSize: 11,
-                                color: _textLight,
-                              ),
-                              prefixIcon: Icon(
-                                Icons.qr_code_scanner_rounded,
-                                color: _accentMint,
-                                size: 14,
-                              ),
-                              suffixIcon: _barcodeController.text.isNotEmpty
-                                  ? GestureDetector(
-                                onTap: () => _barcodeController.clear(),
-                                child: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Icon(
-                                    Icons.close_rounded,
-                                    color: _textLight,
-                                    size: 12,
-                                  ),
-                                ),
-                              )
-                                  : null,
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                              isDense: true,
+                        child: Row(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: Icon(Icons.qr_code_scanner_rounded, color: _accentMint, size: 14),
                             ),
-                          ),
+                            Expanded(
+                              child: TextField(
+                                controller: _barcodeController,
+                                focusNode: _barcodeFocusNode,
+                                style: GoogleFonts.montserrat(fontSize: 11),
+                                onSubmitted: (value) {
+                                  if (value.isNotEmpty) {
+                                    _processBarcode(value);
+                                    _barcodeController.clear();
+                                  }
+                                },
+                                decoration: InputDecoration(
+                                  hintText: 'Scan barcode...',
+                                  hintStyle: GoogleFonts.montserrat(fontSize: 11, color: _textLight),
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            if (_barcodeController.text.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: GestureDetector(
+                                  onTap: () => _barcodeController.clear(),
+                                  child: Icon(Icons.close_rounded, color: _textLight, size: 12),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 10),
-
-                // SINGLE ROW: Action Buttons + Total Item + Total Qty
                 Row(
                   children: [
-                    // Action Buttons
                     _buildModernActionButton(
                       label: 'Add',
                       icon: Icons.add_rounded,
@@ -1075,69 +1018,21 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
                       color: _accentGold,
                       onPressed: _showDoSelectionDialog,
                     ),
-
                     const Spacer(),
-
-                    // Total Items
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _primarySoft,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.inventory_rounded,
-                            size: 10,
-                            color: _primaryDark,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${_selectedItems.length}',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: _primaryDark,
-                            ),
-                          ),
-                        ],
-                      ),
+                      decoration: BoxDecoration(color: _primarySoft, borderRadius: BorderRadius.circular(6)),
+                      child: Text('${_selectedItems.length}', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _primaryDark)),
                     ),
                     const SizedBox(width: 4),
-
-                    // Total Qty
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _accentMintSoft,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.shopping_cart_rounded,
-                            size: 10,
-                            color: _accentMint,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$_totalQuantity',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: _accentMint,
-                            ),
-                          ),
-                        ],
-                      ),
+                      decoration: BoxDecoration(color: _accentMintSoft, borderRadius: BorderRadius.circular(6)),
+                      child: Text('$_totalQuantity', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _accentMint)),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 12),
-
-                // Items List
                 if (_filteredItems.isEmpty)
                   _buildEmptyState()
                 else
@@ -1191,14 +1086,7 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
               children: [
                 Icon(icon, size: 11, color: Colors.white),
                 const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: GoogleFonts.montserrat(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
+                Text(label, style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
               ],
             ),
           ),
@@ -1209,9 +1097,7 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
 
   Widget _buildModernItemCard(StokinItem item) {
     if (!_qtyControllers.containsKey(item.itemId)) {
-      _qtyControllers[item.itemId] = TextEditingController(
-          text: item.qty > 0 ? item.qty.toString() : ''
-      );
+      _qtyControllers[item.itemId] = TextEditingController(text: item.qty > 0 ? item.qty.toString() : '');
     }
 
     final controller = _qtyControllers[item.itemId]!;
@@ -1230,7 +1116,6 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
         padding: const EdgeInsets.all(8),
         child: Row(
           children: [
-            // Item Icon
             Container(
               width: 36,
               height: 36,
@@ -1247,8 +1132,6 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
               ),
             ),
             const SizedBox(width: 8),
-
-            // Item Details
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1272,13 +1155,7 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
                           color: _bgSoft,
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(
-                          'ID: ${item.itemId}',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 8,
-                            color: _textMedium,
-                          ),
-                        ),
+                        child: Text('ID: ${item.itemId}', style: GoogleFonts.montserrat(fontSize: 8, color: _textMedium)),
                       ),
                       if (hasQty) ...[
                         const SizedBox(width: 4),
@@ -1288,14 +1165,7 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
                             color: _accentMintSoft,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(
-                            'Qty: ${item.qty}',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 8,
-                              fontWeight: FontWeight.w600,
-                              color: _accentMint,
-                            ),
-                          ),
+                          child: Text('Qty: ${item.qty}', style: GoogleFonts.montserrat(fontSize: 8, fontWeight: FontWeight.w600, color: _accentMint)),
                         ),
                       ],
                     ],
@@ -1303,48 +1173,50 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
                 ],
               ),
             ),
-
-            // Quantity Input
-            Container(
+            SizedBox(
               width: 60,
               height: 32,
-              decoration: BoxDecoration(
-                color: _bgSoft,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: hasQty ? _primaryDark.withOpacity(0.3) : _borderSoft,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _bgSoft,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: hasQty ? _primaryDark.withOpacity(0.3) : _borderSoft),
+                ),
+                child: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: GoogleFonts.montserrat(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: hasQty ? _primaryDark : _textLight,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '0',
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                    isDense: true,
+                    hintStyle: GoogleFonts.montserrat(fontSize: 11, color: _textLight),
+                  ),
+                  onChanged: (value) {
+                    final intValue = int.tryParse(value) ?? 0;
+                    _updateItemQty(item.itemId, intValue);
+                  },
                 ),
               ),
-              child: TextField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.center,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                style: GoogleFonts.montserrat(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: hasQty ? _primaryDark : _textLight,
+            ),
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: () => _deleteItem(item),
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: _accentCoral.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                decoration: InputDecoration(
-                  hintText: '0',
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
-                  isDense: true,
-                  hintStyle: GoogleFonts.montserrat(
-                    fontSize: 11,
-                    color: _textLight,
-                  ),
-                ),
-                onChanged: (value) {
-                  final intValue = int.tryParse(value) ?? 0;
-                  _updateItemQty(item.itemId, intValue);
-                },
-                onTap: () {
-                  controller.selection = TextSelection(
-                    baseOffset: 0,
-                    extentOffset: controller.text.length,
-                  );
-                },
+                child: Icon(Icons.delete_outline, size: 14, color: _accentCoral),
               ),
             ),
           ],
@@ -1387,7 +1259,7 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
           const SizedBox(height: 2),
           Text(
             _searchController.text.isEmpty
-                ? 'Tambah item dengan tombol di atas'
+                ? 'Tambah item dengan tombol di atas atau scan barcode'
                 : 'Coba kata kunci lain',
             style: GoogleFonts.montserrat(
               fontSize: 10,
@@ -1416,42 +1288,25 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
       child: SafeArea(
         child: Row(
           children: [
-            // Total Summary
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Item dengan QTY',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 9,
-                      color: _textLight,
-                    ),
-                  ),
+                  Text('Item dengan QTY', style: GoogleFonts.montserrat(fontSize: 9, color: _textLight)),
                   Row(
                     children: [
-                      Icon(
-                        Icons.check_circle_rounded,
-                        size: 12,
-                        color: _accentMint,
-                      ),
+                      Icon(Icons.check_circle_rounded, size: 12, color: _accentMint),
                       const SizedBox(width: 4),
                       Text(
                         '$_totalItemsWithQty dari ${_selectedItems.length}',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: _textDark,
-                        ),
+                        style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _textDark),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-
-            // Save Button
             Container(
               width: 120,
               height: 40,
@@ -1477,31 +1332,13 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
                   borderRadius: BorderRadius.circular(8),
                   child: Center(
                     child: _isSaving
-                        ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          isEdit ? Icons.edit_rounded : Icons.save_rounded,
-                          color: Colors.white,
-                          size: 14,
-                        ),
+                        Icon(isEdit ? Icons.edit_rounded : Icons.save_rounded, color: Colors.white, size: 14),
                         const SizedBox(width: 6),
-                        Text(
-                          isEdit ? 'Update' : 'Simpan',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
+                        Text(isEdit ? 'Update' : 'Simpan', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white)),
                       ],
                     ),
                   ),
@@ -1515,5 +1352,4 @@ class _StokinFormScreenState extends State<StokinFormScreen> with SingleTickerPr
   }
 }
 
-// Toast Type enum
 enum ToastType { success, error, info }

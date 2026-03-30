@@ -48,23 +48,25 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
     'no': 60,
     'nomor': 180,
     'tanggal': 100,
-    'memo': 250,
+    'keterangan': 250,
+    'gudang': 100,
+    'cbg_tujuan': 100,
     'status': 90,
     'aksi': 90,
   };
 
   bool _isLoading = false;
   bool _showDateFilter = false;
-  List<Map<String, dynamic>> _doList = [];
+  List<Map<String, dynamic>> _mutasiList = [];
 
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now();
   final TextEditingController _startDateController = TextEditingController();
   final TextEditingController _endDateController = TextEditingController();
 
-  late DoDataSource _dataSource;
+  late MutasiDataSource _dataSource;
 
-  int _totalFilteredDo = 0;
+  int _totalFilteredMutasi = 0;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -85,7 +87,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
     _endDate = DateTime.now();
     _startDate = DateTime(_endDate.year, _endDate.month, 1);
     _updateDateControllers();
-    _loadDoData();
+    _loadMutasiData();
   }
 
   @override
@@ -108,28 +110,28 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
   String _formatDate(String dateString) {
     try {
       final date = DateTime.parse(dateString);
-      return DateFormat('dd/MM/yy').format(date);
+      return DateFormat('dd/MM/yy HH:mm').format(date);
     } catch (e) {
       return dateString;
     }
   }
 
-  Future<void> _loadDoData() async {
+  Future<void> _loadMutasiData() async {
     setState(() => _isLoading = true);
     try {
-      final data = await DoService.getDoList(
+      final data = await DoService.getMutasiList(
         search: null,
         startDate: _formatDateForApi(_startDate),
         endDate: _formatDateForApi(_endDate),
       );
 
       setState(() {
-        _doList = data;
+        _mutasiList = data;
         _calculateTotals(data);
-        _dataSource = DoDataSource(
-          doList: data,
-          onEdit: _openEditDo,
-          onDelete: _deleteDo,
+        _dataSource = MutasiDataSource(
+          mutasiList: data,
+          onEdit: _openEditMutasi,
+          onDelete: _deleteMutasi,
           primaryDark: _primaryDark,
           accentGold: _accentGold,
           accentMint: _accentMint,
@@ -143,37 +145,33 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
         );
       });
     } catch (e) {
-      _showToast('Gagal memuat data pengiriman: ${e.toString()}', type: ToastType.error);
+      _showToast('Gagal memuat data mutasi out: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  void _calculateTotals(List<Map<String, dynamic>> doList) {
-    _totalFilteredDo = doList.length;
+  void _calculateTotals(List<Map<String, dynamic>> mutasiList) {
+    _totalFilteredMutasi = mutasiList.length;
   }
 
   void _onFilterChanged(DataGridFilterChangeDetails details) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_dataSource.effectiveRows != null) {
         final filteredRows = _dataSource.effectiveRows!;
-
         List<Map<String, dynamic>> filteredData = [];
-
         for (var row in filteredRows) {
           final cells = row.getCells();
           final aksiCell = cells.firstWhere(
                 (cell) => cell.columnName == 'aksi',
             orElse: () => DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: null),
           );
-
           if (aksiCell.value != null) {
             filteredData.add(aksiCell.value as Map<String, dynamic>);
           }
         }
-
         setState(() {
-          _totalFilteredDo = filteredData.length;
+          _totalFilteredMutasi = filteredData.length;
         });
       }
     });
@@ -267,28 +265,28 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
     });
   }
 
-  void _openAddDo() {
+  void _openAddMutasi() {
     Navigator.pushNamed(
       context,
       AppRoutes.doForm,
       arguments: {
-        'onSaved': _loadDoData,
+        'onSaved': _loadMutasiData,
       },
     );
   }
 
-  void _openEditDo(Map<String, dynamic> doData) {
+  void _openEditMutasi(Map<String, dynamic> mutasiData) {
     Navigator.pushNamed(
       context,
       AppRoutes.doForm,
       arguments: {
-        'doHeader': doData,
-        'onSaved': _loadDoData,
+        'mutasiHeader': mutasiData,
+        'onSaved': _loadMutasiData,
       },
     );
   }
 
-  void _deleteDo(Map<String, dynamic> doData) {
+  void _deleteMutasi(Map<String, dynamic> mutasiData) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -323,7 +321,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
               ),
               const SizedBox(width: 12),
               Text(
-                'Hapus Pengiriman',
+                'Hapus Mutasi Out',
                 style: GoogleFonts.montserrat(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -336,7 +334,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
         content: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
-            'Apakah Anda yakin ingin menghapus "${doData['do_nomor']}"?',
+            'Apakah Anda yakin ingin menghapus "${mutasiData['mutc_nomor']}"?',
             style: GoogleFonts.montserrat(
               fontSize: 12,
               color: _textMedium,
@@ -378,7 +376,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
             child: ElevatedButton(
               onPressed: () async {
                 Navigator.pop(context);
-                await _performDelete(doData);
+                await _performDelete(mutasiData);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.transparent,
@@ -404,13 +402,13 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
     );
   }
 
-  Future<void> _performDelete(Map<String, dynamic> doData) async {
+  Future<void> _performDelete(Map<String, dynamic> mutasiData) async {
     setState(() => _isLoading = true);
     try {
-      final result = await DoService.deleteDo(doData['do_nomor'].toString());
+      final result = await DoService.deleteMutasi(mutasiData['mutc_nomor'].toString());
       if (result['success']) {
         _showToast(result['message'], type: ToastType.success);
-        await _loadDoData();
+        await _loadMutasiData();
       } else {
         _showToast(result['message'], type: ToastType.error);
       }
@@ -421,7 +419,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
     }
   }
 
-  void _showItemDetailDialog(Map<String, dynamic> doData) {
+  void _showItemDetailDialog(Map<String, dynamic> mutasiData) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -459,7 +457,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                         color: Colors.white.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(Icons.local_shipping, size: 18, color: Colors.white),
+                      child: Icon(Icons.swap_horiz, size: 18, color: Colors.white),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -467,7 +465,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Detail Pengiriman',
+                            'Detail Mutasi Out',
                             style: GoogleFonts.montserrat(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -476,7 +474,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            doData['do_nomor'] ?? '-',
+                            mutasiData['mutc_nomor'] ?? '-',
                             style: GoogleFonts.montserrat(
                               fontSize: 11,
                               color: Colors.white.withOpacity(0.8),
@@ -499,7 +497,6 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                   ],
                 ),
               ),
-
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -533,7 +530,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                                   ),
                                 ),
                                 Text(
-                                  DateFormat('dd MMMM yyyy').format(DateTime.parse(doData['do_tanggal'])),
+                                  DateFormat('dd MMMM yyyy HH:mm').format(DateTime.parse(mutasiData['mutc_tanggal'])),
                                   style: GoogleFonts.montserrat(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -553,14 +550,10 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: doData['do_isclosed'] == 1 ? _accentMintSoft : _accentGoldSoft,
+                              color: _accentSkySoft,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(
-                              doData['do_isclosed'] == 1 ? Icons.check_circle : Icons.pending,
-                              size: 14,
-                              color: doData['do_isclosed'] == 1 ? _accentMint : _accentGold,
-                            ),
+                            child: Icon(Icons.warehouse, size: 14, color: _accentSky),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -568,18 +561,18 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Status',
+                                  'Gudang Asal',
                                   style: GoogleFonts.montserrat(
                                     fontSize: 9,
                                     color: _textLight,
                                   ),
                                 ),
                                 Text(
-                                  doData['do_isclosed'] == 1 ? 'Closed' : 'Open',
+                                  mutasiData['mutc_gdg_kode'] ?? '-',
                                   style: GoogleFonts.montserrat(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
-                                    color: doData['do_isclosed'] == 1 ? _accentMint : _accentGold,
+                                    color: _textDark,
                                   ),
                                 ),
                               ],
@@ -591,7 +584,6 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                   ],
                 ),
               ),
-
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -599,6 +591,44 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                 ),
                 child: Row(
                   children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: _accentGoldSoft,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.business, size: 14, color: _accentGold),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Cabang Tujuan',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 9,
+                                    color: _textLight,
+                                  ),
+                                ),
+                                Text(
+                                  mutasiData['mutc_cbg_tujuan'] ?? '-',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     Expanded(
                       child: Row(
                         children: [
@@ -617,14 +647,14 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Memo',
+                                  'Keterangan',
                                   style: GoogleFonts.montserrat(
                                     fontSize: 9,
                                     color: _textLight,
                                   ),
                                 ),
                                 Text(
-                                  doData['do_memo'] ?? '-',
+                                  mutasiData['mutc_keterangan'] ?? '-',
                                   style: GoogleFonts.montserrat(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -642,10 +672,9 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                   ],
                 ),
               ),
-
               Expanded(
                 child: FutureBuilder(
-                  future: DoService.getDoDetail(doData['do_nomor']),
+                  future: DoService.getMutasiDetail(mutasiData['mutc_nomor']),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return Center(
@@ -718,7 +747,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'Tidak ada item dalam pengiriman ini',
+                              'Tidak ada item dalam mutasi ini',
                               style: GoogleFonts.montserrat(
                                 fontSize: 11,
                                 color: _textMedium,
@@ -766,9 +795,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                               ],
                             ),
                           ),
-
                           const SizedBox(height: 12),
-
                           Expanded(
                             child: Container(
                               decoration: BoxDecoration(
@@ -778,7 +805,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
                                 child: SfDataGrid(
-                                  source: DoDetailDataSource(
+                                  source: MutasiDetailDataSource(
                                     details: details,
                                     accentGold: _accentGold,
                                     textDark: _textDark,
@@ -831,7 +858,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                                         padding: const EdgeInsets.symmetric(horizontal: 8),
                                         alignment: Alignment.center,
                                         child: Text(
-                                          'Qty Kirim',
+                                          'Qty',
                                           style: GoogleFonts.montserrat(
                                             fontWeight: FontWeight.w700,
                                             fontSize: 10,
@@ -851,7 +878,6 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                   },
                 ),
               ),
-
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -920,16 +946,17 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
 
       final Workbook workbook = Workbook();
       final Worksheet sheet = workbook.worksheets[0];
-      sheet.name = 'Data Pengiriman';
+      sheet.name = 'Data Mutasi Out';
 
       sheet.getRangeByIndex(1, 1).columnWidth = 6;
       sheet.getRangeByIndex(1, 2).columnWidth = 18;
       sheet.getRangeByIndex(1, 3).columnWidth = 10;
       sheet.getRangeByIndex(1, 4).columnWidth = 25;
-      sheet.getRangeByIndex(1, 5).columnWidth = 25;
-      sheet.getRangeByIndex(1, 6).columnWidth = 10;
+      sheet.getRangeByIndex(1, 5).columnWidth = 12;
+      sheet.getRangeByIndex(1, 6).columnWidth = 12;
+      sheet.getRangeByIndex(1, 7).columnWidth = 10;
 
-      final headerRange = sheet.getRangeByIndex(1, 1, 1, 6);
+      final headerRange = sheet.getRangeByIndex(1, 1, 1, 7);
       headerRange.cellStyle.backColor = '#2C3E50';
       headerRange.cellStyle.fontColor = '#FFFFFF';
       headerRange.cellStyle.bold = true;
@@ -938,11 +965,12 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
       headerRange.cellStyle.fontSize = 10;
 
       sheet.getRangeByName('A1').setText('No');
-      sheet.getRangeByName('B1').setText('Nomor DO');
+      sheet.getRangeByName('B1').setText('Nomor Mutasi');
       sheet.getRangeByName('C1').setText('Tanggal');
-      sheet.getRangeByName('D1').setText('Memo');
-      sheet.getRangeByName('E1').setText('Status');
-      sheet.getRangeByName('F1').setText('');
+      sheet.getRangeByName('D1').setText('Keterangan');
+      sheet.getRangeByName('E1').setText('Gudang Asal');
+      sheet.getRangeByName('F1').setText('Cabang Tujuan');
+      sheet.getRangeByName('G1').setText('Status');
 
       int rowIndex = 2;
       for (var row in visibleRows) {
@@ -951,7 +979,9 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
         String no = '';
         String nomor = '';
         String tanggal = '';
-        String memo = '';
+        String keterangan = '';
+        String gudang = '';
+        String cbgTujuan = '';
         String status = '';
 
         for (var cell in cells) {
@@ -961,8 +991,12 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
             nomor = cell.value.toString();
           } else if (cell.columnName == 'tanggal') {
             tanggal = cell.value.toString();
-          } else if (cell.columnName == 'memo') {
-            memo = cell.value.toString();
+          } else if (cell.columnName == 'keterangan') {
+            keterangan = cell.value.toString();
+          } else if (cell.columnName == 'gudang') {
+            gudang = cell.value.toString();
+          } else if (cell.columnName == 'cbg_tujuan') {
+            cbgTujuan = cell.value.toString();
           } else if (cell.columnName == 'status') {
             status = cell.value.toString();
           }
@@ -971,11 +1005,12 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
         sheet.getRangeByName('A$rowIndex').setText(no);
         sheet.getRangeByName('B$rowIndex').setText(nomor);
         sheet.getRangeByName('C$rowIndex').setText(tanggal);
-        sheet.getRangeByName('D$rowIndex').setText(memo);
-        sheet.getRangeByName('E$rowIndex').setText(status);
-        sheet.getRangeByName('F$rowIndex').setText('');
+        sheet.getRangeByName('D$rowIndex').setText(keterangan);
+        sheet.getRangeByName('E$rowIndex').setText(gudang);
+        sheet.getRangeByName('F$rowIndex').setText(cbgTujuan);
+        sheet.getRangeByName('G$rowIndex').setText(status);
 
-        final dataRange = sheet.getRangeByIndex(rowIndex, 1, rowIndex, 6);
+        final dataRange = sheet.getRangeByIndex(rowIndex, 1, rowIndex, 7);
         dataRange.cellStyle.fontSize = 9;
         dataRange.cellStyle.vAlign = VAlignType.center;
 
@@ -984,6 +1019,8 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
         sheet.getRangeByName('C$rowIndex').cellStyle.hAlign = HAlignType.center;
         sheet.getRangeByName('D$rowIndex').cellStyle.hAlign = HAlignType.left;
         sheet.getRangeByName('E$rowIndex').cellStyle.hAlign = HAlignType.center;
+        sheet.getRangeByName('F$rowIndex').cellStyle.hAlign = HAlignType.center;
+        sheet.getRangeByName('G$rowIndex').cellStyle.hAlign = HAlignType.center;
 
         if (rowIndex % 2 == 0) {
           dataRange.cellStyle.backColor = '#F8F9FA';
@@ -998,7 +1035,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
       sheet.getRangeByName('A$totalRow').cellStyle.backColor = '#E9ECEF';
       sheet.getRangeByName('A$totalRow').cellStyle.fontSize = 9;
 
-      sheet.getRangeByName('B$totalRow').setText('$_totalFilteredDo Pengiriman');
+      sheet.getRangeByName('B$totalRow').setText('$_totalFilteredMutasi Mutasi');
       sheet.getRangeByName('B$totalRow').cellStyle.backColor = '#E9ECEF';
       sheet.getRangeByName('B$totalRow').cellStyle.hAlign = HAlignType.left;
       sheet.getRangeByName('B$totalRow').cellStyle.fontSize = 9;
@@ -1023,14 +1060,14 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
         final url = html.Url.createObjectUrlFromBlob(blob);
         final anchor = html.AnchorElement(href: url)
           ..target = 'blank'
-          ..download = 'Pengiriman_List_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx'
+          ..download = 'MutasiOut_List_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx'
           ..click();
         html.Url.revokeObjectUrl(url);
 
         _showToast('File Excel berhasil di-download', type: ToastType.success);
       } else {
         final directory = await getApplicationDocumentsDirectory();
-        final file = File('${directory.path}/Pengiriman_List_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx');
+        final file = File('${directory.path}/MutasiOut_List_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx');
         await file.writeAsBytes(bytes);
         _showToast('File Excel berhasil disimpan', type: ToastType.success);
       }
@@ -1047,7 +1084,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
     final screenWidth = MediaQuery.of(context).size.width;
 
     return BaseLayout(
-      title: 'Pengiriman (DO)',
+      title: 'Mutasi Out',
       showBackButton: false,
       showSidebar: !isMobile,
       isFormScreen: false,
@@ -1109,9 +1146,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                         ),
                       ),
                     ),
-
                     const Spacer(),
-
                     Container(
                       height: 36,
                       margin: const EdgeInsets.only(right: 6),
@@ -1155,7 +1190,6 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                         ),
                       ),
                     ),
-
                     Container(
                       height: 36,
                       decoration: BoxDecoration(
@@ -1174,7 +1208,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          onTap: _openAddDo,
+                          onTap: _openAddMutasi,
                           borderRadius: BorderRadius.circular(8),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1201,7 +1235,6 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                   ],
                 ),
               ),
-
               if (_showDateFilter) ...[
                 Container(
                   margin: const EdgeInsets.all(12),
@@ -1264,9 +1297,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                           ),
                         ),
                       ),
-
                       const SizedBox(width: 8),
-
                       Expanded(
                         child: InkWell(
                           onTap: () => _selectDate(context, false),
@@ -1311,9 +1342,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                           ),
                         ),
                       ),
-
                       const SizedBox(width: 8),
-
                       Container(
                         width: 90,
                         height: 40,
@@ -1333,7 +1362,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                         child: Material(
                           color: Colors.transparent,
                           child: InkWell(
-                            onTap: () => _loadDoData(),
+                            onTap: () => _loadMutasiData(),
                             borderRadius: BorderRadius.circular(8),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1364,7 +1393,6 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                   ),
                 ),
               ],
-
               Expanded(
                 child: _isLoading
                     ? Center(
@@ -1381,7 +1409,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Memuat data pengiriman...',
+                        'Memuat data mutasi out...',
                         style: GoogleFonts.montserrat(
                           fontSize: 11,
                           color: _textMedium,
@@ -1390,7 +1418,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                     ],
                   ),
                 )
-                    : _doList.isEmpty
+                    : _mutasiList.isEmpty
                     ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1403,14 +1431,14 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          Icons.local_shipping_outlined,
+                          Icons.swap_horiz,
                           size: 35,
                           color: _textLight,
                         ),
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Belum ada data pengiriman',
+                        'Belum ada data mutasi out',
                         style: GoogleFonts.montserrat(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -1483,7 +1511,6 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                                           (cell) => cell.columnName == 'aksi',
                                       orElse: () => DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: null),
                                     );
-
                                     if (aksiCell.value != null) {
                                       _showItemDetailDialog(aksiCell.value as Map<String, dynamic>);
                                     }
@@ -1518,7 +1545,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                                     padding: const EdgeInsets.symmetric(horizontal: 6),
                                     alignment: Alignment.center,
                                     child: Text(
-                                      'Nomor DO',
+                                      'Nomor Mutasi',
                                       style: GoogleFonts.montserrat(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 10,
@@ -1546,15 +1573,51 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                                   ),
                                 ),
                                 GridColumn(
-                                  columnName: 'memo',
-                                  width: _columnWidths['memo'] ?? 250,
+                                  columnName: 'keterangan',
+                                  width: _columnWidths['keterangan'] ?? 250,
                                   minimumWidth: 200,
                                   maximumWidth: 350,
                                   label: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6),
                                     alignment: Alignment.center,
                                     child: Text(
-                                      'Memo',
+                                      'Keterangan',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                GridColumn(
+                                  columnName: 'gudang',
+                                  width: _columnWidths['gudang'] ?? 100,
+                                  minimumWidth: 80,
+                                  maximumWidth: 120,
+                                  label: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      'Gudang Asal',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                GridColumn(
+                                  columnName: 'cbg_tujuan',
+                                  width: _columnWidths['cbg_tujuan'] ?? 100,
+                                  minimumWidth: 80,
+                                  maximumWidth: 120,
+                                  label: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      'Cabang Tujuan',
                                       style: GoogleFonts.montserrat(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 10,
@@ -1643,7 +1706,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                                         Icon(Icons.receipt, size: 11, color: _primaryDark),
                                         const SizedBox(width: 4),
                                         Text(
-                                          '$_totalFilteredDo Pengiriman',
+                                          '$_totalFilteredMutasi Mutasi',
                                           style: GoogleFonts.montserrat(
                                             fontSize: 10,
                                             fontWeight: FontWeight.w600,
@@ -1667,16 +1730,22 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                                     ),
                                   ),
                                   Container(
-                                    width: _columnWidths['memo'] ?? 250,
+                                    width: _columnWidths['keterangan'] ?? 250,
                                     padding: const EdgeInsets.symmetric(horizontal: 6),
                                     alignment: Alignment.centerLeft,
+                                    child: const SizedBox(),
+                                  ),
+                                  Container(
+                                    width: (_columnWidths['gudang'] ?? 100) + (_columnWidths['cbg_tujuan'] ?? 100),
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
                                     child: const SizedBox(),
                                   ),
                                   Container(
                                     width: (_columnWidths['status'] ?? 90) + (_columnWidths['aksi'] ?? 90),
                                     padding: const EdgeInsets.symmetric(horizontal: 4),
                                     alignment: Alignment.center,
-                                    child: _totalFilteredDo < _doList.length
+                                    child: _totalFilteredMutasi < _mutasiList.length
                                         ? Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       decoration: BoxDecoration(
@@ -1684,7 +1753,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
-                                        '${_doList.length - _totalFilteredDo} filter',
+                                        '${_mutasiList.length - _totalFilteredMutasi} filter',
                                         style: GoogleFonts.montserrat(
                                           fontSize: 8,
                                           fontWeight: FontWeight.w600,
@@ -1712,9 +1781,9 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
   }
 }
 
-class DoDataSource extends DataGridSource {
-  DoDataSource({
-    required List<Map<String, dynamic>> doList,
+class MutasiDataSource extends DataGridSource {
+  MutasiDataSource({
+    required List<Map<String, dynamic>> mutasiList,
     required Function(Map<String, dynamic>) onEdit,
     required Function(Map<String, dynamic>) onDelete,
     required Color primaryDark,
@@ -1741,7 +1810,7 @@ class DoDataSource extends DataGridSource {
     _textLight = textLight;
     _formatDate = formatDate;
 
-    _updateDataSource(doList);
+    _updateDataSource(mutasiList);
   }
 
   List<DataGridRow> _data = [];
@@ -1758,17 +1827,20 @@ class DoDataSource extends DataGridSource {
   late Color _textLight;
   late String Function(String) _formatDate;
 
-  void _updateDataSource(List<Map<String, dynamic>> doList) {
-    _data = doList.asMap().entries.map((entry) {
+  void _updateDataSource(List<Map<String, dynamic>> mutasiList) {
+    _data = mutasiList.asMap().entries.map((entry) {
       final index = entry.key + 1;
       final data = entry.value;
+      final status = data['mutc_status'] == 1 ? 'Closed' : 'Open';
 
       return DataGridRow(cells: [
         DataGridCell<int>(columnName: 'no', value: index),
-        DataGridCell<String>(columnName: 'nomor', value: data['do_nomor']?.toString() ?? '-'),
-        DataGridCell<String>(columnName: 'tanggal', value: _formatDate(data['do_tanggal'] ?? '')),
-        DataGridCell<String>(columnName: 'memo', value: data['do_memo']?.toString() ?? '-'),
-        DataGridCell<String>(columnName: 'status', value: data['do_isclosed'] == 1 ? 'Closed' : 'Open'),
+        DataGridCell<String>(columnName: 'nomor', value: data['mutc_nomor']?.toString() ?? '-'),
+        DataGridCell<String>(columnName: 'tanggal', value: _formatDate(data['mutc_tanggal'] ?? '')),
+        DataGridCell<String>(columnName: 'keterangan', value: data['mutc_keterangan']?.toString() ?? '-'),
+        DataGridCell<String>(columnName: 'gudang', value: data['mutc_gdg_kode']?.toString() ?? '-'),
+        DataGridCell<String>(columnName: 'cbg_tujuan', value: data['mutc_cbg_tujuan']?.toString() ?? '-'),
+        DataGridCell<String>(columnName: 'status', value: status),
         DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: data),
       ]);
     }).toList();
@@ -1911,8 +1983,8 @@ class DoDataSource extends DataGridSource {
   }
 }
 
-class DoDetailDataSource extends DataGridSource {
-  DoDetailDataSource({
+class MutasiDetailDataSource extends DataGridSource {
+  MutasiDetailDataSource({
     required List<Map<String, dynamic>> details,
     required Color accentGold,
     required Color textDark,
@@ -1931,7 +2003,7 @@ class DoDetailDataSource extends DataGridSource {
       final item = entry.value;
 
       int qty = 0;
-      final rawQty = item['dod_qty'];
+      final rawQty = item['mutcd_qty'];
       if (rawQty is int) qty = rawQty;
       else if (rawQty is double) qty = rawQty.toInt();
       else if (rawQty is String) qty = int.tryParse(rawQty) ?? 0;
