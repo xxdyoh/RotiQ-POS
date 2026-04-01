@@ -104,8 +104,45 @@ class DoService {
 
   static Future<List<Map<String, dynamic>>> getCabangTujuanList(String cabangAsalKode) async {
     try {
+      print('📤 Calling API: $baseUrl/mutasi-out/cabang-tujuan?cabang_asal=$cabangAsalKode');
+      print('📤 Headers: ${await _getHeadersWithCabang()}');
+
       final response = await http.get(
         Uri.parse('$baseUrl/mutasi-out/cabang-tujuan?cabang_asal=$cabangAsalKode'),
+        headers: await _getHeadersWithCabang(),
+      );
+
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('✅ Parsed data: $data');
+        return List<Map<String, dynamic>>.from(data['data']);
+      } else {
+        print('❌ Error status code: ${response.statusCode}');
+        throw Exception('Gagal mengambil data cabang tujuan');
+      }
+    } catch (e) {
+      print('❌ Exception: $e');
+      throw Exception('Error: ${e.toString()}');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getMintaListByCabang({
+    required String cabangDatabase,
+    required String startDate,
+    required String endDate,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/do/minta-by-cabang').replace(queryParameters: {
+        'cabang_database': cabangDatabase,
+        'start_date': startDate,
+        'end_date': endDate,
+      });
+
+      final response = await http.get(
+        uri,
         headers: await _getHeadersWithCabang(),
       );
 
@@ -113,7 +150,28 @@ class DoService {
         final data = jsonDecode(response.body);
         return List<Map<String, dynamic>>.from(data['data']);
       } else {
-        throw Exception('Gagal mengambil data cabang tujuan');
+        throw Exception('Gagal mengambil data permintaan');
+      }
+    } catch (e) {
+      throw Exception('Error: ${e.toString()}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getMintaDetailFromCabang({
+    required String cabangDatabase,
+    required String nomor,
+  }) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/do/minta-detail/$cabangDatabase/$nomor'),
+        headers: await _getHeadersWithCabang(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['data'];
+      } else {
+        throw Exception('Gagal mengambil detail permintaan');
       }
     } catch (e) {
       throw Exception('Error: ${e.toString()}');
@@ -135,11 +193,15 @@ class DoService {
       }
 
       final uri = Uri.parse('$baseUrl/mutasi-in/mutasi-out-list').replace(queryParameters: queryParams);
+      print('Calling API: $uri');
 
       final response = await http.get(
         uri,
         headers: await _getHeadersWithCabang(),
       );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -148,6 +210,7 @@ class DoService {
         throw Exception('Gagal mengambil data mutasi out');
       }
     } catch (e) {
+      print('Exception: $e');
       throw Exception('Error: ${e.toString()}');
     }
   }

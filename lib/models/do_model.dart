@@ -1,14 +1,16 @@
 class MutasiItem {
   final int itemId;
   final String itemNama;
+  final int qtyMinta;
   int qty;
-  final String? keterangan;
+  String? keterangan;
   final int? nourut;
 
   MutasiItem({
     required this.itemId,
     required this.itemNama,
-    required this.qty,
+    this.qtyMinta = 0,
+    this.qty = 0,
     this.keterangan,
     this.nourut,
   });
@@ -29,6 +31,7 @@ class MutasiItem {
     return MutasiItem(
       itemId: itemId,
       itemNama: itemNama,
+      qtyMinta: qtyMinta,
       qty: qty ?? this.qty,
       keterangan: keterangan ?? this.keterangan,
       nourut: nourut,

@@ -270,18 +270,21 @@ class _MutasiInListScreenState extends State<MutasiInListScreen> with SingleTick
       context,
       AppRoutes.stockInForm,
       arguments: {
-        'onSaved': _loadMutasiInData,
+        'onMutasiInSaved': _loadMutasiInData,
       },
     );
   }
 
   void _openEditMutasiIn(Map<String, dynamic> mutasiIn) {
+    print('=== EDIT MUTASI IN ===');
+    print('mutasiIn: ${mutasiIn['sti_nomor']}');
+
     Navigator.pushNamed(
       context,
       AppRoutes.stockInForm,
       arguments: {
-        'stokinHeader': mutasiIn,
-        'onSaved': _loadMutasiInData,
+        'mutasiInHeader': mutasiIn,
+        'onMutasiInSaved': _loadMutasiInData,
       },
     );
   }

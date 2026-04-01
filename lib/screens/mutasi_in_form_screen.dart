@@ -57,7 +57,9 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
   bool _isSaving = false;
+  bool _isLoadingCabang = false;
   bool _isLoadingMutasi = false;
+  bool _scannerActive = true;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -71,6 +73,9 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
 
   List<Cabang> _cabangList = [];
   List<Map<String, dynamic>> _mutasiOutList = [];
+
+  String _barcodeBuffer = '';
+  Timer? _barcodeTimer;
 
   @override
   void initState() {
@@ -90,14 +95,18 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
 
     _animationController.forward();
 
-    _loadCabangList();
+    _setupAutoScanner();
 
-    if (widget.mutasiInHeader != null) {
-      _nomorMutasiIn = widget.mutasiInHeader!['sti_nomor'];
-      _selectedDate = DateTime.parse(widget.mutasiInHeader!['sti_tanggal']);
-      _keteranganController.text = widget.mutasiInHeader!['sti_keterangan'] ?? '';
-      _loadMutasiInDetail();
-    }
+    // Load cabang list terlebih dahulu
+    _loadCabangList().then((_) {
+      // Setelah cabang list selesai, baru load detail jika ada
+      if (widget.mutasiInHeader != null) {
+        _nomorMutasiIn = widget.mutasiInHeader!['sti_nomor'];
+        _selectedDate = DateTime.parse(widget.mutasiInHeader!['sti_tanggal']);
+        _keteranganController.text = widget.mutasiInHeader!['sti_keterangan'] ?? '';
+        _loadMutasiInDetail();
+      }
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _barcodeFocusNode.requestFocus();
@@ -107,23 +116,68 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
   @override
   void dispose() {
     _barcodeDebounce?.cancel();
+    _barcodeTimer?.cancel();
     _animationController.dispose();
     _searchController.dispose();
     _keteranganController.dispose();
     _barcodeController.dispose();
     _barcodeFocusNode.dispose();
-    _qtyControllers.values.forEach((controller) => controller.dispose());
+    RawKeyboard.instance.removeListener(_handleRawKeyEvent);
+    for (var controller in _qtyControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
-  void _onBarcodeChanged(String value) {
-    if (_barcodeDebounce?.isActive ?? false) _barcodeDebounce?.cancel();
+  void _setupAutoScanner() {
+    RawKeyboard.instance.addListener(_handleRawKeyEvent);
+  }
 
-    _barcodeDebounce = Timer(const Duration(milliseconds: 300), () {
-      if (value.isNotEmpty) {
-        _processBarcode(value);
+  void _handleRawKeyEvent(RawKeyEvent event) {
+    if (event is! RawKeyDownEvent) return;
+    if (!_scannerActive) return;
+
+    final logicalKey = event.logicalKey;
+    final keyLabel = logicalKey.keyLabel;
+
+    if (logicalKey == LogicalKeyboardKey.enter || logicalKey == LogicalKeyboardKey.tab) {
+      _processBarcodeFromBuffer();
+      return;
+    }
+
+    if (_isValidBarcodeCharacter(keyLabel)) {
+      _barcodeBuffer += keyLabel;
+      _resetBarcodeTimer();
+    }
+  }
+
+  bool _isValidBarcodeCharacter(String char) {
+    if (char.isEmpty || char.length > 1) return false;
+    if (char == 'Enter' || char == 'Tab' || char == 'Escape') return false;
+
+    final code = char.codeUnitAt(0);
+    return (code >= 48 && code <= 57) ||
+        (code >= 65 && code <= 90) ||
+        (code >= 97 && code <= 122) ||
+        char == '-' || char == '.' || char == '_' || char == '/';
+  }
+
+  void _resetBarcodeTimer() {
+    _barcodeTimer?.cancel();
+    _barcodeTimer = Timer(const Duration(milliseconds: 100), () {
+      if (_barcodeBuffer.isNotEmpty && _barcodeBuffer.length >= 3) {
+        _processBarcodeFromBuffer();
+      } else {
+        _barcodeBuffer = '';
       }
     });
+  }
+
+  void _processBarcodeFromBuffer() {
+    if (_barcodeBuffer.isEmpty) return;
+    final barcode = _barcodeBuffer.trim();
+    _barcodeBuffer = '';
+    _processBarcode(barcode);
   }
 
   void _processBarcode(String barcode) {
@@ -169,12 +223,57 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
     _barcodeFocusNode.requestFocus();
   }
 
+  void _toggleScanner() {
+    setState(() {
+      _scannerActive = !_scannerActive;
+      if (_scannerActive) {
+        _showToast('Mode scan aktif', type: ToastType.success);
+      } else {
+        _showToast('Mode scan nonaktif', type: ToastType.info);
+      }
+    });
+  }
+
+  Widget _buildScannerToggle() {
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: _scannerActive ? _accentMint.withOpacity(0.15) : _textMedium.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: _scannerActive ? _accentMint : _textMedium,
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.qr_code_scanner_rounded,
+            size: 16,
+            color: _scannerActive ? _accentMint : _textMedium,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            _scannerActive ? 'SCAN ON' : 'SCAN OFF',
+            style: GoogleFonts.montserrat(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: _scannerActive ? _accentMint : _textMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _loadCabangList() async {
     try {
       final cabangList = await CabangService.getCabangList();
       setState(() {
         _cabangList = cabangList;
       });
+      print('Cabang list loaded: ${_cabangList.length} items');
     } catch (e) {
       _showToast('Gagal memuat data cabang: ${e.toString()}', type: ToastType.error);
     }
@@ -190,14 +289,38 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
       final header = detail['header'];
       final details = List<Map<String, dynamic>>.from(detail['details']);
 
+      print('=== LOAD MUTASI IN DETAIL ===');
+      print('Full header: $header');
+      print('sti_cbg_Asal (with capital A): ${header['sti_cbg_Asal']}');  // Perhatikan kapital A
+      print('sti_mutasi_nomor: ${header['sti_mutasi_nomor']}');
+
       setState(() {
-        _selectedCabangAsal = _cabangList.firstWhere(
-              (c) => c.kode == header['sti_cbg_asal'],
-          orElse: () => Cabang(kode: '', nama: '', database: '', host: '', user: '', password: '', port: '', jenis: '', aktif: 0),
-        );
-        _selectedMutasiOut = {
-          'mutc_nomor': header['sti_mutasi_nomor'],
-        };
+        // Ganti dari sti_cbg_asal menjadi sti_cbg_Asal (sesuai database)
+        final targetCabangKode = header['sti_cbg_Asal'] as String?;  // Perbaiki di sini
+        print('Target cabang kode: $targetCabangKode');
+
+        if (targetCabangKode != null && targetCabangKode.isNotEmpty && _cabangList.isNotEmpty) {
+          final matchingCabang = _cabangList.firstWhere(
+                (c) => c.kode == targetCabangKode,
+            orElse: () {
+              print('Cabang with kode $targetCabangKode NOT FOUND');
+              return Cabang(kode: '', nama: '', database: '', host: '', user: '', password: '', port: '', jenis: '', aktif: 0);
+            },
+          );
+
+          if (matchingCabang.kode.isNotEmpty) {
+            _selectedCabangAsal = matchingCabang;
+            print('Selected cabang asal: ${_selectedCabangAsal?.kode} - ${_selectedCabangAsal?.nama}');
+          } else {
+            _selectedCabangAsal = null;
+          }
+        } else {
+          _selectedCabangAsal = null;
+          print('Target cabang empty or cabang list empty');
+        }
+
+        final targetMutasiNomor = header['sti_mutasi_nomor'] as String?;
+
         _items = details.map((detail) {
           int qty = 0;
           final rawQty = detail['stid_qty'];
@@ -209,12 +332,20 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
             itemId: detail['stid_item_id'],
             itemNama: detail['item_nama'] ?? '',
             qty: qty,
-            qtyMutasi: detail['qty_mutasi'] ?? 0,
+            qtyMutasi: qty,
             referensi: detail['referensi'],
           );
         }).toList();
         _filteredItems = List.from(_items);
         _initializeControllers();
+
+        if (targetMutasiNomor != null) {
+          _selectedMutasiOut = {'mutc_nomor': targetMutasiNomor};
+        }
+
+        if (_selectedCabangAsal != null) {
+          _loadMutasiOutListForEdit(targetMutasiNomor);
+        }
       });
     } catch (e) {
       _showToast('Gagal memuat detail: ${e.toString()}', type: ToastType.error);
@@ -223,12 +354,12 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
     }
   }
 
-  Future<void> _loadMutasiOutList() async {
+  Future<void> _loadMutasiOutListForEdit(String? targetMutasiNomor) async {
     if (_selectedCabangAsal == null) return;
 
     setState(() => _isLoadingMutasi = true);
-
     try {
+      final currentCabang = SessionManager.getCurrentCabang();
       final startDate = DateFormat('yyyy-MM-dd').format(DateTime(2024, 1, 1));
       final endDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
@@ -237,10 +368,68 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
         startDate,
         endDate,
       );
+
+      // Filter mutasi out yang cbg_tujuan = cabang login
+      final filteredData = mutasiData.where((m) =>
+      m['mutc_cbg_tujuan'] == currentCabang?.kode
+      ).toList();
+
       setState(() {
-        _mutasiOutList = mutasiData;
+        _mutasiOutList = filteredData;
+
+        // Cari dan set selected mutasi out berdasarkan nomor dari header
+        if (targetMutasiNomor != null && filteredData.isNotEmpty) {
+          final matchingMutasi = filteredData.firstWhere(
+                (m) => m['mutc_nomor'] == targetMutasiNomor,
+            orElse: () => {},
+          );
+          if (matchingMutasi.isNotEmpty) {
+            _selectedMutasiOut = matchingMutasi;
+            print('Selected mutasi out found: ${matchingMutasi['mutc_nomor']}');
+          }
+        }
       });
     } catch (e) {
+      print('Error loading mutasi out: $e');
+      _showToast('Gagal memuat data mutasi out: ${e.toString()}', type: ToastType.error);
+    } finally {
+      setState(() => _isLoadingMutasi = false);
+    }
+  }
+
+  Future<void> _loadMutasiOutList() async {
+    if (_selectedCabangAsal == null) return;
+
+    setState(() => _isLoadingMutasi = true);
+    try {
+      final currentCabang = SessionManager.getCurrentCabang();
+      print('Current cabang: ${currentCabang?.kode}');
+      print('Selected cabang asal: ${_selectedCabangAsal!.kode}');
+      print('Selected cabang asal database: ${_selectedCabangAsal!.database}');
+
+      final startDate = DateFormat('yyyy-MM-dd').format(DateTime(2024, 1, 1));
+      final endDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      final mutasiData = await DoService.getMutasiOutByCabang(
+        _selectedCabangAsal!.database,
+        startDate,
+        endDate,
+      );
+
+      print('Mutasi data from API: $mutasiData');
+
+      // Filter mutasi out yang cbg_tujuan = cabang login
+      final filteredData = mutasiData.where((m) =>
+      m['mutc_cbg_tujuan'] == currentCabang?.kode
+      ).toList();
+
+      print('Filtered mutasi data: $filteredData');
+
+      setState(() {
+        _mutasiOutList = filteredData;
+      });
+    } catch (e) {
+      print('Error loading mutasi out: $e');
       _showToast('Gagal memuat data mutasi out: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() => _isLoadingMutasi = false);
@@ -249,6 +438,12 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
 
   Future<void> _loadMutasiOutDetail(String nomor) async {
     if (_selectedCabangAsal == null) return;
+
+    // Jika sedang edit dan nomor sama dengan yang sudah dipilih, jangan reload
+    if (widget.mutasiInHeader != null && _selectedMutasiOut != null && _selectedMutasiOut!['mutc_nomor'] == nomor) {
+      print('Skipping load mutasi out detail karena sedang edit');
+      return;
+    }
 
     setState(() {
       _isLoadingMutasi = true;
@@ -731,14 +926,30 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     final isEdit = widget.mutasiInHeader != null;
+    print('MutasiInFormScreen build - isEdit: $isEdit');
+    print('Selected cabang asal: ${_selectedCabangAsal?.kode}');
+    print('Cabang list length: ${_cabangList.length}');
+
+    // Validasi: pastikan selected cabang asal ada di list
+    if (_selectedCabangAsal != null && _cabangList.isNotEmpty) {
+      final exists = _cabangList.any((c) => c.kode == _selectedCabangAsal!.kode);
+      if (!exists) {
+        print('Selected cabang asal not found in list, resetting to null');
+        _selectedCabangAsal = null;
+      }
+    }
 
     return BaseLayout(
       title: isEdit ? 'Edit Mutasi In' : 'Tambah Mutasi In',
       showBackButton: true,
       showSidebar: true,
       isFormScreen: true,
+      actions: [
+        _buildScannerToggle(),
+      ],
       child: FadeTransition(
         opacity: _fadeAnimation,
         child: SlideTransition(
@@ -753,11 +964,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                     padding: const EdgeInsets.all(12),
                     child: Column(
                       children: [
-                        _buildInfoCard(isEdit),
-                        const SizedBox(height: 12),
-                        _buildCabangCard(),
-                        const SizedBox(height: 12),
-                        _buildMutasiCard(),
+                        _buildFormCard(),
                         const SizedBox(height: 12),
                         _buildItemsCard(),
                       ],
@@ -773,7 +980,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
     );
   }
 
-  Widget _buildInfoCard(bool isEdit) {
+  Widget _buildFormCard() {
     return Container(
       decoration: BoxDecoration(
         color: _surfaceWhite,
@@ -793,24 +1000,23 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
           children: [
             if (_nomorMutasiIn != null) ...[
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: _primarySoft,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: _primaryDark.withOpacity(0.2)),
                 ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.confirmation_number_rounded, size: 14, color: _primaryDark),
+                    Icon(Icons.confirmation_number_rounded, size: 12, color: _primaryDark),
                     const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        _nomorMutasiIn!,
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: _primaryDark,
-                        ),
+                    Text(
+                      _nomorMutasiIn!,
+                      style: GoogleFonts.montserrat(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: _primaryDark,
                       ),
                     ),
                   ],
@@ -825,8 +1031,8 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                     onTap: () => _selectDate(context),
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
-                      height: 40,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         color: _bgSoft,
                         borderRadius: BorderRadius.circular(8),
@@ -834,275 +1040,215 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            Icons.calendar_today_rounded,
-                            color: _accentGold,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Tanggal',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 9,
-                                    color: _textMedium,
-                                  ),
+                          Icon(Icons.calendar_today_rounded, color: _accentGold, size: 16),
+                          const SizedBox(width: 10),
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Tanggal',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 9,
+                                  color: _textMedium,
                                 ),
-                                Text(
-                                  DateFormat('dd/MM/yyyy').format(_selectedDate),
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: _textDark,
-                                  ),
+                              ),
+                              Text(
+                                DateFormat('dd/MM/yyyy').format(_selectedDate),
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _textDark,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   flex: 2,
                   child: Container(
-                    height: 40,
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
                       color: _bgSoft,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: _borderSoft),
                     ),
-                    child: Center(
-                      child: TextFormField(
-                        controller: _keteranganController,
-                        textAlignVertical: TextAlignVertical.center,
-                        textAlign: TextAlign.left,
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          color: _textDark,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Keterangan mutasi in...',
-                          hintStyle: GoogleFonts.montserrat(
-                            fontSize: 11,
-                            color: _textLight,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.description_rounded,
-                            color: _primaryDark,
-                            size: 14,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                          isDense: true,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCabangCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: _surfaceWhite,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _borderSoft),
-        boxShadow: [
-          BoxShadow(
-            color: _shadowColor,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: _accentSkySoft,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(
-                Icons.business_rounded,
-                color: _accentSky,
-                size: 14,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Cabang Asal (Mutasi Out)',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 9,
-                      color: _textLight,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<Cabang>(
-                      value: _selectedCabangAsal,
-                      isExpanded: true,
-                      hint: Text(
-                        'Pilih Cabang Asal',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          color: _textLight,
-                        ),
-                      ),
-                      items: _cabangList.map((cabang) {
-                        return DropdownMenuItem<Cabang>(
-                          value: cabang,
-                          child: Text(
-                            '${cabang.kode} - ${cabang.nama}',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 11,
-                              color: _textDark,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (cabang) {
-                        setState(() {
-                          _selectedCabangAsal = cabang;
-                          _selectedMutasiOut = null;
-                          _items.clear();
-                          _filteredItems.clear();
-                          _mutasiOutList.clear();
-                          _qtyControllers.clear();
-                        });
-                        _loadMutasiOutList();
-                        _barcodeFocusNode.requestFocus();
-                      },
-                      icon: Icon(Icons.arrow_drop_down, color: _accentSky, size: 20),
-                      style: GoogleFonts.montserrat(fontSize: 11, color: _textDark),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMutasiCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: _surfaceWhite,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _borderSoft),
-        boxShadow: [
-          BoxShadow(
-            color: _shadowColor,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: _accentGoldSoft,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(
-                Icons.swap_horiz,
-                color: _accentGold,
-                size: 14,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'No. Mutasi Out',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 9,
-                      color: _textLight,
-                    ),
-                  ),
-                  Text(
-                    _selectedMutasiOut != null ? _selectedMutasiOut!['mutc_nomor'] : 'Belum dipilih',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _selectedMutasiOut != null ? _accentGold : _textLight,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              height: 32,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [_accentGold, _accentGold.withOpacity(0.8)],
-                ),
-                borderRadius: BorderRadius.circular(6),
-                boxShadow: [
-                  BoxShadow(
-                    color: _accentGold.withOpacity(0.2),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    _barcodeFocusNode.unfocus();
-                    _showSelectMutasiOutDialog();
-                  },
-                  borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Row(
                       children: [
-                        Icon(Icons.search_rounded, size: 12, color: Colors.white),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Pilih',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
+                        Icon(Icons.description_rounded, color: _primaryDark, size: 16),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _keteranganController,
+                            style: GoogleFonts.montserrat(fontSize: 12, color: _textDark),
+                            decoration: InputDecoration(
+                              hintText: 'Keterangan...',
+                              hintStyle: GoogleFonts.montserrat(fontSize: 12, color: _textLight),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                              isDense: true,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-              ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: _bgSoft,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _borderSoft),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.business_rounded, color: _accentSky, size: 16),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<Cabang>(
+                              value: _selectedCabangAsal,
+                              isExpanded: true,
+                              hint: Text(
+                                'Cabang Asal',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 12,
+                                  color: _textLight,
+                                ),
+                              ),
+                              items: _cabangList.map<DropdownMenuItem<Cabang>>((cabang) {
+                                return DropdownMenuItem<Cabang>(
+                                  value: cabang,
+                                  child: Text(
+                                    '${cabang.kode} - ${cabang.nama}',
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 12,
+                                      color: _textDark,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (cabang) {
+                                setState(() {
+                                  _selectedCabangAsal = cabang;
+                                  _selectedMutasiOut = null;
+                                  _items.clear();
+                                  _filteredItems.clear();
+                                  _mutasiOutList.clear();
+                                  _qtyControllers.clear();
+                                });
+                                _loadMutasiOutList();
+                              },
+                              icon: Icon(Icons.arrow_drop_down, color: _accentSky, size: 20),
+                              style: GoogleFonts.montserrat(fontSize: 12, color: _textDark),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: _bgSoft,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _borderSoft),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.swap_horiz, color: _accentGold, size: 16),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'No. Mutasi Out',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 9,
+                                  color: _textMedium,
+                                ),
+                              ),
+                              Text(
+                                _selectedMutasiOut != null ? _selectedMutasiOut!['mutc_nomor'] : 'Belum dipilih',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _selectedMutasiOut != null ? _accentGold : _textLight,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          height: 32,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [_accentGold, _accentGold.withOpacity(0.8)],
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _accentGold.withOpacity(0.2),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                _barcodeFocusNode.unfocus();
+                                _showSelectMutasiOutDialog();
+                              },
+                              borderRadius: BorderRadius.circular(6),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.search_rounded, size: 14, color: Colors.white),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Pilih',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1179,32 +1325,26 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: _borderSoft),
                         ),
-                        child: Center(
-                          child: TextField(
-                            controller: _searchController,
-                            textAlignVertical: TextAlignVertical.center,
-                            textAlign: TextAlign.left,
-                            style: GoogleFonts.montserrat(fontSize: 11),
-                            onChanged: _filterItems,
-                            onTap: () {
-                              _barcodeFocusNode.unfocus();
-                            },
-                            decoration: InputDecoration(
-                              hintText: 'Cari item...',
-                              hintStyle: GoogleFonts.montserrat(
-                                fontSize: 11,
-                                color: _textLight,
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 10),
+                            Icon(Icons.search_rounded, color: _primaryDark, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                style: GoogleFonts.montserrat(fontSize: 12),
+                                onChanged: _filterItems,
+                                decoration: InputDecoration(
+                                  hintText: 'Cari item...',
+                                  hintStyle: GoogleFonts.montserrat(fontSize: 12, color: _textLight),
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
+                                  isDense: true,
+                                ),
                               ),
-                              prefixIcon: Icon(
-                                Icons.search_rounded,
-                                color: _primaryDark,
-                                size: 14,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                              isDense: true,
                             ),
-                          ),
+                          ],
                         ),
                       ),
                     ),
@@ -1218,46 +1358,40 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: _borderSoft),
                         ),
-                        child: Center(
-                          child: TextField(
-                            controller: _barcodeController,
-                            focusNode: _barcodeFocusNode,
-                            textAlignVertical: TextAlignVertical.center,
-                            textAlign: TextAlign.left,
-                            style: GoogleFonts.montserrat(fontSize: 11),
-                            onChanged: _onBarcodeChanged,
-                            decoration: InputDecoration(
-                              hintText: 'Scan barcode...',
-                              hintStyle: GoogleFonts.montserrat(
-                                fontSize: 11,
-                                color: _textLight,
-                              ),
-                              prefixIcon: Icon(
-                                Icons.qr_code_scanner_rounded,
-                                color: _accentMint,
-                                size: 14,
-                              ),
-                              suffixIcon: _barcodeController.text.isNotEmpty
-                                  ? GestureDetector(
-                                onTap: () {
-                                  _barcodeController.clear();
-                                  _barcodeFocusNode.requestFocus();
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 10),
+                            Icon(Icons.qr_code_scanner_rounded, color: _accentMint, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _barcodeController,
+                                focusNode: _barcodeFocusNode,
+                                style: GoogleFonts.montserrat(fontSize: 12),
+                                onChanged: (value) {
+                                  if (value.isNotEmpty) {
+                                    _processBarcode(value);
+                                    _barcodeController.clear();
+                                  }
                                 },
-                                child: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Icon(
-                                    Icons.close_rounded,
-                                    color: _textLight,
-                                    size: 12,
-                                  ),
+                                decoration: InputDecoration(
+                                  hintText: 'Scan barcode (opsional)...',
+                                  hintStyle: GoogleFonts.montserrat(fontSize: 12, color: _textLight),
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
+                                  isDense: true,
                                 ),
-                              )
-                                  : null,
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                              isDense: true,
+                              ),
                             ),
-                          ),
+                            if (_barcodeController.text.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: GestureDetector(
+                                  onTap: () => _barcodeController.clear(),
+                                  child: Icon(Icons.close_rounded, color: _textLight, size: 16),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),
@@ -1275,11 +1409,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            Icons.inventory_rounded,
-                            size: 10,
-                            color: _primaryDark,
-                          ),
+                          Icon(Icons.inventory_rounded, size: 10, color: _primaryDark),
                           const SizedBox(width: 4),
                           Text(
                             '${_items.length}',
@@ -1301,11 +1431,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            Icons.shopping_cart_rounded,
-                            size: 10,
-                            color: _accentGold,
-                          ),
+                          Icon(Icons.shopping_cart_rounded, size: 10, color: _accentGold),
                           const SizedBox(width: 4),
                           Text(
                             '$_totalQuantity',
@@ -1327,11 +1453,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            Icons.check_circle_rounded,
-                            size: 10,
-                            color: _accentMint,
-                          ),
+                          Icon(Icons.check_circle_rounded, size: 10, color: _accentMint),
                           const SizedBox(width: 4),
                           Text(
                             '$_totalItemsWithQty',
@@ -1392,12 +1514,12 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(10),
         child: Row(
           children: [
             Container(
-              width: 36,
-              height: 36,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: hasQty ? _primaryDark : _accentCoralSoft,
                 borderRadius: BorderRadius.circular(8),
@@ -1406,11 +1528,11 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                 child: Icon(
                   Icons.inventory_2_outlined,
                   color: hasQty ? Colors.white : _accentCoral,
-                  size: 16,
+                  size: 18,
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1418,18 +1540,20 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                   Text(
                     item.itemNama,
                     style: GoogleFonts.montserrat(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: _textDark,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
-                  Row(
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: _bgSoft,
                           borderRadius: BorderRadius.circular(4),
@@ -1437,14 +1561,13 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                         child: Text(
                           'ID: ${item.itemId}',
                           style: GoogleFonts.montserrat(
-                            fontSize: 8,
+                            fontSize: 9,
                             color: _textMedium,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: _accentSkySoft,
                           borderRadius: BorderRadius.circular(4),
@@ -1452,16 +1575,15 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                         child: Text(
                           'Qty Out: ${item.qty}',
                           style: GoogleFonts.montserrat(
-                            fontSize: 8,
+                            fontSize: 9,
                             fontWeight: FontWeight.w600,
                             color: _accentSky,
                           ),
                         ),
                       ),
-                      if (hasQty) ...[
-                        const SizedBox(width: 4),
+                      if (hasQty)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: _accentGoldSoft,
                             borderRadius: BorderRadius.circular(4),
@@ -1469,72 +1591,68 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                           child: Text(
                             'Qty In: ${item.qtyMutasi}',
                             style: GoogleFonts.montserrat(
-                              fontSize: 8,
+                              fontSize: 9,
                               fontWeight: FontWeight.w600,
                               color: _accentGold,
                             ),
                           ),
                         ),
-                      ],
+                      if (item.qtyMutasi > item.qty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _accentCoralSoft,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Melebihi Qty Out!',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w600,
+                              color: _accentCoral,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ],
               ),
             ),
             SizedBox(
-              width: 60,
-              height: 32,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: _bgSoft,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: hasQty ? _primaryDark.withOpacity(0.3) : _accentCoral.withOpacity(0.5),
+              width: 70,
+              height: 38,
+              child: TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: GoogleFonts.montserrat(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: hasQty ? _primaryDark : _accentCoral,
+                ),
+                decoration: InputDecoration(
+                  hintText: '0',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: _borderSoft),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  isDense: true,
+                  hintStyle: GoogleFonts.montserrat(
+                    fontSize: 13,
+                    color: _textLight,
                   ),
                 ),
-                child: TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  style: GoogleFonts.montserrat(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: hasQty ? _primaryDark : _accentCoral,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: '0',
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
-                    isDense: true,
-                    hintStyle: GoogleFonts.montserrat(
-                      fontSize: 11,
-                      color: _textLight,
-                    ),
-                  ),
-                  onChanged: (value) {
-                    if (value.isEmpty) {
-                      _updateItemQty(item.itemId, 0);
-                    } else {
-                      final intValue = int.tryParse(value);
-                      if (intValue != null) {
-                        if (intValue > item.qty) {
-                          _showToast('Qty tidak boleh melebihi qty out (${item.qty})', type: ToastType.error);
-                          controller.text = item.qtyMutasi.toString();
-                          return;
-                        }
-                        _updateItemQty(item.itemId, intValue);
-                      }
-                    }
-                  },
-                  onTap: () {
-                    _barcodeFocusNode.unfocus();
-                    controller.selection = TextSelection(
-                      baseOffset: 0,
-                      extentOffset: controller.text.length,
-                    );
-                  },
-                ),
+                onChanged: (value) {
+                  final intValue = int.tryParse(value) ?? 0;
+                  if (intValue > item.qty) {
+                    _showToast('Qty tidak boleh melebihi qty out (${item.qty})', type: ToastType.error);
+                    controller.text = item.qtyMutasi.toString();
+                    return;
+                  }
+                  _updateItemQty(item.itemId, intValue);
+                },
               ),
             ),
           ],
@@ -1545,12 +1663,12 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
 
   Widget _buildEmptyState() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: const EdgeInsets.symmetric(vertical: 40),
       child: Column(
         children: [
           Container(
-            width: 64,
-            height: 64,
+            width: 80,
+            height: 80,
             decoration: BoxDecoration(
               color: _bgSoft,
               shape: BoxShape.circle,
@@ -1561,11 +1679,11 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                   : (_searchController.text.isEmpty
                   ? Icons.inventory_2_outlined
                   : Icons.search_off_rounded),
-              size: 32,
+              size: 40,
               color: _textLight,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             _selectedMutasiOut == null
                 ? 'Pilih No. Mutasi Out terlebih dahulu'
@@ -1573,12 +1691,12 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                 ? 'Tidak ada item dari mutasi out'
                 : 'Item tidak ditemukan'),
             style: GoogleFonts.montserrat(
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: FontWeight.w500,
               color: _textDark,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
             _selectedMutasiOut == null
                 ? 'Klik tombol Pilih untuk memilih mutasi out'
@@ -1586,7 +1704,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                 ? 'Scan barcode untuk mengisi qty mutasi in'
                 : 'Coba kata kunci lain'),
             style: GoogleFonts.montserrat(
-              fontSize: 10,
+              fontSize: 11,
               color: _textLight,
             ),
           ),
@@ -1620,7 +1738,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                   Text(
                     'Item dengan QTY',
                     style: GoogleFonts.montserrat(
-                      fontSize: 9,
+                      fontSize: 10,
                       color: _textLight,
                     ),
                   ),
@@ -1628,14 +1746,14 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                     children: [
                       Icon(
                         Icons.check_circle_rounded,
-                        size: 12,
+                        size: 14,
                         color: _accentMint,
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 6),
                       Text(
                         '$_totalItemsWithQty dari ${_items.length}',
                         style: GoogleFonts.montserrat(
-                          fontSize: 11,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: _textDark,
                         ),
@@ -1646,8 +1764,8 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
               ),
             ),
             Container(
-              width: 120,
-              height: 40,
+              width: 130,
+              height: 44,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [_primaryDark, _primaryLight],
@@ -1671,8 +1789,8 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                   child: Center(
                     child: _isSaving
                         ? const SizedBox(
-                      width: 16,
-                      height: 16,
+                      width: 20,
+                      height: 20,
                       child: CircularProgressIndicator(
                         color: Colors.white,
                         strokeWidth: 2,
@@ -1684,13 +1802,13 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                         Icon(
                           isEdit ? Icons.edit_rounded : Icons.save_rounded,
                           color: Colors.white,
-                          size: 14,
+                          size: 16,
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 8),
                         Text(
                           isEdit ? 'Update' : 'Simpan',
                           style: GoogleFonts.montserrat(
-                            fontSize: 11,
+                            fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
                           ),

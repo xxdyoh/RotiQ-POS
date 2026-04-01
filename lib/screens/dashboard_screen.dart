@@ -964,64 +964,10 @@ class _SalesChart extends StatelessWidget {
       );
     }).toList();
 
-    final dataCount = processedSales.length;
-    final isMobile = MediaQuery.of(context).size.width < 600;
-    final bool isDayView = groupBy == 'day';
-    final bool isYearView = groupBy == 'year';
-    final bool needScroll = (isDayView && dataCount > 7) || (isYearView && dataCount > 8);
-
-    double barWidth = 0;
-    double chartWidth = 0;
-    int labelRotation;
-    double labelFontSize;
-    double seriesWidth;
-
-    if (isDayView) {
-      if (dataCount <= 7) {
-        barWidth = isMobile ? 90 : 110;
-        labelRotation = 0;
-        labelFontSize = isMobile ? 10 : 11;
-        seriesWidth = 0.85;
-      } else if (dataCount <= 15) {
-        barWidth = isMobile ? 70 : 85;
-        labelRotation = 45;
-        labelFontSize = isMobile ? 9 : 10;
-        seriesWidth = 0.8;
-      } else {
-        barWidth = isMobile ? 55 : 70;
-        labelRotation = 45;
-        labelFontSize = isMobile ? 8 : 9;
-        seriesWidth = 0.75;
-      }
-      chartWidth = barWidth * dataCount;
-    } else if (groupBy == 'month') {
-      if (dataCount <= 6) {
-        labelRotation = 0;
-        labelFontSize = isMobile ? 12 : 13;
-        seriesWidth = 0.85;
-      } else if (dataCount <= 12) {
-        labelRotation = 45;
-        labelFontSize = isMobile ? 11 : 12;
-        seriesWidth = 0.8;
-      } else {
-        labelRotation = 45;
-        labelFontSize = isMobile ? 10 : 11;
-        seriesWidth = 0.75;
-      }
-    } else {
-      labelRotation = 0;
-      labelFontSize = isMobile ? 14 : 16;
-      seriesWidth = 0.85;
-      if (dataCount > 8) {
-        barWidth = isMobile ? 100 : 120;
-        chartWidth = barWidth * dataCount;
-      }
-    }
-
     return Container(
       width: double.infinity,
       decoration: theme.cardDecoration,
-      padding: EdgeInsets.all(isMobile ? 20 : 24),
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1055,68 +1001,51 @@ class _SalesChart extends StatelessWidget {
           SizedBox(
             height: 400,
             width: double.infinity,
-            child: needScroll
-                ? SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: chartWidth > 0 ? chartWidth : null,
-                child: _buildChart(processedSales, dataCount, labelFontSize, labelRotation, seriesWidth, true, isYearView),
+            child: SfCartesianChart(
+              zoomPanBehavior: ZoomPanBehavior(
+                enablePinching: true,
+                enablePanning: true,
+                zoomMode: ZoomMode.x,
               ),
-            )
-                : _buildChart(processedSales, dataCount, labelFontSize, labelRotation, seriesWidth, false, isYearView),
+              plotAreaBorderWidth: 0,
+              margin: const EdgeInsets.fromLTRB(10, 20, 10, 20),
+              primaryXAxis: CategoryAxis(
+                labelRotation: groupBy == 'year' ? 0 : 45,
+                labelStyle: theme.caption,
+                majorGridLines: const MajorGridLines(width: 0),
+                axisLine: const AxisLine(width: 0),
+                labelPlacement: LabelPlacement.betweenTicks,
+              ),
+              primaryYAxis: NumericAxis(
+                title: AxisTitle(text: 'Total Penjualan'),
+                numberFormat: currencyFormat,
+                labelStyle: theme.caption,
+                axisLine: const AxisLine(width: 0),
+                majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
+              ),
+              series: [
+                ColumnSeries<DashboardSalesData, String>(
+                  dataSource: processedSales,
+                  xValueMapper: (d, _) => d.label,
+                  yValueMapper: (d, _) => d.totalSales,
+                  color: theme.primary,
+                  enableTooltip: true,
+                  width: 0.85,
+                  spacing: groupBy == 'year' ? 0.2 : 0.1,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                ),
+              ],
+              tooltipBehavior: TooltipBehavior(
+                enable: true,
+                canShowMarker: false,
+                textStyle: theme.bodySmall,
+                color: theme.surface,
+                borderColor: theme.border,
+                borderWidth: 1,
+              ),
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildChart(
-      List<DashboardSalesData> salesData,
-      int dataCount,
-      double labelFontSize,
-      int labelRotation,
-      double seriesWidth,
-      bool isScrollable,
-      bool isYearView) {
-    return SfCartesianChart(
-      plotAreaBorderWidth: 0,
-      margin: EdgeInsets.fromLTRB(10, 20, isScrollable ? 20 : 10, 20),
-      primaryXAxis: CategoryAxis(
-        labelRotation: isYearView ? 0 : labelRotation,
-        labelStyle: theme.caption.copyWith(
-          fontSize: labelFontSize,
-          fontWeight: isYearView ? FontWeight.w600 : FontWeight.w400,
-        ),
-        majorGridLines: const MajorGridLines(width: 0),
-        axisLine: const AxisLine(width: 0),
-        labelPlacement: LabelPlacement.betweenTicks,
-      ),
-      primaryYAxis: NumericAxis(
-        title: AxisTitle(text: 'Total Penjualan'),
-        numberFormat: currencyFormat,
-        labelStyle: theme.caption,
-        axisLine: const AxisLine(width: 0),
-        majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
-      ),
-      series: [
-        ColumnSeries<DashboardSalesData, String>(
-          dataSource: salesData,
-          xValueMapper: (d, _) => d.label,
-          yValueMapper: (d, _) => d.totalSales,
-          color: theme.primary,
-          enableTooltip: true,
-          width: seriesWidth,
-          spacing: isYearView ? 0.2 : 0.1,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-        ),
-      ],
-      tooltipBehavior: TooltipBehavior(
-        enable: true,
-        canShowMarker: false,
-        textStyle: theme.bodySmall,
-        color: theme.surface,
-        borderColor: theme.border,
-        borderWidth: 1,
       ),
     );
   }
@@ -1166,47 +1095,7 @@ class _MultiCabangChart extends StatelessWidget {
     final dates = data.dates;
     final series = data.series;
 
-    final dataCount = dates.length;
-    final isMobile = MediaQuery.of(context).size.width < 600;
-    final bool isYearView = groupBy == 'year';
     final double totalPenjualan = _getTotalPenjualan();
-
-    bool needScroll = false;
-    double barWidth = 0;
-    double chartWidth = 0;
-    int labelRotation;
-    double labelFontSize;
-    double seriesWidth;
-
-    if (isYearView) {
-      labelRotation = 0;
-      labelFontSize = isMobile ? 14 : 16;
-      seriesWidth = 0.85;
-      needScroll = dataCount > 8;
-      if (needScroll) {
-        barWidth = isMobile ? 100 : 120;
-        chartWidth = barWidth * dataCount;
-      }
-    } else {
-      if (dataCount <= 6) {
-        labelRotation = 0;
-        labelFontSize = isMobile ? 12 : 13;
-        seriesWidth = 0.85;
-      } else if (dataCount <= 12) {
-        labelRotation = 45;
-        labelFontSize = isMobile ? 11 : 12;
-        seriesWidth = 0.8;
-      } else {
-        labelRotation = 45;
-        labelFontSize = isMobile ? 10 : 11;
-        seriesWidth = 0.75;
-      }
-      needScroll = dataCount > 7;
-      if (needScroll) {
-        barWidth = isMobile ? 70 : 85;
-        chartWidth = barWidth * dataCount;
-      }
-    }
 
     final visibleSeries = series.asMap().entries
         .where((e) => e.key < selectedVisibility.length && selectedVisibility[e.key])
@@ -1215,7 +1104,7 @@ class _MultiCabangChart extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: theme.cardDecoration,
-      padding: EdgeInsets.all(isMobile ? 20 : 24),
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1277,73 +1166,57 @@ class _MultiCabangChart extends StatelessWidget {
           SizedBox(
             height: 430,
             width: double.infinity,
-            child: needScroll
-                ? SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: chartWidth,
-                child: _buildChart(dates, visibleSeries, dataCount, labelRotation, labelFontSize, seriesWidth, true, isYearView),
+            child: SfCartesianChart(
+              zoomPanBehavior: ZoomPanBehavior(
+                enablePinching: true,
+                enablePanning: true,
+                zoomMode: ZoomMode.x,
               ),
-            )
-                : _buildChart(dates, visibleSeries, dataCount, labelRotation, labelFontSize, seriesWidth, false, isYearView),
+              plotAreaBorderWidth: 0,
+              margin: const EdgeInsets.fromLTRB(10, 20, 10, 20),
+              primaryXAxis: CategoryAxis(
+                labelRotation: groupBy == 'year' ? 0 : 45,
+                labelStyle: theme.caption,
+                majorGridLines: const MajorGridLines(width: 0),
+                axisLine: const AxisLine(width: 0),
+                labelPlacement: LabelPlacement.betweenTicks,
+              ),
+              primaryYAxis: NumericAxis(
+                title: AxisTitle(text: 'Total Penjualan'),
+                numberFormat: currencyFormat,
+                labelStyle: theme.caption,
+                axisLine: const AxisLine(width: 0),
+                majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
+              ),
+              series: visibleSeries.map((entry) {
+                final index = entry.key;
+                final cabangData = entry.value;
+                final points = List.generate(dates.length, (i) =>
+                    ChartData(x: dates[i], y: cabangData['data'][i] ?? 0.0));
+
+                return ColumnSeries<ChartData, String>(
+                  dataSource: points,
+                  xValueMapper: (d, _) => d.x,
+                  yValueMapper: (d, _) => d.y,
+                  name: cabangData['cabang_nama'],
+                  color: _colors[index % _colors.length],
+                  enableTooltip: true,
+                  width: 0.85,
+                  spacing: groupBy == 'year' ? 0.2 : 0.08,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                );
+              }).toList(),
+              tooltipBehavior: TooltipBehavior(
+                enable: true,
+                canShowMarker: false,
+                textStyle: theme.bodySmall,
+                color: theme.surface,
+                borderColor: theme.border,
+                borderWidth: 1,
+              ),
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildChart(
-      List<String> dates,
-      List<MapEntry<int, Map<String, dynamic>>> visibleSeries,
-      int dataCount,
-      int labelRotation,
-      double labelFontSize,
-      double seriesWidth,
-      bool isScrollable,
-      bool isYearView,
-      ) {
-    return SfCartesianChart(
-      plotAreaBorderWidth: 0,
-      margin: EdgeInsets.fromLTRB(10, 20, isScrollable ? 20 : 10, 20),
-      primaryXAxis: CategoryAxis(
-        labelRotation: isYearView ? 0 : labelRotation,
-        labelStyle: theme.caption.copyWith(fontSize: labelFontSize, fontWeight: isYearView ? FontWeight.w600 : FontWeight.w400),
-        majorGridLines: const MajorGridLines(width: 0),
-        axisLine: const AxisLine(width: 0),
-        labelPlacement: LabelPlacement.betweenTicks,
-      ),
-      primaryYAxis: NumericAxis(
-        title: AxisTitle(text: 'Total Penjualan'),
-        numberFormat: currencyFormat,
-        labelStyle: theme.caption,
-        axisLine: const AxisLine(width: 0),
-        majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
-      ),
-      series: visibleSeries.map((entry) {
-        final index = entry.key;
-        final cabangData = entry.value;
-        final points = List.generate(dates.length, (i) =>
-            ChartData(x: dates[i], y: cabangData['data'][i] ?? 0.0));
-
-        return ColumnSeries<ChartData, String>(
-          dataSource: points,
-          xValueMapper: (d, _) => d.x,
-          yValueMapper: (d, _) => d.y,
-          name: cabangData['cabang_nama'],
-          color: _colors[index % _colors.length],
-          enableTooltip: true,
-          width: seriesWidth,
-          spacing: isYearView ? 0.2 : 0.08,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-        );
-      }).toList(),
-      tooltipBehavior: TooltipBehavior(
-        enable: true,
-        canShowMarker: false,
-        textStyle: theme.bodySmall,
-        color: theme.surface,
-        borderColor: theme.border,
-        borderWidth: 1,
       ),
     );
   }

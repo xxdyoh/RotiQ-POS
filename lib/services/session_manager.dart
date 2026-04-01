@@ -13,7 +13,9 @@ class SessionManager {
   static Future<void> saveSession(String token, User user, Cabang cabang, {Map<String, dynamic>? permissions}) async {
     _currentUser = user;
     _token = token;
-    _currentCabang = cabang;
+    _currentCabang = cabang; // Pastikan ini terisi
+
+    print('Cabang saved: ${cabang.kode}'); // Tambahkan ini
 
     if (permissions != null) {
       _userPermissionsByName = {};

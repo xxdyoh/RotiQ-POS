@@ -270,7 +270,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
       context,
       AppRoutes.doForm,
       arguments: {
-        'onSaved': _loadMutasiData,
+        'onMutasiSaved': _loadMutasiData,
       },
     );
   }
@@ -281,7 +281,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
       AppRoutes.doForm,
       arguments: {
         'mutasiHeader': mutasiData,
-        'onSaved': _loadMutasiData,
+        'onMutasiSaved': _loadMutasiData,
       },
     );
   }

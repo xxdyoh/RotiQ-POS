@@ -84,7 +84,7 @@ class AppRoutes {
   static const String serahTerimaForm = '/serah-terima/form';
 
   static const String doList = '/do';
-  static const String doForm = '/do/form';
+  static const String doForm = '/do/form';  // <-- TAMBAHKAN INI
 
   static const String spkList = '/spk';
 
@@ -116,9 +116,7 @@ class AppRoutes {
       ),
 
       doList: (context) => DoListScreen(),
-      doForm: (context) => DoFormScreen(
-        onMutasiSaved: () {},
-      ),
+      // HAPUS doForm dari sini - tidak perlu karena sudah ditangani di onGenerateRoute
 
       spkList: (context) => SpkListScreen(),
 
@@ -140,9 +138,9 @@ class AppRoutes {
 
       koreksiList: (context) => KoreksiListScreen(),
 
-      stockInForm: (context) => MutasiInFormScreen(
-        onMutasiInSaved: () {},
-      ),
+      // stockInForm: (context) => MutasiInFormScreen(
+      //   onMutasiInSaved: () {},
+      // ),
     };
   }
 

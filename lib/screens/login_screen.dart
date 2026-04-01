@@ -431,6 +431,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         final menuMapping = result['menuMapping'] as Map<String, dynamic>?;
 
         print('Menu mapping dari API: ${result['menuMapping']}'); // Tambahkan ini
+        print('Selected Cabang: ${_selectedCabang?.kode}'); // Tambahkan ini
 
         SessionManager.saveSession(
           token,

@@ -179,10 +179,11 @@ class MyApp extends StatelessWidget {
 
           case AppRoutes.stockInForm:
             final args = settings.arguments as Map<String, dynamic>?;
+            print('StockInForm args: $args'); // Debug
             return MaterialPageRoute(
               builder: (context) => MutasiInFormScreen(
-                mutasiInHeader: args?['stokinHeader'],
-                onMutasiInSaved: args?['onSaved'] ?? () {},
+                mutasiInHeader: args?['mutasiInHeader'],
+                onMutasiInSaved: args?['onMutasiInSaved'] ?? () {},
               ),
             );
 
@@ -242,10 +243,11 @@ class MyApp extends StatelessWidget {
 
           case AppRoutes.doForm:
             final args = settings.arguments as Map<String, dynamic>?;
+            print('DoForm args: $args'); // Tambahkan debug
             return MaterialPageRoute(
               builder: (context) => DoFormScreen(
                 mutasiHeader: args?['mutasiHeader'],
-                onMutasiSaved: args?['onSaved'] ?? () {},
+                onMutasiSaved: args?['onMutasiSaved'] ?? () {},
               ),
             );
 

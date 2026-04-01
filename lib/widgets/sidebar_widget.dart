@@ -46,7 +46,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     AppRoutes.setengahJadiList: 'frmSetengahJadi',
     AppRoutes.penerimaanSetengahJadi: 'frmPenerimaanStJadi',
     AppRoutes.spkList: 'frmSPK',
-    AppRoutes.doList: 'frmDO',
+    AppRoutes.doList: 'frmMutasiOut',
     AppRoutes.stockSetengahJadi: 'frmStockSetengahJadi',
     AppRoutes.connectPrinter: 'frmConnectPrinter',
     AppRoutes.settingPrinter: 'frmSettingPrinter',

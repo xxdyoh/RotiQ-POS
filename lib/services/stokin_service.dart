@@ -112,7 +112,7 @@ class StokinService {
   static Future<Map<String, dynamic>> createStokIn(Map<String, dynamic> data) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/stokin'),
+        Uri.parse('$baseUrl/mutasi-in'),
         headers: await _getHeadersWithCabang(),
         body: jsonEncode(data),
       );
@@ -128,7 +128,7 @@ class StokinService {
       } else {
         return {
           'success': false,
-          'message': result['message'] ?? 'Gagal menambah stock in',
+          'message': result['message'] ?? 'Gagal menambah mutasi in',
         };
       }
     } catch (e) {
