@@ -93,6 +93,8 @@ class AppRoutes {
   static const String koreksiList = '/koreksi';
   static const String koreksiForm = '/koreksi-form';
 
+  static const String deviceCheck = '/device-check';
+
   static Map<String, WidgetBuilder> get routes {
     return {
       dashboard: (context) => DashboardScreen(),

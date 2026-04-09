@@ -23,6 +23,7 @@ import 'screens/serah_terima_form_screen.dart';
 import 'screens/do_form_screen.dart';
 import 'screens/koreksi_form_screen.dart';
 import 'screens/mutasi_in_form_screen.dart';
+import 'screens/device_check_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,8 +84,8 @@ class MyApp extends StatelessWidget {
       title: 'RotiQ',
       debugShowCheckedModeBanner: false,
 
-      initialRoute: AppRoutes.login,
-
+      // initialRoute: AppRoutes.login,
+      initialRoute: '/device-check',
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: Colors.white,
@@ -129,7 +130,11 @@ class MyApp extends StatelessWidget {
         ),
       ),
 
-      routes: AppRoutes.routes,
+      // routes: AppRoutes.routes,
+      routes: {
+        ...AppRoutes.routes,
+        '/device-check': (context) => const DeviceCheckScreen(),
+      },
       onGenerateRoute: (settings) {
         switch (settings.name) {
           case AppRoutes.setengahJadiForm:
