@@ -25,13 +25,15 @@ class SalesItemService {
   static Future<Map<String, dynamic>> getSalesByItem({
     required DateTime startDate,
     required DateTime endDate,
+    required bool isPusat,
     List<String>? selectedCategories,
   }) async {
     try {
       final startStr = _formatDate(startDate);
       final endStr = _formatDate(endDate);
+      final isPusValue = isPusat ? '1' : '0';
 
-      String url = '$baseUrl/report/sales-by-item?start_date=$startStr&end_date=$endStr';
+      String url = '$baseUrl/report/sales-by-item?start_date=$startStr&end_date=$endStr&is_pusat=$isPusValue';
 
       if (selectedCategories != null && selectedCategories.isNotEmpty) {
         final categoriesParam = selectedCategories.join(',');

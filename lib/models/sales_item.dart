@@ -11,6 +11,7 @@ class SalesItem {
   final String served;
   final String category;
   final String kasir;
+  final String cabang;
   // final String category;
   // final int totalQty;
   // final double totalNilai;
@@ -28,6 +29,7 @@ class SalesItem {
     this.served = '',
     this.category = '',
     this.kasir = '',
+    this.cabang = '',
   });
 
   factory SalesItem.fromJson(Map<String, dynamic> json) {
@@ -44,6 +46,7 @@ class SalesItem {
       served: json['Served'] ?? '',
       category: json['Category'] ?? '',
       kasir: json['Kasir'] ?? '',
+      cabang: json['Cabang'] ?? '',
     );
   }
 }

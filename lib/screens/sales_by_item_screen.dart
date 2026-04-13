@@ -14,6 +14,7 @@ import '../services/sales_item_service.dart';
 import '../models/sales_item.dart';
 import '../widgets/base_layout.dart';
 import '../utils/responsive_helper.dart';
+import '../services/session_manager.dart';
 
 class SalesByItemScreen extends StatefulWidget {
   const SalesByItemScreen({super.key});
@@ -31,6 +32,7 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
   DateTime? _endDate;
   List<SalesItem> _salesItems = [];
   bool _isLoading = false;
+  bool _isPusat = false;
   bool _showDateFilter = false;
   String? _error;
   late SalesItemDataSource _dataSource;
@@ -67,8 +69,9 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
     'qty': 100,
     'nilai': 150,
     'served': 120,
-    'category': 120,
+    'category': 130,
     'kasir': 120,
+    'cabang': 120,
   };
 
   int _totalFilteredQty = 0;
@@ -85,6 +88,12 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
   @override
   void initState() {
     super.initState();
+
+    final user = SessionManager.getCurrentUser();
+    final cabang = SessionManager.getCurrentCabang();
+    setState(() {
+      _isPusat = cabang?.kode == '00';
+    });
 
     _animationController = AnimationController(
       vsync: this,
@@ -103,6 +112,7 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
       currencyFormat: _currencyFormat,
       numberFormat: _numberFormat,
       onFilterChanged: _onFilterChanged,
+      isPusat: _isPusat,
     );
     _loadData();
   }
@@ -126,6 +136,7 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
       final response = await SalesItemService.getSalesByItem(
         startDate: _startDate!,
         endDate: _endDate!,
+        isPusat: _isPusat,
       );
 
       if (response['success'] == true) {
@@ -140,6 +151,7 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
             currencyFormat: _currencyFormat,
             numberFormat: _numberFormat,
             onFilterChanged: _onFilterChanged,
+            isPusat: _isPusat,
           );
         });
       } else {
@@ -275,6 +287,7 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
         'served': item.served,
         'category': item.category,
         'kasir': item.kasir,
+        'cabang': item.cabang,
       });
     }
     return jsonEncode(data);
@@ -346,6 +359,8 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
       sheet.getRangeByIndex(1, 11).columnWidth = 12;
       sheet.getRangeByIndex(1, 12).columnWidth = 12;
       sheet.getRangeByIndex(1, 13).columnWidth = 12;
+      if(_isPusat)
+        sheet.getRangeByIndex(1, 14).columnWidth = 12;
 
       final headerRange = sheet.getRangeByIndex(1, 1, 1, 13);
       headerRange.cellStyle.backColor = '#2C3E50';
@@ -368,6 +383,8 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
       sheet.getRangeByName('K1').setText('Served');
       sheet.getRangeByName('L1').setText('Category');
       sheet.getRangeByName('M1').setText('Kasir');
+      if(_isPusat)
+        sheet.getRangeByName('N1').setText('Cabang');
 
       int rowIndex = 2;
       for (var row in visibleRows) {
@@ -386,22 +403,50 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
         String served = '';
         String category = '';
         String kasir = '';
+        String cabang = '';
+
+        // for (var cell in cells) {
+        //   switch (cell.columnName) {
+        //     case 'no': no = cell.value.toString(); break;
+        //     case 'bulan': bulan = cell.value.toString(); break;
+        //     case 'tahun': tahun = cell.value.toString(); break;
+        //     case 'nomor': nomor = cell.value.toString(); break;
+        //     case 'tanggal': tanggal = cell.value.toString(); break;
+        //     case 'nama': nama = cell.value.toString(); break;
+        //     case 'varian': varian = cell.value.toString(); break;
+        //     case 'salesType': salesType = cell.value.toString(); break;
+        //     case 'qty': qty = cell.value.toString(); break;
+        //     case 'nilai': nilai = cell.value.toString(); break;
+        //     case 'served': served = cell.value.toString(); break;
+        //     case 'category': category = cell.value.toString(); break;
+        //     case 'kasir': kasir = cell.value.toString(); break;
+        //   }
+        // }
+
+        final fieldMap = <String, void Function(String)>{
+          'no': (v) => no = v,
+          'bulan': (v) => bulan = v,
+          'tahun': (v) => tahun = v,
+          'nomor': (v) => nomor = v,
+          'tanggal': (v) => tanggal = v,
+          'nama': (v) => nama = v,
+          'varian': (v) => varian = v,
+          'salesType': (v) => salesType = v,
+          'qty': (v) => qty = v,
+          'nilai': (v) => nilai = v,
+          'served': (v) => served = v,
+          'category': (v) => category = v,
+          'kasir': (v) => kasir = v,
+        };
+
+        if (_isPusat) {
+          fieldMap['cabang'] = (v) => cabang = v;
+        }
 
         for (var cell in cells) {
-          switch (cell.columnName) {
-            case 'no': no = cell.value.toString(); break;
-            case 'bulan': bulan = cell.value.toString(); break;
-            case 'tahun': tahun = cell.value.toString(); break;
-            case 'nomor': nomor = cell.value.toString(); break;
-            case 'tanggal': tanggal = cell.value.toString(); break;
-            case 'nama': nama = cell.value.toString(); break;
-            case 'varian': varian = cell.value.toString(); break;
-            case 'salesType': salesType = cell.value.toString(); break;
-            case 'qty': qty = cell.value.toString(); break;
-            case 'nilai': nilai = cell.value.toString(); break;
-            case 'served': served = cell.value.toString(); break;
-            case 'category': category = cell.value.toString(); break;
-            case 'kasir': kasir = cell.value.toString(); break;
+          final handler = fieldMap[cell.columnName];
+          if (handler != null) {
+            handler(cell.value.toString());
           }
         }
 
@@ -418,6 +463,9 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
         sheet.getRangeByName('K$rowIndex').setText(served);
         sheet.getRangeByName('L$rowIndex').setText(category);
         sheet.getRangeByName('M$rowIndex').setText(kasir);
+        if (_isPusat) {
+          sheet.getRangeByName('N$rowIndex').setText(cabang);
+        }
 
         final dataRange = sheet.getRangeByIndex(rowIndex, 1, rowIndex, 13);
         dataRange.cellStyle.fontSize = 9;
@@ -436,6 +484,9 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
         sheet.getRangeByName('K$rowIndex').cellStyle.hAlign = HAlignType.left;
         sheet.getRangeByName('L$rowIndex').cellStyle.hAlign = HAlignType.left;
         sheet.getRangeByName('M$rowIndex').cellStyle.hAlign = HAlignType.left;
+        if (_isPusat) {
+          sheet.getRangeByName('N$rowIndex').cellStyle.hAlign = HAlignType.left;
+        }
 
         if (rowIndex % 2 == 0) {
           dataRange.cellStyle.backColor = '#F8F9FA';
@@ -1367,9 +1418,9 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
                     ),
                     GridColumn(
                       columnName: 'category',
-                      width: _columnWidths['category'] ?? 120,
-                      minimumWidth: 110,
-                      maximumWidth: 150,
+                      width: _columnWidths['category'] ?? 130,
+                      minimumWidth: 130,
+                      maximumWidth: 99999999,
                       label: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         alignment: Alignment.center,
@@ -1401,6 +1452,25 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
                         ),
                       ),
                     ),
+                    if(_isPusat)
+                      GridColumn(
+                        columnName: 'Cabang',
+                        width: _columnWidths['cabang'] ?? 120,
+                        minimumWidth: 110,
+                        maximumWidth: 150,
+                        label: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'Cabang',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 10,
+                              color: _textDark,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -1696,6 +1766,7 @@ class SalesItemDataSource extends DataGridSource {
     required NumberFormat currencyFormat,
     required NumberFormat numberFormat,
     required Function(DataGridFilterChangeDetails) onFilterChanged,
+    required bool isPusat,
   }) {
     _currencyFormat = currencyFormat;
     _numberFormat = numberFormat;
@@ -1720,6 +1791,8 @@ class SalesItemDataSource extends DataGridSource {
         DataGridCell<String>(columnName: 'served', value: item.served),
         DataGridCell<String>(columnName: 'category', value: item.category),
         DataGridCell<String>(columnName: 'kasir', value: item.kasir),
+        if (isPusat)
+          DataGridCell<String>(columnName: 'cabang', value: item.cabang),
       ]);
     }).toList();
   }
