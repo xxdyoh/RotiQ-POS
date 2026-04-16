@@ -63,6 +63,7 @@ class _JurnalListScreenState extends State<JurnalListScreen> with SingleTickerPr
   late JurnalDataSource _dataSource;
 
   int _totalFilteredJurnal = 0;
+  double _totalFilteredNilai = 0;
 
   // Animation
   late AnimationController _animationController;
@@ -132,6 +133,7 @@ class _JurnalListScreenState extends State<JurnalListScreen> with SingleTickerPr
       setState(() {
         _jurnalList = jurnalData;
         _totalFilteredJurnal = jurnalData.length;
+        _totalFilteredNilai = jurnalData.fold(0.0, (sum, item) => sum + (item.totalDebet ?? 0));
         _dataSource = JurnalDataSource(
           jurnalList: jurnalData,
           currencyFormat: _currencyFormat,
@@ -162,8 +164,22 @@ class _JurnalListScreenState extends State<JurnalListScreen> with SingleTickerPr
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_dataSource.effectiveRows != null) {
         final filteredRows = _dataSource.effectiveRows!;
+        List<JurnalHeader> filteredData = [];
+
+        for (var row in filteredRows) {
+          final cells = row.getCells();
+          final aksiCell = cells.firstWhere(
+                (cell) => cell.columnName == 'aksi',
+            orElse: () => DataGridCell<JurnalHeader>(columnName: 'aksi', value: null),
+          );
+          if (aksiCell.value != null) {
+            filteredData.add(aksiCell.value as JurnalHeader);
+          }
+        }
+
         setState(() {
-          _totalFilteredJurnal = filteredRows.length;
+          _totalFilteredJurnal = filteredData.length;
+          _totalFilteredNilai = filteredData.fold(0.0, (sum, item) => sum + (item.totalDebet ?? 0));
         });
       }
     });
@@ -1510,15 +1526,41 @@ class _JurnalListScreenState extends State<JurnalListScreen> with SingleTickerPr
                                     ),
                                   ),
                                   Container(
-                                    width: (_columnWidths['tanggal'] ?? 100) + (_columnWidths['keterangan'] ?? 350) + (_columnWidths['nilai'] ?? 140),
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    alignment: Alignment.centerLeft,
+                                    width: _columnWidths['tanggal'] ?? 100,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
                                     child: Text(
-                                      'Periode: ${DateFormat('dd/MM').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}',
+                                      '${DateFormat('dd/MM').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}',
                                       style: GoogleFonts.montserrat(
                                         fontSize: 9,
                                         fontWeight: FontWeight.w500,
                                         color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: _columnWidths['keterangan'] ?? 350,
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      'Total Nilai: ',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: _columnWidths['nilai'] ?? 140,
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      _currencyFormat.format(_totalFilteredNilai),
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: _accentGold,
                                       ),
                                     ),
                                   ),
@@ -1793,12 +1835,15 @@ class JurnalDetailDataSource extends DataGridSource {
       final index = entry.key + 1;
       final item = entry.value;
 
+      // Debug print
+      print('Detail item $index: ${item['jurd_debet']}, ${item['jurd_kredit']}');
+
       return DataGridRow(cells: [
         DataGridCell<int>(columnName: 'no', value: index),
-        DataGridCell<String>(columnName: 'akun', value: item['akun_kode']?.toString() ?? '-'),
-        DataGridCell<String>(columnName: 'nama_akun', value: item['akun_nama']?.toString() ?? '-'),
-        DataGridCell<double>(columnName: 'debet', value: (item['jrd_debet'] ?? 0).toDouble()),
-        DataGridCell<double>(columnName: 'kredit', value: (item['jrd_kredit'] ?? 0).toDouble()),
+        DataGridCell<String>(columnName: 'akun', value: item['jurd_rek_kode']?.toString() ?? '-'),
+        DataGridCell<String>(columnName: 'nama_akun', value: item['rek_nama']?.toString() ?? '-'),
+        DataGridCell<double>(columnName: 'debet', value: (item['jurd_debet'] ?? 0).toDouble()),
+        DataGridCell<double>(columnName: 'kredit', value: (item['jurd_kredit'] ?? 0).toDouble()),
       ]);
     }).toList();
   }
@@ -1809,7 +1854,7 @@ class JurnalDetailDataSource extends DataGridSource {
   late Color _textMedium;
   late Color _accentMint;
   late Color _accentMintSoft;
-  late Color _accentGoldSoft; // Menambahkan field ini
+  late Color _accentGoldSoft;
   late Color _bgSoft;
   late Color _borderSoft;
   late NumberFormat _currencyFormat;

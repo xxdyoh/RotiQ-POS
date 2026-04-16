@@ -37,28 +37,37 @@ class _SalesByInvoiceScreenState extends State<SalesByInvoiceScreen> {
     totalInvoices: 0,
   );
 
+  // Totals untuk footer
+  double _totalAmount = 0;
+  double _totalServiceCharge = 0;
+  double _totalTax = 0;
+  double _totalDiscount = 0;
+  double _totalCash = 0;
+  double _totalCard = 0;
+  double _totalDp = 0;
+  double _totalEdc = 0;
+  double _totalOtherValue = 0;
+  int _totalFilteredInvoices = 0;
+
   final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
   final NumberFormat _numberFormat = NumberFormat('#,##0');
+
+  // Warna
+  final Color _primaryDark = const Color(0xFF2C3E50);
+  final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _bgSoft = const Color(0xFFF8FAFC);
+  final Color _surfaceWhite = Colors.white;
+  final Color _textDark = const Color(0xFF1A202C);
+  final Color _textMedium = const Color(0xFF718096);
+  final Color _borderSoft = const Color(0xFFE2E8F0);
 
   @override
   void initState() {
     super.initState();
     _endDate = DateTime.now();
     _startDate = _endDate!.subtract(const Duration(days: 7));
-    // _loadPromos();
     _loadReportData();
-  }
-
-  Future<void> _loadPromos() async {
-    try {
-      final promos = await SalesInvoiceService.getPromos();
-      setState(() {
-        _allPromos = promos;
-        _selectedPromos = List.from(promos);
-      });
-    } catch (e) {
-      print('Error loading promos: $e');
-    }
   }
 
   Future<void> _loadReportData() async {
@@ -78,8 +87,12 @@ class _SalesByInvoiceScreenState extends State<SalesByInvoiceScreen> {
       setState(() {
         _invoices = data.map((json) => SalesInvoice.fromJson(json)).toList();
         _paymentSummary = PaymentSummary.fromJson(response['summary'] ?? {});
+
+        // Hitung semua total
+        _calculateTotals(_invoices);
+
         _dataSource = InvoiceDataSource(
-          invoices: _invoices, // Mengirim invoices yang sudah difilter
+          invoices: _invoices,
           currencyFormat: _currencyFormat,
           numberFormat: _numberFormat,
           onTap: _showInvoiceDetailBottomSheet,
@@ -92,6 +105,19 @@ class _SalesByInvoiceScreenState extends State<SalesByInvoiceScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  void _calculateTotals(List<SalesInvoice> invoices) {
+    _totalFilteredInvoices = invoices.length;
+    _totalAmount = invoices.fold(0.0, (sum, inv) => sum + inv.amount);
+    _totalServiceCharge = invoices.fold(0.0, (sum, inv) => sum + inv.serviceCharge);
+    _totalTax = invoices.fold(0.0, (sum, inv) => sum + inv.tax);
+    _totalDiscount = invoices.fold(0.0, (sum, inv) => sum + inv.discount);
+    _totalCash = invoices.fold(0.0, (sum, inv) => sum + inv.cash);
+    _totalCard = invoices.fold(0.0, (sum, inv) => sum + inv.card);
+    _totalDp = invoices.fold(0.0, (sum, inv) => sum + inv.dp);
+    _totalEdc = invoices.fold(0.0, (sum, inv) => sum + inv.edc);
+    _totalOtherValue = invoices.fold(0.0, (sum, inv) => sum + inv.otherValue);
   }
 
   void _showInvoiceDetailBottomSheet(SalesInvoice invoice) {
@@ -419,33 +445,6 @@ class _SalesByInvoiceScreenState extends State<SalesByInvoiceScreen> {
     );
   }
 
-  Widget _buildPaymentRow(String label, double amount, {bool isTotal = false}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.montserrat(
-              fontSize: isTotal ? 13 : 11,
-              fontWeight: isTotal ? FontWeight.w700 : FontWeight.normal,
-              color: isTotal ? const Color(0xFF2C3E50) : Colors.grey.shade700,
-            ),
-          ),
-          Text(
-            _currencyFormat.format(amount),
-            style: GoogleFonts.montserrat(
-              fontSize: isTotal ? 13 : 11,
-              fontWeight: isTotal ? FontWeight.w800 : FontWeight.w600,
-              color: isTotal ? const Color(0xFFF6A918) : Colors.black87,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showSnackbar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -522,480 +521,586 @@ class _SalesByInvoiceScreenState extends State<SalesByInvoiceScreen> {
     }
   }
 
-  String _formatCurrency(dynamic amount) {
-    final num value = amount is int ? amount : (amount ?? 0);
-    return _currencyFormat.format(value);
-  }
-
   @override
   Widget build(BuildContext context) {
+    final isTablet = MediaQuery.of(context).size.width >= 600;
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return BaseLayout(
       title: 'Sales by Invoice',
       showBackButton: false,
       showSidebar: true,
       isFormScreen: false,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isTablet = constraints.maxWidth >= 600;
-
-          return Column(
-            children: [
-              // Filter Section - Satu baris dengan tanggal dan tombol load
-              Container(
-                margin: EdgeInsets.all(isTablet ? 12 : 10),
-                padding: EdgeInsets.all(isTablet ? 14 : 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
-                      blurRadius: 3,
-                      offset: const Offset(0, 1),
+      child: Container(
+        color: _bgSoft,
+        child: Column(
+          children: [
+            // Filter Section
+            Container(
+              margin: EdgeInsets.all(isTablet ? 12 : 10),
+              padding: EdgeInsets.all(isTablet ? 14 : 12),
+              decoration: BoxDecoration(
+                color: _surfaceWhite,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _borderSoft),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: _buildDateField(
+                      label: 'Dari Tanggal',
+                      date: _startDate,
+                      onTap: () => _selectStartDate(context),
                     ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    // Dari Tanggal
-                    Expanded(
-                      flex: 2,
-                      child: _buildDateField(
-                        label: 'Dari Tanggal',
-                        date: _startDate,
-                        onTap: () => _selectStartDate(context),
-                      ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: _buildDateField(
+                      label: 'Sampai Tanggal',
+                      date: _endDate,
+                      onTap: () => _selectEndDate(context),
                     ),
-                    const SizedBox(width: 8),
-
-                    // Sampai Tanggal
-                    Expanded(
-                      flex: 2,
-                      child: _buildDateField(
-                        label: 'Sampai Tanggal',
-                        date: _endDate,
-                        onTap: () => _selectEndDate(context),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-
-                    // Tombol Load
-                    Expanded(
-                      flex: 1,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 13), // Untuk menyamakan tinggi dengan label tanggal
-                          Container(
-                            height: 36,
-                            child: ElevatedButton.icon(
-                              onPressed: _isLoading ? null : _loadReportData,
-                              icon: _isLoading
-                                  ? SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white
-                                ),
-                              )
-                                  : Icon(Icons.refresh, size: 14, color: Colors.white),
-                              label: Text(
-                                'Load',
-                                style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white
-                                ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 13),
+                        Container(
+                          height: 36,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [_accentGold, _accentGold.withOpacity(0.8)],
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: _isLoading ? null : _loadReportData,
+                            icon: _isLoading
+                                ? SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white
                               ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFF6A918),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(6)
-                                ),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                                minimumSize: const Size(70, 36),
+                            )
+                                : Icon(Icons.refresh, size: 14, color: Colors.white),
+                            label: Text(
+                              'Load',
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white
                               ),
                             ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.white,
+                              shadowColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6)
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                            ),
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Data Grid
+            Expanded(
+              child: _isLoading
+                  ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(
+                        color: _accentGold,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Memuat data invoice...',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 11,
+                        color: _textMedium,
                       ),
                     ),
                   ],
                 ),
-              ),
-
-              // Hapus bagian Promo Filter Panel (_showPromoFilter dan _buildPromoFilterPanel)
-
-              // Data Grid
-              Expanded(
-                child: _isLoading
-                    ? Center(
-                  child: CircularProgressIndicator(color: const Color(0xFFF6A918)),
-                )
-                    : _invoices.isEmpty
-                    ? Center(
+              )
+                  : _invoices.isEmpty
+                  ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 70,
+                      height: 70,
+                      decoration: BoxDecoration(
+                        color: _bgSoft,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.receipt_long_outlined,
+                        size: 35,
+                        color: _textMedium,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Tidak ada data invoice',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: _textDark,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+                  : Padding(
+                padding: EdgeInsets.all(isTablet ? 12 : 10),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _surfaceWhite,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _borderSoft),
+                  ),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.receipt_long, size: 48, color: Colors.grey.shade400),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Tidak ada data invoice',
-                        style: GoogleFonts.montserrat(
-                            color: Colors.grey.shade500,
-                            fontSize: 13
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(12),
+                            topRight: Radius.circular(12),
+                          ),
+                          child: SfDataGrid(
+                            source: _dataSource,
+                            allowColumnsResizing: true,
+                            columnResizeMode: ColumnResizeMode.onResize,
+                            columnWidthMode: ColumnWidthMode.fill,
+                            headerRowHeight: 32,
+                            rowHeight: 30,
+                            allowSorting: true,
+                            allowFiltering: true,
+                            gridLinesVisibility: GridLinesVisibility.both,
+                            headerGridLinesVisibility: GridLinesVisibility.both,
+                            selectionMode: SelectionMode.none,
+                            onCellTap: (details) {
+                              if (details.rowColumnIndex.rowIndex > 0) {
+                                final dataRowIndex = details.rowColumnIndex.rowIndex - 1;
+                                if (dataRowIndex >= 0 && dataRowIndex < _invoices.length) {
+                                  final invoice = _invoices[dataRowIndex];
+                                  _showInvoiceDetailBottomSheet(invoice);
+                                }
+                              }
+                            },
+                            columns: [
+                              GridColumn(
+                                columnName: 'no',
+                                width: 50,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.center,
+                                  child: Text('No', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Nomor',
+                                width: 130,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerLeft,
+                                  child: Text('Nomor', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Tanggal',
+                                width: 130,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerLeft,
+                                  child: Text('Tanggal', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Meja',
+                                width: 60,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.center,
+                                  child: Text('Meja', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Customer',
+                                width: 120,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerLeft,
+                                  child: Text('Customer', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Duration',
+                                width: 70,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.center,
+                                  child: Text('Durasi', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Amount',
+                                width: 110,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerRight,
+                                  child: Text('Amount', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'SeviceCharge',
+                                width: 90,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerRight,
+                                  child: Text('Service', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Tax',
+                                width: 80,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerRight,
+                                  child: Text('Tax', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Discount',
+                                width: 80,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerRight,
+                                  child: Text('Disc', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Cash',
+                                width: 90,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerRight,
+                                  child: Text('Cash', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Card',
+                                width: 80,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerRight,
+                                  child: Text('Card', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'DP',
+                                width: 80,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerRight,
+                                  child: Text('DP', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'EDC',
+                                width: 80,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerRight,
+                                  child: Text('EDC', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Other_Value',
+                                width: 90,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerRight,
+                                  child: Text('Other', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Other',
+                                width: 80,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerLeft,
+                                  child: Text('Jenis Other', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'StatusOrder',
+                                width: 70,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.center,
+                                  child: Text('Status', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Promo',
+                                width: 100,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerLeft,
+                                  child: Text('Promo', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                              GridColumn(
+                                columnName: 'Kasir',
+                                width: 100,
+                                label: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerLeft,
+                                  child: Text('Kasir', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                )
-                    : Container(
-                  margin: EdgeInsets.all(isTablet ? 12 : 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: SfDataGrid(
-                      source: _dataSource,
-                      allowColumnsResizing: true,
-                      columnResizeMode: ColumnResizeMode.onResize,
-                      columnWidthMode: ColumnWidthMode.auto,
-                      headerRowHeight: 32,
-                      rowHeight: 30,
-                      allowSorting: true,
-                      allowFiltering: true,
-                      gridLinesVisibility: GridLinesVisibility.both,
-                      headerGridLinesVisibility: GridLinesVisibility.both,
-                      selectionMode: SelectionMode.single,
-
-                      onCellTap: (details) {
-                        // Periksa apakah yang di-tap adalah baris data (bukan header)
-                        if (details.rowColumnIndex.rowIndex > 0) {
-                          // Di SfDataGrid, rowIndex 1 = header, rowIndex 2 = data pertama
-                          // Jadi untuk mendapatkan index ke-0 di list, kita kurangi dengan 2
-                          final dataRowIndex = details.rowColumnIndex.rowIndex - 2;
-
-                          // Pastikan index valid
-                          if (dataRowIndex >= 0 && dataRowIndex < _invoices.length) {
-                            final invoice = _invoices[dataRowIndex];
-                            _showInvoiceDetailBottomSheet(invoice);
-                          }
-                        }
-                      },
-
-                      stackedHeaderRows: [
-                        StackedHeaderRow(
-                          cells: [
-                            StackedHeaderCell(
-                              columnNames: [
-                                'no', 'Nomor', 'Tanggal', 'Meja', 'Customer', 'Duration',
-                                'Amount', 'SeviceCharge', 'Tax', 'Discount', 'Cash', 'Card',
-                                'DP', 'EDC', 'Other_Value', 'Other', 'StatusOrder', 'Promo', 'Kasir'
-                              ],
-                              child: Container(
-                                height: 12,
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 4),
+                      // Custom Footer dengan total semua kolom nominal
+                      Container(
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: _bgSoft,
+                          border: Border(
+                            top: BorderSide(color: _borderSoft),
+                          ),
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(12),
+                            bottomRight: Radius.circular(12),
+                          ),
+                        ),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              // No
+                              Container(
+                                width: 50,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  'Total',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: _textDark,
+                                  ),
+                                ),
+                              ),
+                              // Nomor - Info transaksi
+                              Container(
+                                width: 130,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.centerLeft,
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
-                                    Icon(Icons.filter_list, size: 10, color: Colors.grey[500]),
-                                    const SizedBox(width: 2),
-                                    Icon(Icons.unfold_more, size: 10, color: Colors.grey[500]),
+                                    Icon(Icons.receipt, size: 11, color: _primaryDark),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '$_totalFilteredInvoices Invoice',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: _primaryDark,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ],
-
-                      tableSummaryRows: [
-                        GridTableSummaryRow(
-                          showSummaryInRow: false,
-                          title: 'TOTAL',
-                          titleColumnSpan: 6,
-                          columns: [
-                            GridSummaryColumn(
-                              name: 'TotalInvoice',
-                              columnName: 'Amount',
-                              summaryType: GridSummaryType.sum,
-                            ),
-                          ],
-                          position: GridTableSummaryRowPosition.bottom,
-                        ),
-                      ],
-
-                      columns: [
-                        GridColumn(
-                          columnName: 'no',
-                          minimumWidth: 50,
-                          maximumWidth: 60,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'No',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
+                              // Tanggal - Periode
+                              Container(
+                                width: 130,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '${DateFormat('dd/MM').format(_startDate!)} - ${DateFormat('dd/MM/yy').format(_endDate!)}',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w500,
+                                    color: _textDark,
+                                  ),
+                                ),
+                              ),
+                              // Meja
+                              Container(width: 60),
+                              // Customer
+                              Container(width: 120),
+                              // Duration
+                              Container(width: 70),
+                              // Amount
+                              Container(
+                                width: 110,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _currencyFormat.format(_totalAmount),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: _accentGold,
+                                  ),
+                                ),
+                              ),
+                              // Service Charge
+                              Container(
+                                width: 90,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _currencyFormat.format(_totalServiceCharge),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textDark,
+                                  ),
+                                ),
+                              ),
+                              // Tax
+                              Container(
+                                width: 80,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _currencyFormat.format(_totalTax),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textDark,
+                                  ),
+                                ),
+                              ),
+                              // Discount
+                              Container(
+                                width: 80,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _currencyFormat.format(_totalDiscount),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.red.shade600,
+                                  ),
+                                ),
+                              ),
+                              // Cash
+                              Container(
+                                width: 90,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _currencyFormat.format(_totalCash),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: _accentMint,
+                                  ),
+                                ),
+                              ),
+                              // Card
+                              Container(
+                                width: 80,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _currencyFormat.format(_totalCard),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: _accentMint,
+                                  ),
+                                ),
+                              ),
+                              // DP
+                              Container(
+                                width: 80,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _currencyFormat.format(_totalDp),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: _accentMint,
+                                  ),
+                                ),
+                              ),
+                              // EDC
+                              Container(
+                                width: 80,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _currencyFormat.format(_totalEdc),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: _accentMint,
+                                  ),
+                                ),
+                              ),
+                              // Other Value
+                              Container(
+                                width: 90,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _currencyFormat.format(_totalOtherValue),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: _accentMint,
+                                  ),
+                                ),
+                              ),
+                              // Other (jenis)
+                              Container(width: 80),
+                              // Status
+                              Container(width: 70),
+                              // Promo
+                              Container(width: 100),
+                              // Kasir
+                              Container(width: 100),
+                            ],
                           ),
                         ),
-                        GridColumn(
-                          columnName: 'Nomor',
-                          minimumWidth: 120,
-                          maximumWidth: 140,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Nomor',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Tanggal',
-                          minimumWidth: 130,
-                          maximumWidth: 150,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Tanggal',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Meja',
-                          minimumWidth: 60,
-                          maximumWidth: 80,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Meja',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Customer',
-                          minimumWidth: 120,
-                          maximumWidth: 150,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Customer',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Duration',
-                          minimumWidth: 70,
-                          maximumWidth: 90,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Duration',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Amount',
-                          minimumWidth: 100,
-                          maximumWidth: 120,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Amount',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'SeviceCharge',
-                          minimumWidth: 100,
-                          maximumWidth: 120,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Service Charge',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Tax',
-                          minimumWidth: 70,
-                          maximumWidth: 90,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Tax',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Discount',
-                          minimumWidth: 80,
-                          maximumWidth: 100,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Discount',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Cash',
-                          minimumWidth: 80,
-                          maximumWidth: 100,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Cash',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Card',
-                          minimumWidth: 80,
-                          maximumWidth: 100,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Card',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'DP',
-                          minimumWidth: 70,
-                          maximumWidth: 90,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'DP',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'EDC',
-                          minimumWidth: 70,
-                          maximumWidth: 90,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'EDC',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Other_Value',
-                          minimumWidth: 80,
-                          maximumWidth: 100,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Other Value',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Other',
-                          minimumWidth: 80,
-                          maximumWidth: 100,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Other',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'StatusOrder',
-                          minimumWidth: 80,
-                          maximumWidth: 100,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Status',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Promo',
-                          minimumWidth: 100,
-                          maximumWidth: 120,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Promo',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        GridColumn(
-                          columnName: 'Kasir',
-                          minimumWidth: 100,
-                          maximumWidth: 120,
-                          label: Container(
-                            padding: const EdgeInsets.only(left: 4, top: 4),
-                            alignment: Alignment.centerLeft,
-                            child: const Text(
-                              'Kasir',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-
-              // Bottom Total Bar
-              // _buildBottomTotalBar(isTablet),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1012,29 +1117,30 @@ class _SalesByInvoiceScreenState extends State<SalesByInvoiceScreen> {
           label,
           style: GoogleFonts.montserrat(
             fontSize: 11,
-            color: Colors.grey.shade600,
+            color: _textMedium,
             fontWeight: FontWeight.w500,
           ),
         ),
         const SizedBox(height: 4),
         InkWell(
           onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
           child: Container(
             height: 36,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
+              color: _bgSoft,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.grey.shade300),
+              border: Border.all(color: _borderSoft),
             ),
             child: Row(
               children: [
-                Icon(Icons.calendar_today, size: 14, color: const Color(0xFFF6A918)),
+                Icon(Icons.calendar_today, size: 14, color: _accentGold),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     date != null ? DateFormat('dd/MM/yy').format(date) : 'Pilih',
-                    style: const TextStyle(fontSize: 12),
+                    style: GoogleFonts.montserrat(fontSize: 11, color: _textDark),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -1043,261 +1149,6 @@ class _SalesByInvoiceScreenState extends State<SalesByInvoiceScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildPromoFilterButton() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Promo',
-          style: GoogleFonts.montserrat(
-            fontSize: 11,
-            color: Colors.grey.shade600,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        InkWell(
-          onTap: () => setState(() => _showPromoFilter = !_showPromoFilter),
-          child: Container(
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.local_offer, size: 14, color: Colors.grey.shade600),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    '${_selectedPromos.length} dipilih',
-                    style: const TextStyle(fontSize: 12),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Icon(
-                  _showPromoFilter ? Icons.expand_less : Icons.expand_more,
-                  size: 14,
-                  color: Colors.grey.shade600,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLoadButton() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 13),
-        Container(
-          height: 36,
-          child: ElevatedButton.icon(
-            onPressed: _isLoading ? null : _loadReportData,
-            icon: _isLoading
-                ? SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-            )
-                : Icon(Icons.refresh, size: 14, color: Colors.white),
-            label: Text(
-              'Load',
-              style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF6A918),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-              minimumSize: const Size(70, 36),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPromoFilterPanel(bool isTablet) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: isTablet ? 12 : 10, vertical: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 3,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Pilih Promo',
-                style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-              Row(
-                children: [
-                  TextButton(
-                    onPressed: () => setState(() => _selectedPromos = List.from(_allPromos)),
-                    child: Text('Pilih Semua', style: GoogleFonts.montserrat(fontSize: 10)),
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() => _selectedPromos = []),
-                    child: Text('Hapus', style: GoogleFonts.montserrat(fontSize: 10)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _allPromos.map((promo) {
-              final isSelected = _selectedPromos.contains(promo);
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(6),
-                  onTap: () {
-                    setState(() {
-                      if (isSelected) {
-                        _selectedPromos.remove(promo);
-                      } else {
-                        _selectedPromos.add(promo);
-                      }
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isSelected ? const Color(0xFFF6A918) : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: isSelected ? const Color(0xFFF6A918) : Colors.grey.shade300,
-                      ),
-                    ),
-                    child: Text(
-                      promo,
-                      style: GoogleFonts.montserrat(
-                        fontSize: 10,
-                        color: isSelected ? Colors.white : Colors.black87,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: 34,
-            child: ElevatedButton(
-              onPressed: () {
-                _loadReportData();
-                setState(() => _showPromoFilter = false);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF6A918),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-              ),
-              child: Text(
-                'Terapkan Filter',
-                style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomTotalBar(bool isTablet) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Total Invoice',
-                    style: GoogleFonts.montserrat(fontSize: 11, color: Colors.grey.shade600),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${_invoices.length} invoices',
-                    style: GoogleFonts.montserrat(fontSize: 9, color: Colors.grey),
-                  ),
-                ],
-              ),
-              Text(
-                _currencyFormat.format(_paymentSummary.totalAmount),
-                style: GoogleFonts.montserrat(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFFF6A918),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                if (_paymentSummary.totalCash > 0) _buildPaymentSummaryItem('Cash', _paymentSummary.totalCash),
-                if (_paymentSummary.totalCard > 0) _buildPaymentSummaryItem('Card', _paymentSummary.totalCard),
-                if (_paymentSummary.totalEdc > 0) _buildPaymentSummaryItem('EDC', _paymentSummary.totalEdc),
-                if (_paymentSummary.totalDp > 0) _buildPaymentSummaryItem('DP', _paymentSummary.totalDp),
-                if (_paymentSummary.totalOther > 0) _buildPaymentSummaryItem('Other', _paymentSummary.totalOther),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPaymentSummaryItem(String label, double amount) {
-    return Container(
-      margin: const EdgeInsets.only(right: 12),
-      child: Column(
-        children: [
-          Text(label, style: GoogleFonts.montserrat(fontSize: 9, color: Colors.grey.shade600)),
-          Text(
-            _currencyFormat.format(amount),
-            style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFFF6A918)),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1312,12 +1163,10 @@ class InvoiceDataSource extends DataGridSource {
     _currencyFormat = currencyFormat;
     _numberFormat = numberFormat;
     _onTap = onTap;
-    _invoices = invoices; // Simpan referensi invoices
-
-    _totalAmount = invoices.fold<double>(0, (sum, inv) => sum + inv.amount);
+    _invoices = invoices;
 
     _data = invoices.asMap().entries.map((entry) {
-      final index = entry.key + 1; // Nomor urut dimulai dari 1
+      final index = entry.key + 1;
       final inv = entry.value;
 
       return DataGridRow(cells: [
@@ -1357,52 +1206,10 @@ class InvoiceDataSource extends DataGridSource {
   late NumberFormat _currencyFormat;
   late NumberFormat _numberFormat;
   late Function(SalesInvoice) _onTap;
-  late double _totalAmount;
-  late List<SalesInvoice> _invoices; // Simpan referensi
+  late List<SalesInvoice> _invoices;
 
   @override
   List<DataGridRow> get rows => _data;
-
-  @override
-  Widget? buildTableSummaryCellWidget(
-      GridTableSummaryRow summaryRow,
-      GridSummaryColumn? summaryColumn,
-      RowColumnIndex rowColumnIndex,
-      String summaryValue) {
-
-    if (summaryColumn?.name == 'TotalInvoice') {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        alignment: Alignment.centerRight,
-        child: Text(
-          _currencyFormat.format(_totalAmount),
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 10,
-            color: Color(0xFFF6A918),
-          ),
-        ),
-      );
-    } else if (summaryColumn == null && summaryRow.title != null && summaryRow.title!.isNotEmpty) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        alignment: Alignment.centerLeft,
-        child: Text(
-          summaryRow.title!,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 10,
-            color: Color(0xFFF6A918),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: Text(summaryValue),
-    );
-  }
 
   @override
   DataGridRowAdapter buildRow(DataGridRow row) {
@@ -1418,6 +1225,14 @@ class InvoiceDataSource extends DataGridSource {
             cell.columnName == 'EDC' ||
             cell.columnName == 'Other_Value';
 
+        // Warna untuk discount (merah)
+        Color textColor = const Color(0xFF1A202C);
+        if (cell.columnName == 'Discount') {
+          textColor = Colors.red.shade600;
+        } else if (isAmount) {
+          textColor = const Color(0xFFF6A918);
+        }
+
         return Container(
           alignment: _getAlignment(cell.columnName),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -1429,9 +1244,7 @@ class InvoiceDataSource extends DataGridSource {
             style: GoogleFonts.montserrat(
               fontSize: 10,
               fontWeight: _getFontWeight(cell.columnName),
-              color: isAmount
-                  ? const Color(0xFFF6A918)
-                  : Colors.black87,
+              color: textColor,
             ),
           ),
         );
@@ -1451,6 +1264,9 @@ class InvoiceDataSource extends DataGridSource {
         columnName == 'Other_Value') {
       return Alignment.centerRight;
     }
+    if (columnName == 'no' || columnName == 'Meja' || columnName == 'Duration' || columnName == 'StatusOrder') {
+      return Alignment.center;
+    }
     return Alignment.centerLeft;
   }
 
@@ -1465,6 +1281,9 @@ class InvoiceDataSource extends DataGridSource {
         columnName == 'EDC' ||
         columnName == 'Other_Value') {
       return TextAlign.right;
+    }
+    if (columnName == 'no' || columnName == 'Meja' || columnName == 'Duration' || columnName == 'StatusOrder') {
+      return TextAlign.center;
     }
     return TextAlign.left;
   }

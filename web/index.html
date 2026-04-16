@@ -60,14 +60,137 @@
   </script>
 </head>
 <body>
-<!-- UNTUK DEBUG: Gunakan script src biasa -->
-<script src="flutter.js" defer></script>
+
+<!--<script>-->
+<!--  // 🔥 VERSION: GANTI ANGKA INI SETIAP KALI DEPLOY!-->
+<!--  const APP_VERSION = '20260413_001';-->
+
+<!--  // Auto-reload ketika ada versi baru-->
+<!--  (function() {-->
+<!--    console.log('📱 App Version:', APP_VERSION);-->
+
+<!--    async function checkVersion() {-->
+<!--      try {-->
+<!--        const response = await fetch('/version.json?t=' + Date.now());-->
+<!--        const data = await response.json();-->
+
+<!--        if (data.version && data.version !== APP_VERSION) {-->
+<!--          console.log('🔄 New version detected! Current:', APP_VERSION, 'New:', data.version);-->
+<!--          console.log('🧹 Clearing cache and reloading...');-->
+
+<!--          // Clear semua cache storage-->
+<!--          if ('caches' in window) {-->
+<!--            const keys = await caches.keys();-->
+<!--            await Promise.all(keys.map(key => caches.delete(key)));-->
+<!--          }-->
+
+<!--          // Clear session storage-->
+<!--          sessionStorage.clear();-->
+
+<!--          // Reload halaman dengan force refresh-->
+<!--          setTimeout(() => {-->
+<!--            window.location.reload(true);-->
+<!--          }, 500);-->
+<!--        } else {-->
+<!--          console.log('✅ App is up to date');-->
+<!--        }-->
+<!--      } catch (e) {-->
+<!--        console.log('⚠️ Version check failed (server might not have version.json yet)');-->
+<!--      }-->
+<!--    }-->
+
+<!--    // Cek versi setiap 3 menit-->
+<!--    setInterval(checkVersion, 180000);-->
+
+<!--    // Cek juga saat halaman focus lagi-->
+<!--    window.addEventListener('focus', checkVersion);-->
+
+<!--    // Cek pertama kali setelah 2 detik (biar app keburu load)-->
+<!--    setTimeout(checkVersion, 2000);-->
+<!--  })();-->
+<!--</script>-->
+
+<script>
+  const APP_VERSION = '20241215_001';
+
+  (function() {
+    // Deteksi apakah sedang di local development
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' ||
+                        hostname === '127.0.0.1' ||
+                        hostname.startsWith('192.168.') ||
+                        hostname.startsWith('10.0.') ||
+                        hostname.startsWith('172.');
+
+    // Jika di local, matikan auto-reload
+    if (isLocalhost) {
+      console.log('🏠 Local development - Auto-reload disabled');
+      console.log('📱 Current version:', APP_VERSION);
+      return;
+    }
+
+    console.log('🌐 Production mode - Auto-reload enabled');
+    console.log('📱 App Version:', APP_VERSION);
+
+    let isChecking = false;
+
+    async function checkVersion() {
+      if (isChecking) return;
+      isChecking = true;
+
+      try {
+        const response = await fetch('/version.json?t=' + Date.now());
+
+        if (!response.ok) {
+          console.log('⚠️ version.json not found (status:', response.status, ')');
+          return;
+        }
+
+        const data = await response.json();
+
+        if (data.version && data.version !== APP_VERSION) {
+          console.log('🔄 New version detected! Current:', APP_VERSION, 'New:', data.version);
+          console.log('🧹 Clearing cache...');
+
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(key => caches.delete(key)));
+          }
+
+          sessionStorage.clear();
+
+          setTimeout(() => {
+            window.location.reload(true);
+          }, 500);
+        } else {
+          console.log('✅ Version', APP_VERSION, 'is up to date');
+        }
+      } catch (e) {
+        console.log('⚠️ Version check failed:', e.message);
+      } finally {
+        isChecking = false;
+      }
+    }
+
+    // Cek setiap 3 menit
+    setInterval(checkVersion, 180000);
+
+    // Cek saat tab focus
+    window.addEventListener('focus', checkVersion);
+
+    // Cek pertama kali setelah 3 detik
+    setTimeout(checkVersion, 3000);
+  })();
+</script>
+
+<script src="flutter.js?v=20241215_001" defer></script>
 
 <script>
   window.addEventListener('load', function(ev) {
     if (typeof _flutter !== 'undefined' && _flutter.loader) {
       _flutter.loader.loadEntrypoint({
-        entrypointUrl: 'main.dart.js',
+        // 🔥 GANTI ?v=XXXX SETIAP DEPLOY (sama dengan yang di atas)
+        entrypointUrl: 'main.dart.js?v=20260413_001',
         onEntrypointLoaded: async function(engineInitializer) {
           console.log('Initializing engine...');
           const appRunner = await engineInitializer.initializeEngine();

@@ -836,7 +836,7 @@ class _ItemListScreenState extends State<ItemListScreen> {
                                   style: GoogleFonts.montserrat(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
-                                    color: _accentSky,
+                                    color: _primaryDark,
                                   ),
                                 ),
                               ),
@@ -850,7 +850,7 @@ class _ItemListScreenState extends State<ItemListScreen> {
                                     style: GoogleFonts.montserrat(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w700,
-                                      color: _accentGold,
+                                      color: _primaryDark,
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),

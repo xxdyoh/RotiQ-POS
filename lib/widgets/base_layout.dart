@@ -6,6 +6,7 @@ import 'dart:async';
 import '../utils/sidebar_manager.dart';
 import '../services/session_manager.dart';
 import '../models/user.dart';
+import '../models/cabang_model.dart';
 import '../routes/app_routes.dart';
 import 'sidebar_widget.dart';
 import '../services/fullscreen_service.dart';
@@ -39,6 +40,8 @@ class _BaseLayoutState extends State<BaseLayout> {
 
   final Color _primaryDark = const Color(0xFF2C3E50);
   final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _accentSky = const Color(0xFF4CC9F0);
   final Color _bgLight = const Color(0xFFFAFAFA);
   final Color _bgCard = Colors.white;
   final Color _borderColor = const Color(0xFFE2E8F0);
@@ -162,6 +165,8 @@ class _BaseLayoutState extends State<BaseLayout> {
   }
 
   Widget _buildDesktopHeader(BuildContext context, User? user) {
+    final cabang = SessionManager.getCurrentCabang();
+
     return ValueListenableBuilder<bool>(
       valueListenable: SidebarManager.sidebarVisible,
       builder: (context, isSidebarVisible, child) {
@@ -179,6 +184,7 @@ class _BaseLayoutState extends State<BaseLayout> {
           ),
           child: Row(
             children: [
+              // Menu toggle button
               InkWell(
                 onTap: SidebarManager.toggle,
                 borderRadius: BorderRadius.circular(6),
@@ -197,6 +203,8 @@ class _BaseLayoutState extends State<BaseLayout> {
                   ),
                 ),
               ),
+
+              // Back button
               if (widget.showBackButton && !_isMainScreen) ...[
                 const SizedBox(width: 8),
                 InkWell(
@@ -218,10 +226,14 @@ class _BaseLayoutState extends State<BaseLayout> {
                   ),
                 ),
               ],
+
               const SizedBox(width: 12),
+
+              // Title and info section
               Expanded(
                 child: Row(
                   children: [
+                    // Page title
                     Text(
                       widget.title,
                       style: GoogleFonts.montserrat(
@@ -230,6 +242,51 @@ class _BaseLayoutState extends State<BaseLayout> {
                         color: const Color(0xFF1A202C),
                       ),
                     ),
+
+                    // Cabang info
+                    if (cabang != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 4,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _getCabangColor(cabang.jenis).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: _getCabangColor(cabang.jenis).withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _getCabangIcon(cabang.jenis),
+                              size: 12,
+                              color: _getCabangColor(cabang.jenis),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${cabang.kode} - ${cabang.nama}',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: _getCabangColor(cabang.jenis),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    // User greeting
                     if (!widget.isFormScreen && user != null) ...[
                       const SizedBox(width: 8),
                       Container(
@@ -249,7 +306,8 @@ class _BaseLayoutState extends State<BaseLayout> {
                           border: Border.all(color: _accentGold.withOpacity(0.2)),
                         ),
                         child: Text(
-                          '${_getGreeting()}, ${user.nmuser}',
+                          // '${_getGreeting()}, ${user.nmuser}',
+                          '${user.nmuser}',
                           style: GoogleFonts.montserrat(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
@@ -261,6 +319,8 @@ class _BaseLayoutState extends State<BaseLayout> {
                   ],
                 ),
               ),
+
+              // Time and date
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
@@ -293,6 +353,8 @@ class _BaseLayoutState extends State<BaseLayout> {
                   ],
                 ),
               ),
+
+              // Custom actions
               if (widget.actions != null) ...[
                 const SizedBox(width: 8),
                 ...widget.actions!,
@@ -305,6 +367,8 @@ class _BaseLayoutState extends State<BaseLayout> {
   }
 
   Widget _buildMobileLayout(BuildContext context) {
+    final cabang = SessionManager.getCurrentCabang();
+
     return Scaffold(
       backgroundColor: _bgLight,
       appBar: AppBar(
@@ -317,13 +381,41 @@ class _BaseLayoutState extends State<BaseLayout> {
           color: _primaryDark,
         )
             : null,
-        title: Text(
-          widget.title,
-          style: GoogleFonts.montserrat(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: const Color(0xFF1A202C),
-          ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Page title
+            Text(
+              widget.title,
+              style: GoogleFonts.montserrat(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1A202C),
+              ),
+            ),
+            // Cabang info di bawah title
+            if (cabang != null) ...[
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Icon(
+                    _getCabangIcon(cabang.jenis),
+                    size: 10,
+                    color: _getCabangColor(cabang.jenis),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${cabang.kode} - ${cabang.nama}',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: _getCabangColor(cabang.jenis),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
         actions: widget.actions,
         systemOverlayStyle: SystemUiOverlayStyle.dark,
@@ -337,5 +429,31 @@ class _BaseLayoutState extends State<BaseLayout> {
     if (hour < 12) return 'Pagi';
     if (hour < 17) return 'Siang';
     return 'Malam';
+  }
+
+  Color _getCabangColor(String jenis) {
+    switch (jenis.toLowerCase()) {
+      case 'outlet':
+        return _accentGold;
+      case 'tenant':
+        return _accentSky;
+      case 'pusat':
+        return _accentMint;
+      default:
+        return _primaryDark;
+    }
+  }
+
+  IconData _getCabangIcon(String jenis) {
+    switch (jenis.toLowerCase()) {
+      case 'outlet':
+        return Icons.storefront_rounded;
+      case 'tenant':
+        return Icons.business_center_rounded;
+      case 'pusat':
+        return Icons.business_rounded;
+      default:
+        return Icons.store_rounded;
+    }
   }
 }

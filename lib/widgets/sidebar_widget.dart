@@ -333,6 +333,12 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         indent: true,
       ),
       _buildMenuItem(
+        icon: Icons.local_shipping_rounded,
+        label: 'Mutasi Out',
+        routeName: AppRoutes.doList,
+        indent: true,
+      ),
+      _buildMenuItem(
         icon: Icons.inventory_rounded,
         label: 'Mutasi In',
         routeName: AppRoutes.stockInList,
@@ -345,6 +351,12 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         indent: true,
       ),
       _buildMenuItem(
+        icon: Icons.assignment_return_outlined,
+        label: 'Return Production',
+        routeName: AppRoutes.returnProduction,
+        indent: true,
+      ),
+      _buildMenuItem(
         icon: Icons.swap_horizontal_circle_outlined,
         label: 'Penerimaan St. Jadi',
         routeName: AppRoutes.penerimaanSetengahJadi,
@@ -354,12 +366,6 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         icon: Icons.payment_rounded,
         label: 'Uang Muka',
         routeName: AppRoutes.uangMukaList,
-        indent: true,
-      ),
-      _buildMenuItem(
-        icon: Icons.assignment_return_outlined,
-        label: 'Return Production',
-        routeName: AppRoutes.returnProduction,
         indent: true,
       ),
       _buildMenuItem(
@@ -384,12 +390,6 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         icon: Icons.inventory_rounded,
         label: 'Serah Terima BJ',
         routeName: AppRoutes.serahTerimaList,
-        indent: true,
-      ),
-      _buildMenuItem(
-        icon: Icons.local_shipping_rounded,
-        label: 'Mutasi Out',
-        routeName: AppRoutes.doList,
         indent: true,
       ),
     ];

@@ -65,6 +65,7 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
   late UangMukaDataSource _dataSource;
 
   int _totalFilteredUangMuka = 0;
+  double _totalFilteredNilai = 0;
 
   // Animation
   late AnimationController _animationController;
@@ -130,6 +131,9 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
       setState(() {
         _uangMukaList = uangMukaData;
         _totalFilteredUangMuka = uangMukaData.length;
+        _totalFilteredNilai = uangMukaData.fold(0.0, (sum, item) {
+          return sum + (double.tryParse(item['um_nilai']?.toString() ?? '0') ?? 0);
+        });
         _dataSource = UangMukaDataSource(
           uangMukaList: uangMukaData,
           onEdit: _openEditUangMuka,
@@ -161,8 +165,24 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_dataSource.effectiveRows != null) {
         final filteredRows = _dataSource.effectiveRows!;
+        List<Map<String, dynamic>> filteredData = [];
+
+        for (var row in filteredRows) {
+          final cells = row.getCells();
+          final aksiCell = cells.firstWhere(
+                (cell) => cell.columnName == 'aksi',
+            orElse: () => DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: null),
+          );
+          if (aksiCell.value != null) {
+            filteredData.add(aksiCell.value as Map<String, dynamic>);
+          }
+        }
+
         setState(() {
-          _totalFilteredUangMuka = filteredRows.length;
+          _totalFilteredUangMuka = filteredData.length;
+          _totalFilteredNilai = filteredData.fold(0.0, (sum, item) {
+            return sum + (double.tryParse(item['um_nilai']?.toString() ?? '0') ?? 0);
+          });
         });
       }
     });
@@ -1051,21 +1071,49 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
                                     ),
                                   ),
                                   Container(
-                                    width: (_columnWidths['tanggal'] ?? 100) +
-                                        (_columnWidths['customer'] ?? 200) +
-                                        (_columnWidths['nilai'] ?? 140) +
-                                        (_columnWidths['jenis_bayar'] ?? 100) +
-                                        (_columnWidths['status'] ?? 100),
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    alignment: Alignment.centerLeft,
+                                    width: _columnWidths['tanggal'] ?? 100,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
                                     child: Text(
-                                      'Periode: ${DateFormat('dd/MM').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}',
+                                      '${DateFormat('dd/MM').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}',
                                       style: GoogleFonts.montserrat(
                                         fontSize: 9,
                                         fontWeight: FontWeight.w500,
                                         color: _textDark,
                                       ),
                                     ),
+                                  ),
+                                  Container(
+                                    width: _columnWidths['customer'] ?? 200,
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      'Total Nilai: ',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: _textDark,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: _columnWidths['nilai'] ?? 140,
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      _currencyFormat.format(_totalFilteredNilai),
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: _accentGold,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: (_columnWidths['jenis_bayar'] ?? 100) + (_columnWidths['status'] ?? 100),
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
+                                    child: const SizedBox(),
                                   ),
                                   Container(
                                     width: _columnWidths['aksi'] ?? 120,
