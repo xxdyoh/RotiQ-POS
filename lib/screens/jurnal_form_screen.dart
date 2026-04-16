@@ -39,6 +39,20 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
 
   String? _nomorJurnal;
 
+  // Colors
+  final Color _primaryDark = const Color(0xFF2C3E50);
+  final Color _primaryLight = const Color(0xFF34495E);
+  final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _accentCoral = const Color(0xFFFF6B6B);
+  final Color _accentSky = const Color(0xFF4CC9F0);
+  final Color _bgSoft = const Color(0xFFF8FAFC);
+  final Color _surfaceWhite = Colors.white;
+  final Color _textDark = const Color(0xFF1A202C);
+  final Color _textMedium = const Color(0xFF718096);
+  final Color _textLight = const Color(0xFFA0AEC0);
+  final Color _borderSoft = const Color(0xFFE2E8F0);
+
   @override
   void initState() {
     super.initState();
@@ -61,7 +75,7 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
         await _loadJurnalDetail();
       }
     } catch (e) {
-      _showErrorSnackbar('Gagal memuat data: ${e.toString()}');
+      _showToast('Gagal memuat data: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() {
         _isLoadingData = false;
@@ -137,7 +151,7 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
         _loadRekeningHeader();
       });
     } catch (e) {
-      _showErrorSnackbar('Gagal memuat detail: ${e.toString()}');
+      _showToast('Gagal memuat detail: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() {
         _isLoading = false;
@@ -159,44 +173,32 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
     return formatter.format(num);
   }
 
-  void _showErrorSnackbar(String message) {
+  void _showToast(String message, {required ToastType type}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.error_outline, color: Colors.white, size: 16),
-            SizedBox(width: 6),
-            Text(
-              message,
-              style: GoogleFonts.montserrat(fontSize: 12),
-            ),
-          ],
+        content: Container(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Icon(
+                type == ToastType.success ? Icons.check_circle_rounded : Icons.error_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message,
+                  style: GoogleFonts.montserrat(fontSize: 11, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: type == ToastType.success ? _accentMint : _accentCoral,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        margin: EdgeInsets.all(12),
-      ),
-    );
-  }
-
-  void _showSuccessSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 16),
-            SizedBox(width: 6),
-            Text(
-              message,
-              style: GoogleFonts.montserrat(fontSize: 12),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        margin: EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        margin: const EdgeInsets.all(12),
       ),
     );
   }
@@ -211,10 +213,11 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
         return Theme(
           data: ThemeData.light().copyWith(
             colorScheme: ColorScheme.light(
-              primary: const Color(0xFFF6A918),
+              primary: _primaryDark,
               onPrimary: Colors.white,
+              surface: _surfaceWhite,
             ),
-            dialogBackgroundColor: Colors.white,
+            dialogBackgroundColor: _surfaceWhite,
           ),
           child: child!,
         );
@@ -287,18 +290,18 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedRekeningHeader == null) {
-      _showErrorSnackbar('Pilih account header!');
+      _showToast('Pilih account header!', type: ToastType.error);
       return;
     }
 
     if (_details.isEmpty) {
-      _showErrorSnackbar('Minimal satu detail harus diisi!');
+      _showToast('Minimal satu detail harus diisi!', type: ToastType.error);
       return;
     }
 
     for (var detail in _details) {
       if (detail.account.isEmpty || detail.nilai <= 0) {
-        _showErrorSnackbar('Semua detail harus memiliki account dan nilai > 0!');
+        _showToast('Semua detail harus memiliki account dan nilai > 0!', type: ToastType.error);
         return;
       }
     }
@@ -306,7 +309,7 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
     final cleanValue = _nilaiController.text.replaceAll('.', '');
     final nilaiHeader = double.tryParse(cleanValue) ?? 0;
     if ((_totalDetail - nilaiHeader).abs() > 0.01) {
-      _showErrorSnackbar('Total detail harus sama dengan nilai header!');
+      _showToast('Total detail harus sama dengan nilai header!', type: ToastType.error);
       return;
     }
 
@@ -338,14 +341,14 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
       );
 
       if (result['success']) {
-        _showSuccessSnackbar(result['message']);
+        _showToast(result['message'], type: ToastType.success);
         widget.onJurnalSaved();
         Navigator.pop(context);
       } else {
-        _showErrorSnackbar(result['message']);
+        _showToast(result['message'], type: ToastType.error);
       }
     } catch (e) {
-      _showErrorSnackbar('Error: ${e.toString()}');
+      _showToast('Error: ${e.toString()}', type: ToastType.error);
     } finally {
       setState(() {
         _isSaving = false;
@@ -354,20 +357,23 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
   }
 
   String _formatCurrency(double amount) {
-    return NumberFormat.currency(
-      locale: 'id_ID',
-      symbol: 'Rp ',
-      decimalDigits: 0,
-    ).format(amount);
+    return NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(amount);
   }
 
   Future<void> _showRekeningHeaderDialog() async {
     final selected = await showDialog<Rekening>(
       context: context,
-      builder: (context) => _buildRekeningDialog(
+      builder: (context) => _buildSelectionDialog(
         title: 'Pilih Account Header',
-        rekeningList: _rekeningHeaderList,
+        items: _rekeningHeaderList,
         selected: _selectedRekeningHeader,
+        itemBuilder: (item, isSelected) => ListTile(
+          leading: Icon(Icons.account_balance_wallet, size: 16, color: isSelected ? _accentGold : _textLight),
+          title: Text(item.rekNama, style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600)),
+          subtitle: Text(item.rekKode, style: GoogleFonts.montserrat(fontSize: 10, color: _textMedium)),
+          trailing: isSelected ? Icon(Icons.check, size: 14, color: _accentGold) : null,
+          onTap: () => Navigator.pop(context, item),
+        ),
       ),
     );
 
@@ -381,12 +387,19 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
   Future<void> _showRekeningDetailDialog(int index) async {
     final selected = await showDialog<Rekening>(
       context: context,
-      builder: (context) => _buildRekeningDialog(
+      builder: (context) => _buildSelectionDialog(
         title: 'Pilih Account Detail',
-        rekeningList: _rekeningDetailList,
+        items: _rekeningDetailList,
         selected: _details[index].account.isNotEmpty
             ? Rekening(rekKode: _details[index].account, rekNama: _details[index].accountName)
             : null,
+        itemBuilder: (item, isSelected) => ListTile(
+          leading: Icon(Icons.account_balance_wallet, size: 16, color: isSelected ? _accentGold : _textLight),
+          title: Text(item.rekNama, style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600)),
+          subtitle: Text(item.rekKode, style: GoogleFonts.montserrat(fontSize: 10, color: _textMedium)),
+          trailing: isSelected ? Icon(Icons.check, size: 14, color: _accentGold) : null,
+          onTap: () => Navigator.pop(context, item),
+        ),
       ),
     );
 
@@ -407,11 +420,19 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
   Future<void> _showCostCenterDialog(int index) async {
     final selected = await showDialog<CostCenter>(
       context: context,
-      builder: (context) => _buildCostCenterDialog(
-        costCenterList: _costCenterList,
+      builder: (context) => _buildSelectionDialog(
+        title: 'Pilih Cost Center',
+        items: _costCenterList,
         selected: _details[index].costcenter.isNotEmpty
             ? CostCenter(ccKode: _details[index].costcenter, ccNama: _details[index].costcenterName)
             : null,
+        itemBuilder: (item, isSelected) => ListTile(
+          leading: Icon(Icons.business, size: 16, color: isSelected ? _accentGold : _textLight),
+          title: Text(item.ccNama, style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600)),
+          subtitle: Text(item.ccKode, style: GoogleFonts.montserrat(fontSize: 10, color: _textMedium)),
+          trailing: isSelected ? Icon(Icons.check, size: 14, color: _accentGold) : null,
+          onTap: () => Navigator.pop(context, item),
+        ),
       ),
     );
 
@@ -429,243 +450,57 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
     }
   }
 
-  Widget _buildRekeningDialog({
+  Widget _buildSelectionDialog<T>({
     required String title,
-    required List<Rekening> rekeningList,
-    required Rekening? selected,
+    required List<T> items,
+    required T? selected,
+    required Widget Function(T item, bool isSelected) itemBuilder,
   }) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
         height: 400,
-        padding: EdgeInsets.all(12),
+        padding: const EdgeInsets.all(12),
         child: Column(
           children: [
             Text(
               title,
-              style: GoogleFonts.montserrat(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: Colors.black87,
-              ),
+              style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600, color: _textDark),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Expanded(
-              child: rekeningList.isEmpty
+              child: items.isEmpty
                   ? Center(
                 child: Text(
                   'Tidak ada data',
-                  style: GoogleFonts.montserrat(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                  ),
+                  style: GoogleFonts.montserrat(fontSize: 11, color: _textLight),
                 ),
               )
                   : ListView.builder(
-                itemCount: rekeningList.length,
+                itemCount: items.length,
                 itemBuilder: (context, index) {
-                  final item = rekeningList[index];
-                  final isSelected = selected?.rekKode == item.rekKode;
-
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => Navigator.pop(context, item),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: Colors.grey.shade200,
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.account_balance_wallet,
-                              size: 14,
-                              color: isSelected ? Color(0xFFF6A918) : Colors.grey.shade600,
-                            ),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.rekKode,
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: isSelected ? Color(0xFFF6A918) : Colors.black87,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    item.rekNama,
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 10,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (isSelected)
-                              Icon(
-                                Icons.check,
-                                size: 14,
-                                color: Color(0xFFF6A918),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
+                  final item = items[index];
+                  bool isSelected = false;
+                  if (item is Rekening && selected is Rekening) {
+                    isSelected = selected.rekKode == item.rekKode;
+                  } else if (item is CostCenter && selected is CostCenter) {
+                    isSelected = selected.ccKode == item.ccKode;
+                  }
+                  return itemBuilder(item, isSelected);
                 },
               ),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               height: 36,
               child: OutlinedButton(
                 onPressed: () => Navigator.pop(context),
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: Colors.grey.shade300),
+                  side: BorderSide(color: _borderSoft),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                 ),
-                child: Text(
-                  'Batal',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCostCenterDialog({
-    required List<CostCenter> costCenterList,
-    required CostCenter? selected,
-  }) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        height: 300,
-        padding: EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Text(
-              'Pilih Cost Center',
-              style: GoogleFonts.montserrat(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: Colors.black87,
-              ),
-            ),
-            SizedBox(height: 12),
-            Expanded(
-              child: costCenterList.isEmpty
-                  ? Center(
-                child: Text(
-                  'Tidak ada data',
-                  style: GoogleFonts.montserrat(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                  ),
-                ),
-              )
-                  : ListView.builder(
-                itemCount: costCenterList.length,
-                itemBuilder: (context, index) {
-                  final item = costCenterList[index];
-                  final isSelected = selected?.ccKode == item.ccKode;
-
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => Navigator.pop(context, item),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: Colors.grey.shade200,
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.business,
-                              size: 14,
-                              color: isSelected ? Color(0xFFF6A918) : Colors.grey.shade600,
-                            ),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.ccKode,
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: isSelected ? Color(0xFFF6A918) : Colors.black87,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    item.ccNama,
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 10,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (isSelected)
-                              Icon(
-                                Icons.check,
-                                size: 14,
-                                color: Color(0xFFF6A918),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 36,
-              child: OutlinedButton(
-                onPressed: () => Navigator.pop(context),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: Colors.grey.shade300),
-                ),
-                child: Text(
-                  'Batal',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
+                child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 11, color: _textMedium)),
               ),
             ),
           ],
@@ -677,15 +512,19 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.jurnalHeader != null;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final cleanValue = _nilaiController.text.replaceAll('.', '');
+    final nilaiHeader = double.tryParse(cleanValue) ?? 0;
+    final isBalance = (_totalDetail - nilaiHeader).abs() <= 0.01;
 
     if (_isLoadingData) {
       return BaseLayout(
         title: isEdit ? 'Edit Biaya' : 'Tambah Biaya',
         showBackButton: true,
-        showSidebar: true,
+        showSidebar: !isMobile,
         isFormScreen: true,
         child: Center(
-          child: CircularProgressIndicator(color: Color(0xFFF6A918)),
+          child: CircularProgressIndicator(color: _accentGold),
         ),
       );
     }
@@ -693,334 +532,96 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
     return BaseLayout(
       title: isEdit ? 'Edit Biaya' : 'Tambah Biaya',
       showBackButton: true,
-      showSidebar: true,
+      showSidebar: !isMobile,
       isFormScreen: true,
-      child: Form(
-        key: _formKey,
-        child: Padding(
-          padding: EdgeInsets.all(16),
+      child: Container(
+        color: _bgSoft,
+        child: Form(
+          key: _formKey,
           child: Column(
             children: [
               Expanded(
                 child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Header Card
                       Container(
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.02),
-                              blurRadius: 3,
-                              offset: Offset(0, 1),
-                            ),
-                          ],
+                          color: _surfaceWhite,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _borderSoft),
                         ),
-                        padding: EdgeInsets.all(12),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Nomor (jika edit)
                             if (_nomorJurnal != null) ...[
                               Container(
-                                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade50,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: Colors.grey.shade200, width: 1),
+                                  color: _primaryDark.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: _primaryDark.withOpacity(0.1)),
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.confirmation_number, size: 14, color: Colors.grey.shade600),
-                                    SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        _nomorJurnal!,
-                                        style: GoogleFonts.montserrat(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.grey.shade700,
-                                        ),
+                                    Icon(Icons.receipt, size: 14, color: _primaryDark),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      _nomorJurnal!,
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: _primaryDark,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 16),
                             ],
 
-                            // Tanggal
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            // Row 1: Tanggal & Jenis
+                            Row(
                               children: [
-                                Text(
-                                  'Tanggal',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700,
-                                  ),
+                                Expanded(
+                                  flex: 2,
+                                  child: _buildFieldLabel('Tanggal'),
                                 ),
-                                SizedBox(height: 4),
-                                Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(6),
-                                    onTap: () => _selectDate(context),
-                                    child: Container(
-                                      height: 36,
-                                      padding: EdgeInsets.symmetric(horizontal: 10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade50,
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.grey.shade300, width: 1),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.calendar_today, size: 14, color: Color(0xFFF6A918)),
-                                          SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(
-                                              DateFormat('dd/MM/yy').format(_selectedDate),
-                                              style: GoogleFonts.montserrat(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w500,
-                                                color: Colors.black87,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                Expanded(
+                                  flex: 3,
+                                  child: _buildFieldLabel('Jenis Pembayaran'),
                                 ),
                               ],
                             ),
-
-                            SizedBox(height: 12),
-
-                            // Jenis Pembayaran
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            const SizedBox(height: 6),
+                            Row(
                               children: [
-                                Text(
-                                  'Jenis Pembayaran',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700,
-                                  ),
+                                Expanded(
+                                  flex: 2,
+                                  child: _buildDateField(),
                                 ),
-                                SizedBox(height: 6),
-                                Row(
-                                  children: [
-                                    // Kas Radio
-                                    Expanded(
-                                      child: _buildPaymentTypeRadio(
-                                        value: 'kas',
-                                        label: 'Kas',
-                                        isSelected: _selectedJenis == 'kas',
-                                      ),
-                                    ),
-                                    SizedBox(width: 8),
-                                    // Bank Radio
-                                    Expanded(
-                                      child: _buildPaymentTypeRadio(
-                                        value: 'bank',
-                                        label: 'Bank',
-                                        isSelected: _selectedJenis == 'bank',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-
-                            SizedBox(height: 12),
-
-                            // Account Header
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Account Header *',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                InkWell(
-                                  borderRadius: BorderRadius.circular(6),
-                                  onTap: _showRekeningHeaderDialog,
-                                  child: Container(
-                                    height: 36,
-                                    padding: EdgeInsets.symmetric(horizontal: 10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade50,
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: Colors.grey.shade300, width: 1),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.account_balance_wallet, size: 14, color: Colors.grey.shade600),
-                                        SizedBox(width: 6),
-                                        Expanded(
-                                          child: _selectedRekeningHeader == null
-                                              ? Text(
-                                            'Pilih Account Header',
-                                            style: GoogleFonts.montserrat(
-                                              fontSize: 11,
-                                              color: Colors.grey.shade500,
-                                            ),
-                                          )
-                                              : Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                _selectedRekeningHeader!.rekKode,
-                                                style: GoogleFonts.montserrat(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Colors.black87,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Icon(Icons.arrow_drop_down, size: 16, color: Colors.grey.shade600),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                if (_selectedRekeningHeader != null) ...[
-                                  SizedBox(height: 2),
-                                  Text(
-                                    _selectedRekeningHeader!.rekNama,
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 9,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ],
-                            ),
-
-                            SizedBox(height: 12),
-
-                            // Keterangan Header
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Keterangan *',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                Container(
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.grey.shade300, width: 1),
-                                  ),
-                                  padding: EdgeInsets.symmetric(horizontal: 10),
-                                  alignment: Alignment.centerLeft,
-                                  child: TextFormField(
-                                    controller: _keteranganController,
-                                    style: GoogleFonts.montserrat(fontSize: 11),
-                                    decoration: InputDecoration(
-                                      hintText: 'Keterangan biaya...',
-                                      hintStyle: GoogleFonts.montserrat(
-                                        fontSize: 10,
-                                        color: Colors.grey.shade500,
-                                      ),
-                                      border: InputBorder.none,
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.zero,
-                                    ),
-                                    validator: (value) {
-                                      if (value == null || value.trim().isEmpty) {
-                                        return 'Keterangan harus diisi';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            SizedBox(height: 12),
-
-                            // Nilai Header
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Nilai Total *',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                Container(
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.grey.shade300, width: 1),
-                                  ),
-                                  padding: EdgeInsets.symmetric(horizontal: 10),
-                                  alignment: Alignment.centerLeft,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 3,
                                   child: Row(
                                     children: [
-                                      Text(
-                                        'Rp ',
-                                        style: GoogleFonts.montserrat(
-                                          fontSize: 11,
-                                          color: Colors.grey.shade700,
-                                          fontWeight: FontWeight.w500,
+                                      Expanded(
+                                        child: _buildPaymentTypeRadio(
+                                          value: 'kas',
+                                          label: 'Kas',
+                                          isSelected: _selectedJenis == 'kas',
                                         ),
                                       ),
+                                      const SizedBox(width: 8),
                                       Expanded(
-                                        child: TextFormField(
-                                          controller: _nilaiController,
-                                          keyboardType: TextInputType.number,
-                                          style: GoogleFonts.montserrat(fontSize: 11),
-                                          decoration: InputDecoration(
-                                            hintText: '0',
-                                            hintStyle: GoogleFonts.montserrat(
-                                              fontSize: 10,
-                                              color: Colors.grey.shade500,
-                                            ),
-                                            border: InputBorder.none,
-                                            isDense: true,
-                                            contentPadding: EdgeInsets.zero,
-                                          ),
-                                          onChanged: _onNilaiChanged,
-                                          validator: (value) {
-                                            if (value == null || value.trim().isEmpty) {
-                                              return 'Nilai harus diisi';
-                                            }
-                                            final cleanValue = value.replaceAll('.', '');
-                                            final nilai = double.tryParse(cleanValue);
-                                            if (nilai == null || nilai <= 0) {
-                                              return 'Nilai harus > 0';
-                                            }
-                                            return null;
-                                          },
+                                        child: _buildPaymentTypeRadio(
+                                          value: 'bank',
+                                          label: 'Bank',
+                                          isSelected: _selectedJenis == 'bank',
                                         ),
                                       ),
                                     ],
@@ -1028,132 +629,255 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
                                 ),
                               ],
                             ),
+
+                            const SizedBox(height: 16),
+
+                            // Row 2: Account Header & Nilai
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: _buildFieldLabel('Account Header *'),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: _buildFieldLabel('Nilai Total *'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: _buildAccountHeaderField(),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 2,
+                                  child: _buildNilaiField(),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            // Keterangan
+                            _buildFieldLabel('Keterangan *'),
+                            const SizedBox(height: 6),
+                            _buildKeteranganField(),
                           ],
                         ),
                       ),
 
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
 
+                      // Detail Section Header
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.02),
-                              blurRadius: 3,
-                              offset: Offset(0, 1),
-                            ),
-                          ],
+                          color: _surfaceWhite,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _borderSoft),
                         ),
-                        child: Column(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: _accentMint.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Icon(Icons.list_alt, size: 14, color: _accentMint),
+                                ),
+                                const SizedBox(width: 8),
                                 Text(
                                   'Detail Biaya',
                                   style: GoogleFonts.montserrat(
                                     fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.black87,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textDark,
                                   ),
                                 ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                // Total & Balance indicator
                                 Container(
-                                  height: 30,
-                                  child: ElevatedButton.icon(
-                                    onPressed: _addDetail,
-                                    icon: Icon(Icons.add, size: 12, color: Colors.white),
-                                    label: Text(
-                                      'Tambah',
-                                      style: GoogleFonts.montserrat(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isBalance ? _accentMint.withOpacity(0.1) : _accentCoral.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: isBalance ? _accentMint.withOpacity(0.3) : _accentCoral.withOpacity(0.3),
                                     ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Color(0xFFF6A918),
-                                      foregroundColor: Colors.white,
-                                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Total: ',
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 10,
+                                          color: _textMedium,
+                                        ),
+                                      ),
+                                      Text(
+                                        _formatCurrency(_totalDetail),
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: isBalance ? _accentMint : _accentCoral,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [_primaryDark, _primaryLight],
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: _addDetail,
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.add, size: 12, color: Colors.white),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Tambah',
+                                              style: GoogleFonts.montserrat(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-
-                            SizedBox(height: 12),
-
-                            // Total Summary
-                            Container(
-                              padding: EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: Colors.grey.shade300, width: 1),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Total Detail:',
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                  Text(
-                                    _formatCurrency(_totalDetail),
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: (_totalDetail - (double.tryParse(_nilaiController.text.replaceAll('.', '')) ?? 0)).abs() <= 0.01
-                                          ? Colors.green
-                                          : Colors.red,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                           ],
                         ),
                       ),
 
-                      SizedBox(height: 12),
+                      const SizedBox(height: 12),
 
-                      // Details List
-                      if (_details.isEmpty)
+                      // Detail Grid Header
+                      if (_details.isNotEmpty)
                         Container(
-                          padding: EdgeInsets.all(20),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.02),
-                                blurRadius: 3,
-                                offset: Offset(0, 1),
+                            color: _primaryDark,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 40,
+                                child: Text(
+                                  'No',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'Account',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'Keterangan',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: Text(
+                                  'Nilai',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'Cost Center',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 40,
+                                child: Center(
+                                  child: Text(
+                                    'Aksi',
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
+                        ),
+
+                      // Detail Rows
+                      if (_details.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: _surfaceWhite,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _borderSoft),
+                          ),
                           child: Column(
                             children: [
-                              Icon(
-                                Icons.list_alt_outlined,
-                                size: 36,
-                                color: Colors.grey.shade400,
-                              ),
-                              SizedBox(height: 8),
+                              Icon(Icons.list_alt_outlined, size: 36, color: _textLight),
+                              const SizedBox(height: 8),
                               Text(
                                 'Belum ada detail biaya',
-                                style: GoogleFonts.montserrat(
-                                  color: Colors.grey.shade500,
-                                  fontSize: 12,
-                                ),
+                                style: GoogleFonts.montserrat(fontSize: 11, color: _textLight),
                               ),
                             ],
                           ),
@@ -1162,50 +886,112 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
                         ..._details.asMap().entries.map((entry) {
                           final index = entry.key;
                           final detail = entry.value;
-                          return _buildDetailCard(index, detail);
+                          return _buildDetailRow(index, detail);
                         }).toList(),
                     ],
                   ),
                 ),
               ),
 
-              SizedBox(height: 12),
-
-              SizedBox(
-                width: double.infinity,
-                height: 42,
-                child: ElevatedButton.icon(
-                  onPressed: _isSaving ? null : _saveJurnal,
-                  icon: _isSaving
-                      ? SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                      : Icon(
-                    isEdit ? Icons.edit_rounded : Icons.save_rounded,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                  label: Text(
-                    isEdit ? 'UPDATE BIAYA' : 'SIMPAN BIAYA',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFFF6A918),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
+              // Bottom Save Button
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _surfaceWhite,
+                  border: Border(top: BorderSide(color: _borderSoft)),
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [_accentGold, _accentGold.withOpacity(0.8)],
+                      ),
                       borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _accentGold.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _isSaving ? null : _saveJurnal,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Center(
+                          child: _isSaving
+                              ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                              : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                isEdit ? Icons.edit_rounded : Icons.save_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                isEdit ? 'UPDATE BIAYA' : 'SIMPAN BIAYA',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String text) {
+    return Text(
+      text,
+      style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _textMedium),
+    );
+  }
+
+  Widget _buildDateField() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _selectDate(context),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: _bgSoft,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: _borderSoft),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.calendar_today, size: 14, color: _accentGold),
+              const SizedBox(width: 8),
+              Text(
+                DateFormat('dd MMM yyyy').format(_selectedDate),
+                style: GoogleFonts.montserrat(fontSize: 11, color: _textDark),
               ),
             ],
           ),
@@ -1222,39 +1008,40 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(6),
         onTap: () => _onJenisChanged(value),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
+            color: isSelected ? _accentGold.withOpacity(0.1) : _bgSoft,
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isSelected ? Color(0xFFF6A918) : Colors.grey.shade300,
+              color: isSelected ? _accentGold : _borderSoft,
               width: isSelected ? 1.5 : 1,
             ),
-            borderRadius: BorderRadius.circular(6),
-            color: isSelected ? Color(0xFFF6A918).withOpacity(0.1) : Colors.white,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 16,
-                height: 16,
+                width: 14,
+                height: 14,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isSelected ? Color(0xFFF6A918) : Colors.grey.shade400,
-                    width: isSelected ? 5 : 1,
+                    color: isSelected ? _accentGold : _textLight,
+                    width: isSelected ? 5 : 1.5,
                   ),
                 ),
               ),
-              SizedBox(width: 6),
+              const SizedBox(width: 6),
               Text(
                 label,
                 style: GoogleFonts.montserrat(
                   fontSize: 11,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected ? Color(0xFFF6A918) : Colors.grey.shade700,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  color: isSelected ? _accentGold : _textMedium,
                 ),
               ),
             ],
@@ -1264,376 +1051,329 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
     );
   }
 
-  Widget _buildDetailCard(int index, JurnalDetailInput detail) {
+  Widget _buildAccountHeaderField() {
+    return InkWell(
+      onTap: _showRekeningHeaderDialog,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: _bgSoft,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: _borderSoft),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.account_balance_wallet, size: 14, color: _textLight),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _selectedRekeningHeader == null
+                  ? Text(
+                'Pilih Account Header',
+                style: GoogleFonts.montserrat(fontSize: 11, color: _textLight),
+              )
+                  : Text(
+                _selectedRekeningHeader!.rekNama,
+                style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: _textDark),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(Icons.arrow_drop_down, size: 16, color: _textLight),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNilaiField() {
     return Container(
-      margin: EdgeInsets.only(bottom: 8),
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _bgSoft,
         borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 2,
-            offset: Offset(0, 1),
+        border: Border.all(color: _borderSoft),
+      ),
+      child: Row(
+        children: [
+          Text(
+            'Rp',
+            style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _textMedium),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextFormField(
+              controller: _nilaiController,
+              keyboardType: TextInputType.number,
+              style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _textDark),
+              decoration: InputDecoration(
+                hintText: '0',
+                hintStyle: GoogleFonts.montserrat(fontSize: 11, color: _textLight),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+              onChanged: _onNilaiChanged,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) return 'Nilai harus diisi';
+                final cleanValue = value.replaceAll('.', '');
+                final nilai = double.tryParse(cleanValue);
+                if (nilai == null || nilai <= 0) return 'Nilai harus > 0';
+                return null;
+              },
+            ),
           ),
         ],
       ),
-      child: Column(
+    );
+  }
+
+  Widget _buildKeteranganField() {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: _bgSoft,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _borderSoft),
+      ),
+      child: TextFormField(
+        controller: _keteranganController,
+        style: GoogleFonts.montserrat(fontSize: 11, color: _textDark),
+        decoration: InputDecoration(
+          hintText: 'Keterangan biaya...',
+          hintStyle: GoogleFonts.montserrat(fontSize: 11, color: _textLight),
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+        validator: (value) {
+          if (value == null || value.trim().isEmpty) return 'Keterangan harus diisi';
+          return null;
+        },
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(int index, JurnalDetailInput detail) {
+    final isEven = index % 2 == 0;
+    final detailController = TextEditingController(
+      text: detail.nilai > 0 ? NumberFormat('#,###', 'id_ID').format(detail.nilai.toInt()) : '',
+    );
+    final keteranganController = TextEditingController(text: detail.keterangan);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isEven ? _surfaceWhite : _bgSoft,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: _borderSoft.withOpacity(0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
-              ),
-              border: Border(
-                bottom: BorderSide(color: Colors.grey.shade200, width: 1),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Detail ${index + 1}',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(4),
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text(
-                            'Hapus Detail?',
-                            style: GoogleFonts.montserrat(fontSize: 14),
-                          ),
-                          content: Text(
-                            'Apakah Anda yakin ingin menghapus detail ini?',
-                            style: GoogleFonts.montserrat(fontSize: 12),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: Text(
-                                'Batal',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ),
-                            ElevatedButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                _removeDetail(index);
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                              ),
-                              child: Text(
-                                'Hapus',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    child: Container(
-                      padding: EdgeInsets.all(4),
-                      child: Icon(
-                        Icons.delete_outline,
-                        size: 12,
-                        color: Colors.red.shade600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+          // No
+          SizedBox(
+            width: 40,
+            child: Text(
+              '${index + 1}',
+              style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w500, color: _textMedium),
             ),
           ),
 
-          Padding(
-            padding: EdgeInsets.all(10),
-            child: Column(
-              children: [
-                // Account Detail
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          // Account - tampilkan nama saja
+          Expanded(
+            flex: 2,
+            child: InkWell(
+              onTap: () => _showRekeningDetailDialog(index),
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
                   children: [
-                    Text(
-                      'Account *',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(6),
-                      onTap: () => _showRekeningDetailDialog(index),
-                      child: Container(
-                        height: 36,
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.grey.shade300, width: 1),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.account_balance_wallet, size: 14, color: Colors.grey.shade600),
-                            SizedBox(width: 6),
-                            Expanded(
-                              child: detail.account.isEmpty
-                                  ? Text(
-                                'Pilih Account',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade500,
-                                ),
-                              )
-                                  : Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    detail.account,
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.black87,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(Icons.arrow_drop_down, size: 16, color: Colors.grey.shade600),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (detail.account.isNotEmpty) ...[
-                      SizedBox(height: 2),
-                      Text(
+                    Icon(Icons.account_balance_wallet, size: 12, color: _textLight),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: detail.account.isEmpty
+                          ? Text(
+                        'Pilih Account',
+                        style: GoogleFonts.montserrat(fontSize: 10, color: _textLight),
+                      )
+                          : Text(
                         detail.accountName,
                         style: GoogleFonts.montserrat(
-                          fontSize: 9,
-                          color: Colors.grey.shade600,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: _textDark,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ],
+                    ),
+                    Icon(Icons.arrow_drop_down, size: 14, color: _textLight),
                   ],
                 ),
+              ),
+            ),
+          ),
 
-                SizedBox(height: 10),
+          // Keterangan
+          Expanded(
+            flex: 2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: TextField(
+                controller: keteranganController,
+                style: GoogleFonts.montserrat(fontSize: 10, color: _textDark),
+                decoration: InputDecoration(
+                  hintText: 'Keterangan',
+                  hintStyle: GoogleFonts.montserrat(fontSize: 10, color: _textLight),
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                onChanged: (value) {
+                  _updateDetail(index, JurnalDetailInput(
+                    account: detail.account,
+                    accountName: detail.accountName,
+                    nilai: detail.nilai,
+                    keterangan: value,
+                    costcenter: detail.costcenter,
+                    costcenterName: detail.costcenterName,
+                  ));
+                },
+              ),
+            ),
+          ),
 
-                // Nilai dan Cost Center
-                Row(
+          // Nilai
+          Expanded(
+            flex: 1,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Text(
+                    'Rp',
+                    style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w500, color: _textMedium),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: TextField(
+                      controller: detailController,
+                      keyboardType: TextInputType.number,
+                      style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _accentGold),
+                      decoration: InputDecoration(
+                        hintText: '0',
+                        hintStyle: GoogleFonts.montserrat(fontSize: 10, color: _textLight),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onChanged: (value) {
+                        final cleanValue = value.replaceAll('.', '');
+                        final newNilai = double.tryParse(cleanValue) ?? 0;
+                        _updateDetail(index, JurnalDetailInput(
+                          account: detail.account,
+                          accountName: detail.accountName,
+                          nilai: newNilai,
+                          keterangan: detail.keterangan,
+                          costcenter: detail.costcenter,
+                          costcenterName: detail.costcenterName,
+                        ));
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Cost Center - tampilkan nama saja
+          Expanded(
+            flex: 2,
+            child: InkWell(
+              onTap: () => _showCostCenterDialog(index),
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(
                   children: [
-                    // Nilai
+                    Icon(Icons.business, size: 12, color: _textLight),
+                    const SizedBox(width: 6),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Nilai *',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Container(
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.grey.shade300, width: 1),
-                            ),
-                            padding: EdgeInsets.symmetric(horizontal: 10),
-                            alignment: Alignment.centerLeft,
-                            child: Row(
-                              children: [
-                                Text(
-                                  'Rp ',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: TextField(
-                                    controller: TextEditingController(
-                                      text: detail.nilai > 0
-                                          ? NumberFormat('#,###', 'id_ID').format(detail.nilai.toInt())
-                                          : '',
-                                    ),
-                                    keyboardType: TextInputType.number,
-                                    style: GoogleFonts.montserrat(fontSize: 11),
-                                    decoration: InputDecoration(
-                                      hintText: '0',
-                                      hintStyle: GoogleFonts.montserrat(
-                                        fontSize: 10,
-                                        color: Colors.grey.shade500,
-                                      ),
-                                      border: InputBorder.none,
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.zero,
-                                    ),
-                                    onChanged: (value) {
-                                      final cleanValue = value.replaceAll('.', '');
-                                      final newNilai = double.tryParse(cleanValue) ?? 0;
-                                      _updateDetail(index, JurnalDetailInput(
-                                        account: detail.account,
-                                        accountName: detail.accountName,
-                                        nilai: newNilai,
-                                        keterangan: detail.keterangan,
-                                        costcenter: detail.costcenter,
-                                        costcenterName: detail.costcenterName,
-                                      ));
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                      child: detail.costcenter.isEmpty
+                          ? Text(
+                        'Pilih CC',
+                        style: GoogleFonts.montserrat(fontSize: 10, color: _textLight),
+                      )
+                          : Text(
+                        detail.costcenterName,
+                        style: GoogleFonts.montserrat(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: _textDark,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-
-                    SizedBox(width: 10),
-
-                    // Cost Center
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Cost Center',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          InkWell(
-                            borderRadius: BorderRadius.circular(6),
-                            onTap: () => _showCostCenterDialog(index),
-                            child: Container(
-                              height: 36,
-                              padding: EdgeInsets.symmetric(horizontal: 10),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: Colors.grey.shade300, width: 1),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.business, size: 14, color: Colors.grey.shade600),
-                                  SizedBox(width: 6),
-                                  Expanded(
-                                    child: detail.costcenter.isEmpty
-                                        ? Text(
-                                      'Pilih',
-                                      style: GoogleFonts.montserrat(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade500,
-                                      ),
-                                    )
-                                        : Text(
-                                      detail.costcenter,
-                                      style: GoogleFonts.montserrat(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Icon(Icons.arrow_drop_down, size: 16, color: Colors.grey.shade600),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    Icon(Icons.arrow_drop_down, size: 14, color: _textLight),
                   ],
                 ),
+              ),
+            ),
+          ),
 
-                // SizedBox(height: 10),
-                //
-                // // Keterangan Detail
-                // Column(
-                //   crossAxisAlignment: CrossAxisAlignment.start,
-                //   children: [
-                //     Text(
-                //       'Keterangan',
-                //       style: GoogleFonts.montserrat(
-                //         fontSize: 10,
-                //         fontWeight: FontWeight.w600,
-                //         color: Colors.grey.shade700,
-                //       ),
-                //     ),
-                //     SizedBox(height: 4),
-                //     Container(
-                //       height: 36,
-                //       decoration: BoxDecoration(
-                //         color: Colors.grey.shade50,
-                //         borderRadius: BorderRadius.circular(6),
-                //         border: Border.all(color: Colors.grey.shade300, width: 1),
-                //       ),
-                //       padding: EdgeInsets.symmetric(horizontal: 10),
-                //       alignment: Alignment.centerLeft,
-                //       child: TextField(
-                //         style: GoogleFonts.montserrat(fontSize: 11),
-                //         decoration: InputDecoration(
-                //           hintText: 'Keterangan detail...',
-                //           hintStyle: GoogleFonts.montserrat(
-                //             fontSize: 10,
-                //             color: Colors.grey.shade500,
-                //           ),
-                //           border: InputBorder.none,
-                //           isDense: true,
-                //           contentPadding: EdgeInsets.zero,
-                //         ),
-                //         onChanged: (value) {
-                //           _updateDetail(index, JurnalDetailInput(
-                //             account: detail.account,
-                //             accountName: detail.accountName,
-                //             nilai: detail.nilai,
-                //             keterangan: value,
-                //             costcenter: detail.costcenter,
-                //             costcenterName: detail.costcenterName,
-                //           ));
-                //         },
-                //       ),
-                //     ),
-                //   ],
-                // ),
-              ],
+          // Aksi (Delete)
+          SizedBox(
+            width: 40,
+            child: Center(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        title: Text('Hapus Detail?', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600)),
+                        content: Text('Apakah Anda yakin ingin menghapus detail ini?',
+                            style: GoogleFonts.montserrat(fontSize: 11, color: _textMedium)),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 11, color: _textMedium)),
+                          ),
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _removeDetail(index);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _accentCoral,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                            child: Text('Hapus', style: GoogleFonts.montserrat(fontSize: 11, color: Colors.white)),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    child: Icon(Icons.delete_outline, size: 14, color: _accentCoral),
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -1641,3 +1381,5 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
     );
   }
 }
+
+enum ToastType { success, error, info }
