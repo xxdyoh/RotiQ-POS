@@ -24,6 +24,7 @@ import 'screens/do_form_screen.dart';
 import 'screens/koreksi_form_screen.dart';
 import 'screens/mutasi_in_form_screen.dart';
 import 'screens/device_check_screen.dart';
+import '../screens/posting_penjualan_form_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -84,8 +85,8 @@ class MyApp extends StatelessWidget {
       title: 'RotiQ',
       debugShowCheckedModeBanner: false,
 
-      // initialRoute: AppRoutes.login,
-      initialRoute: '/device-check',
+      initialRoute: AppRoutes.login,
+      // initialRoute: '/device-check',
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: Colors.white,
@@ -253,6 +254,15 @@ class MyApp extends StatelessWidget {
               builder: (context) => DoFormScreen(
                 mutasiHeader: args?['mutasiHeader'],
                 onMutasiSaved: args?['onMutasiSaved'] ?? () {},
+              ),
+            );
+
+          case AppRoutes.postingPenjualanForm:
+            final args = settings.arguments as Map<String, dynamic>?;
+            return MaterialPageRoute(
+              builder: (context) => PostingPenjualanFormScreen(
+                postingHeader: args?['postingHeader'],
+                onPostingSaved: args?['onPostingSaved'] ?? () {},
               ),
             );
 

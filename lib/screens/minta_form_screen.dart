@@ -110,6 +110,7 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
           return MintaItem(
             itemId: detail['mtd_brg_kode'],
             itemNama: detail['item_nama'] ?? '',
+            tipe: detail['mtd_tipe'] ?? 'BJ', // <-- TAMBAHKAN TIPE
             qty: detail['mtd_qty']?.toInt() ?? 0,
             keterangan: detail['mtd_keterangan'] ?? '',
           );
@@ -196,9 +197,7 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.transparent,
-        ),
+        decoration: const BoxDecoration(color: Colors.transparent),
         child: AddItemModalMinta(
           existingItems: _selectedItems,
         ),
@@ -206,6 +205,12 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
     );
 
     if (selectedItems != null && selectedItems.isNotEmpty) {
+      // DEBUG: Print items received
+      print('Items received from modal:');
+      for (var item in selectedItems) {
+        print('  - ID: ${item.itemId}, Tipe: ${item.tipe}, Qty: ${item.qty}');
+      }
+
       setState(() {
         for (var newItem in selectedItems) {
           final existingIndex = _selectedItems.indexWhere((item) => item.itemId == newItem.itemId);
@@ -214,12 +219,13 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
             final updatedItem = MintaItem(
               itemId: existingItem.itemId,
               itemNama: existingItem.itemNama,
+              tipe: newItem.tipe, // <-- PASTIKAN TIPE DARI newItem DIPAKAI
               qty: existingItem.qty + newItem.qty,
               keterangan: existingItem.keterangan,
             );
             _selectedItems[existingIndex] = updatedItem;
           } else {
-            _selectedItems.add(newItem);
+            _selectedItems.add(newItem); // <-- newItem SUDAH PUNYA TIPE YANG BENAR
           }
         }
         _filteredItems = List.from(_selectedItems);
@@ -327,6 +333,9 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
 
     setState(() => _isSaving = true);
     HapticFeedback.mediumImpact();
+
+    final itemsJson = itemsWithQty.map((item) => item.toJson()).toList();
+    print('Items to save: $itemsJson');
 
     try {
       final tanggalStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
@@ -770,57 +779,6 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildModernActionButton({
-    required String label,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onPressed,
-  }) {
-    return Container(
-      height: 28,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color, color.withOpacity(0.8)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        borderRadius: BorderRadius.circular(6),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.2),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 11, color: Colors.white),
-                const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: GoogleFonts.montserrat(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildModernItemCard(MintaItem item) {
     if (!_qtyControllers.containsKey(item.itemId)) {
       _qtyControllers[item.itemId] = TextEditingController(
@@ -861,7 +819,7 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
                   ),
                   child: Center(
                     child: Icon(
-                      Icons.inventory_2_outlined,
+                      item.tipeIcon,
                       color: hasQty ? Colors.white : _textLight,
                       size: 16,
                     ),
@@ -883,7 +841,8 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      Row(
+                      Wrap(
+                        spacing: 4,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -899,8 +858,24 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
                               ),
                             ),
                           ),
+                          // Tipe badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: item.tipeColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: item.tipeColor.withOpacity(0.3)),
+                            ),
+                            child: Text(
+                              item.tipeLabel,
+                              style: GoogleFonts.montserrat(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w600,
+                                color: item.tipeColor,
+                              ),
+                            ),
+                          ),
                           if (hasQty) ...[
-                            const SizedBox(width: 4),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                               decoration: BoxDecoration(
@@ -998,6 +973,57 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernActionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      height: 28,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color, color.withOpacity(0.8)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 11, color: Colors.white),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

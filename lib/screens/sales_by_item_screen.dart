@@ -7,7 +7,8 @@ import 'package:pivot_table/pivot_table.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:html' as html;
+// import 'dart:html' as html;
+import 'package:universal_html/html.dart' as html;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import '../services/sales_item_service.dart';
@@ -213,7 +214,7 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
       context: context, // Gunakan context dari parameter
       initialDate: _startDate ?? DateTime.now(),
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
@@ -242,7 +243,7 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
       context: context,
       initialDate: _endDate ?? DateTime.now(),
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(

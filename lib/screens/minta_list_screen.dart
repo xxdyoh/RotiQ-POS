@@ -724,7 +724,9 @@ class _MintaListScreenState extends State<MintaListScreen> with SingleTickerProv
                                     textDark: _textDark,
                                     textMedium: _textMedium,
                                     accentMint: _accentMint,
+                                    accentSky: _accentSky,           // <-- TAMBAHKAN
                                     accentMintSoft: _accentMintSoft,
+                                    accentSkySoft: _accentSkySoft,   // <-- TAMBAHKAN
                                     bgSoft: _bgSoft,
                                     borderSoft: _borderSoft,
                                   ),
@@ -737,18 +739,11 @@ class _MintaListScreenState extends State<MintaListScreen> with SingleTickerProv
                                   columns: [
                                     GridColumn(
                                       columnName: 'no',
-                                      width: 60,
+                                      width: 50,
                                       label: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8),
                                         alignment: Alignment.center,
-                                        child: Text(
-                                          'No',
-                                          style: GoogleFonts.montserrat(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 10,
-                                            color: _textDark,
-                                          ),
-                                        ),
+                                        child: Text('No', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
                                       ),
                                     ),
                                     GridColumn(
@@ -756,30 +751,25 @@ class _MintaListScreenState extends State<MintaListScreen> with SingleTickerProv
                                       label: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8),
                                         alignment: Alignment.centerLeft,
-                                        child: Text(
-                                          'Nama Item',
-                                          style: GoogleFonts.montserrat(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 10,
-                                            color: _textDark,
-                                          ),
-                                        ),
+                                        child: Text('Nama Item', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'tipe',
+                                      width: 70,
+                                      label: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        alignment: Alignment.center,
+                                        child: Text('Tipe', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
                                       ),
                                     ),
                                     GridColumn(
                                       columnName: 'qty',
-                                      width: 100,
+                                      width: 80,
                                       label: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8),
                                         alignment: Alignment.center,
-                                        child: Text(
-                                          'Quantity',
-                                          style: GoogleFonts.montserrat(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 10,
-                                            color: _textDark,
-                                          ),
-                                        ),
+                                        child: Text('Qty', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
                                       ),
                                     ),
                                     GridColumn(
@@ -787,14 +777,7 @@ class _MintaListScreenState extends State<MintaListScreen> with SingleTickerProv
                                       label: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8),
                                         alignment: Alignment.centerLeft,
-                                        child: Text(
-                                          'Keterangan',
-                                          style: GoogleFonts.montserrat(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 10,
-                                            color: _textDark,
-                                          ),
-                                        ),
+                                        child: Text('Keterangan', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
                                       ),
                                     ),
                                   ],
@@ -1715,7 +1698,9 @@ class MintaDetailDataSource extends DataGridSource {
     required Color textDark,
     required Color textMedium,
     required Color accentMint,
+    required Color accentSky,           // <-- TAMBAHKAN
     required Color accentMintSoft,
+    required Color accentSkySoft,       // <-- TAMBAHKAN
     required Color bgSoft,
     required Color borderSoft,
   }) {
@@ -1723,17 +1708,21 @@ class MintaDetailDataSource extends DataGridSource {
     _textDark = textDark;
     _textMedium = textMedium;
     _accentMint = accentMint;
+    _accentSky = accentSky;             // <-- TAMBAHKAN
     _accentMintSoft = accentMintSoft;
+    _accentSkySoft = accentSkySoft;     // <-- TAMBAHKAN
     _bgSoft = bgSoft;
     _borderSoft = borderSoft;
 
     _data = details.asMap().entries.map((entry) {
       final index = entry.key + 1;
       final item = entry.value;
+      final tipe = item['mtd_tipe'] ?? 'BJ';
 
       return DataGridRow(cells: [
         DataGridCell<int>(columnName: 'no', value: index),
         DataGridCell<String>(columnName: 'nama', value: item['item_nama']?.toString() ?? '-'),
+        DataGridCell<String>(columnName: 'tipe', value: tipe),
         DataGridCell<int>(columnName: 'qty', value: item['mtd_qty'] ?? 0),
         DataGridCell<String>(columnName: 'keterangan', value: item['mtd_keterangan']?.toString() ?? '-'),
       ]);
@@ -1745,9 +1734,12 @@ class MintaDetailDataSource extends DataGridSource {
   late Color _textDark;
   late Color _textMedium;
   late Color _accentMint;
+  late Color _accentSky;           // <-- TAMBAHKAN
   late Color _accentMintSoft;
+  late Color _accentSkySoft;       // <-- TAMBAHKAN
   late Color _bgSoft;
   late Color _borderSoft;
+
 
   @override
   List<DataGridRow> get rows => _data;
@@ -1756,6 +1748,33 @@ class MintaDetailDataSource extends DataGridSource {
   DataGridRowAdapter buildRow(DataGridRow row) {
     return DataGridRowAdapter(
       cells: row.getCells().map<Widget>((cell) {
+        if (cell.columnName == 'tipe') {
+          final tipe = cell.value.toString();
+          final isBJ = tipe == 'BJ';
+          final color = isBJ ? _accentSky : _accentMint;
+
+          return Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: color.withOpacity(0.3)),
+              ),
+              child: Text(
+                isBJ ? 'BJ' : 'STJ',
+                style: GoogleFonts.montserrat(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ),
+          );
+        }
+
         if (cell.columnName == 'qty') {
           return Container(
             alignment: Alignment.center,

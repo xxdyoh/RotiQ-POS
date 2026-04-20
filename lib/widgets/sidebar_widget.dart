@@ -54,7 +54,8 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     AppRoutes.tutupKasir: 'frmTutupKasir',
     AppRoutes.mintaReport: 'frmLapPermintaan',
     AppRoutes.serahTerimaList: 'frmSTBJ',
-    AppRoutes.mintaList: 'frmPermintaanBarang'
+    AppRoutes.mintaList: 'frmPermintaanBarang',
+    AppRoutes.postingPenjualanList: 'frmPostingPenjualan'
   };
 
   final Color _primaryDark = const Color(0xFF2C3E50);
@@ -348,6 +349,12 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         icon: Icons.inventory_rounded,
         label: 'Koreksi Stok',
         routeName: AppRoutes.koreksiList,
+        indent: true,
+      ),
+      _buildMenuItem(
+        icon: Icons.shopping_cart_rounded,
+        label: 'Posting Penjualan',
+        routeName: AppRoutes.postingPenjualanList,
         indent: true,
       ),
       _buildMenuItem(

@@ -167,7 +167,7 @@
 //       context: context,
 //       initialDate: _startDate,
 //       firstDate: DateTime(2023),
-//       lastDate: DateTime.now(),
+//       lastDate: DateTime(2100),
 //     );
 //     if (picked != null && picked != _startDate) {
 //       setState(() {
@@ -181,7 +181,7 @@
 //       context: context,
 //       initialDate: _endDate,
 //       firstDate: DateTime(2023),
-//       lastDate: DateTime.now(),
+//       lastDate: DateTime(2100),
 //     );
 //     if (picked != null && picked != _endDate) {
 //       setState(() {

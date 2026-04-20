@@ -289,34 +289,22 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
       final header = detail['header'];
       final details = List<Map<String, dynamic>>.from(detail['details']);
 
-      print('=== LOAD MUTASI IN DETAIL ===');
-      print('Full header: $header');
-      print('sti_cbg_Asal (with capital A): ${header['sti_cbg_Asal']}');  // Perhatikan kapital A
-      print('sti_mutasi_nomor: ${header['sti_mutasi_nomor']}');
-
       setState(() {
-        // Ganti dari sti_cbg_asal menjadi sti_cbg_Asal (sesuai database)
-        final targetCabangKode = header['sti_cbg_Asal'] as String?;  // Perbaiki di sini
-        print('Target cabang kode: $targetCabangKode');
+        final targetCabangKode = header['sti_cbg_Asal'] as String?;
 
         if (targetCabangKode != null && targetCabangKode.isNotEmpty && _cabangList.isNotEmpty) {
           final matchingCabang = _cabangList.firstWhere(
                 (c) => c.kode == targetCabangKode,
-            orElse: () {
-              print('Cabang with kode $targetCabangKode NOT FOUND');
-              return Cabang(kode: '', nama: '', database: '', host: '', user: '', password: '', port: '', jenis: '', aktif: 0);
-            },
+            orElse: () => Cabang(kode: '', nama: '', database: '', host: '', user: '', password: '', port: '', jenis: '', aktif: 0),
           );
 
           if (matchingCabang.kode.isNotEmpty) {
             _selectedCabangAsal = matchingCabang;
-            print('Selected cabang asal: ${_selectedCabangAsal?.kode} - ${_selectedCabangAsal?.nama}');
           } else {
             _selectedCabangAsal = null;
           }
         } else {
           _selectedCabangAsal = null;
-          print('Target cabang empty or cabang list empty');
         }
 
         final targetMutasiNomor = header['sti_mutasi_nomor'] as String?;
@@ -331,6 +319,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
           return MutasiInItem(
             itemId: detail['stid_item_id'],
             itemNama: detail['item_nama'] ?? '',
+            tipe: detail['stid_tipe'] ?? 'BJ', // <-- TAMBAHKAN
             qty: qty,
             qtyMutasi: qty,
             referensi: detail['referensi'],
@@ -439,7 +428,6 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
   Future<void> _loadMutasiOutDetail(String nomor) async {
     if (_selectedCabangAsal == null) return;
 
-    // Jika sedang edit dan nomor sama dengan yang sudah dipilih, jangan reload
     if (widget.mutasiInHeader != null && _selectedMutasiOut != null && _selectedMutasiOut!['mutc_nomor'] == nomor) {
       print('Skipping load mutasi out detail karena sedang edit');
       return;
@@ -470,6 +458,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
           return MutasiInItem(
             itemId: detail['mutcd_brg_kode'],
             itemNama: detail['item_nama'] ?? '',
+            tipe: detail['mutcd_tipe'] ?? 'BJ', // <-- TAMBAHKAN
             qty: qty,
             qtyMutasi: 0,
             referensi: '',
@@ -531,7 +520,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
@@ -871,6 +860,8 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
       return;
     }
 
+
+
     setState(() => _isSaving = true);
     HapticFeedback.mediumImpact();
 
@@ -886,6 +877,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
         'items': itemsWithQty.map((item) => {
           'item_id': item.itemId,
           'item_nama': item.itemNama,
+          'tipe': item.tipe, // <-- TAMBAHKAN
           'qty': item.qtyMutasi,
         }).toList(),
       };
@@ -1526,7 +1518,7 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
               ),
               child: Center(
                 child: Icon(
-                  Icons.inventory_2_outlined,
+                  item.tipeIcon,
                   color: hasQty ? Colors.white : _accentCoral,
                   size: 18,
                 ),
@@ -1563,6 +1555,22 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                           style: GoogleFonts.montserrat(
                             fontSize: 9,
                             color: _textMedium,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: item.tipeColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: item.tipeColor.withOpacity(0.3)),
+                        ),
+                        child: Text(
+                          item.tipeLabel,
+                          style: GoogleFonts.montserrat(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: item.tipeColor,
                           ),
                         ),
                       ),

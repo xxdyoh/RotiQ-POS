@@ -253,6 +253,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
           final newItem = MutasiItem(
             itemId: itemId,
             itemNama: itemData['item_nama']?.toString() ?? '',
+            tipe: 'BJ', // <-- TAMBAHKAN, default BJ karena dari titem
             qty: 1,
           );
 
@@ -409,6 +410,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
           return MutasiItem(
             itemId: detail['mtd_brg_kode'],
             itemNama: detail['item_nama'] ?? '',
+            tipe: detail['mtd_tipe'] ?? 'BJ', // <-- TAMBAHKAN
             qtyMinta: qtyMinta,
             qty: 0,
             keterangan: '',
@@ -442,10 +444,8 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
           orElse: () => Gudang(kode: '', nama: ''),
         );
 
-        // Simpan sementara kode cabang tujuan dari header
         final targetCabangKode = header['mutc_cbg_tujuan'] as String?;
 
-        // Cari cabang tujuan yang sesuai di list yang sudah ada
         if (targetCabangKode != null && _cabangTujuanList.isNotEmpty) {
           final matchingCabang = _cabangTujuanList.cast<Map<String, dynamic>>().firstWhere(
                 (c) => c['cbg_kode'] == targetCabangKode,
@@ -470,6 +470,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
           return MutasiItem(
             itemId: detail['mutcd_brg_kode'],
             itemNama: detail['item_nama'] ?? '',
+            tipe: detail['mutcd_tipe'] ?? 'BJ', // <-- TAMBAHKAN TIPE
             qty: qty,
             keterangan: detail['mutcd_keterangan'] ?? '',
             nourut: detail['mutcd_nourut'],
@@ -812,16 +813,19 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
 
   void _showAddItemModal() async {
     HapticFeedback.selectionClick();
+
+    final isPusat = SessionManager.getCurrentCabang()?.kode == '00' ||
+        SessionManager.getCurrentCabang()?.jenis.toLowerCase() == 'pusat';
+
     final selectedItems = await showModalBottomSheet<List<MutasiItem>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.transparent,
-        ),
+        decoration: const BoxDecoration(color: Colors.transparent),
         child: AddItemModalMutasi(
-          existingItems: _items,
+          existingItems: _items, // <-- GANTI _selectedItems menjadi _items
+          isPusat: isPusat,
         ),
       ),
     );
@@ -829,7 +833,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
     if (selectedItems != null && selectedItems.isNotEmpty) {
       setState(() {
         for (var newItem in selectedItems) {
-          final existingIndex = _items.indexWhere((item) => item.itemId == newItem.itemId);
+          final existingIndex = _items.indexWhere((item) => item.itemId == newItem.itemId && item.tipe == newItem.tipe);
           if (existingIndex >= 0) {
             final newQty = _items[existingIndex].qty + newItem.qty;
             _items[existingIndex] = _items[existingIndex].copyWith(qty: newQty);
@@ -1524,12 +1528,12 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    if (!isPusat)
+                    // if (!isPusat)
                       _buildModernActionButton(
                         label: 'Add Item',
                         icon: Icons.add_rounded,
                         color: _accentSky,
-                        onPressed: _showAddItemModal,
+                        onPressed: _showAddItemModal, // <-- TETAP BISA, TAPI MODAL HANYA TAMPILKAN STJ
                       ),
                     const Spacer(),
                     Container(
@@ -1711,7 +1715,7 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                   ),
                   child: Center(
                     child: Icon(
-                      Icons.inventory_2_outlined,
+                      item.tipe == 'BJ' ? Icons.inventory_2_outlined : Icons.precision_manufacturing_outlined,
                       color: hasQty ? Colors.white : _textLight,
                       size: 18,
                     ),
@@ -1748,6 +1752,23 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
                               style: GoogleFonts.montserrat(
                                 fontSize: 9,
                                 color: _textMedium,
+                              ),
+                            ),
+                          ),
+                          // Tipe badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: item.tipeColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: item.tipeColor.withOpacity(0.3)),
+                            ),
+                            child: Text(
+                              item.tipeLabel,
+                              style: GoogleFonts.montserrat(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                color: item.tipeColor,
                               ),
                             ),
                           ),
@@ -2039,10 +2060,12 @@ enum ToastType { success, error, info }
 
 class AddItemModalMutasi extends StatefulWidget {
   final List<MutasiItem> existingItems;
+  final bool isPusat; // <-- TAMBAHKAN
 
   const AddItemModalMutasi({
     super.key,
     required this.existingItems,
+    required this.isPusat, // <-- TAMBAHKAN
   });
 
   @override
@@ -2053,11 +2076,13 @@ class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
   final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _filteredItems = [];
-  final Map<int, TextEditingController> _qtyControllers = {};
+  final Map<String, TextEditingController> _qtyControllers = {}; // Key: "id_tipe"
   bool _isLoading = true;
 
   final Color _primaryDark = const Color(0xFF2C3E50);
   final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _accentSky = const Color(0xFF4CC9F0);
   final Color _bgSoft = const Color(0xFFF8FAFC);
   final Color _surfaceWhite = Colors.white;
   final Color _textDark = const Color(0xFF1A202C);
@@ -2085,10 +2110,17 @@ class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
       setState(() {
         _items = items.map((item) {
           return {
-            'item_id': item['item_id'] ?? 0,
-            'item_nama': item['item_nama']?.toString() ?? 'Unknown Item',
+            'id': item['id'] ?? 0,
+            'nama': item['nama']?.toString() ?? 'Unknown Item',
+            'tipe': item['tipe']?.toString() ?? 'BJ',
           };
         }).toList();
+
+        // JIKA PUSAT, HANYA TAMPILKAN ITEM SETENGAH JADI (STJ)
+        if (widget.isPusat) {
+          _items = _items.where((item) => item['tipe'] == 'STJ').toList();
+        }
+
         _filteredItems = List.from(_items);
         _isLoading = false;
       });
@@ -2105,24 +2137,32 @@ class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
       } else {
         final searchLower = query.toLowerCase();
         _filteredItems = _items.where((item) {
-          final itemNama = item['item_nama']?.toString() ?? '';
-          return itemNama.toLowerCase().contains(searchLower);
+          final itemNama = item['nama']?.toString() ?? '';
+          return itemNama.toLowerCase().contains(searchLower) ||
+              item['id'].toString().contains(searchLower);
         }).toList();
       }
     });
   }
 
+  String _getControllerKey(int id, String tipe) {
+    return '${id}_$tipe';
+  }
+
   void _addSelectedItems() {
     final selectedItems = <MutasiItem>[];
     for (var item in _filteredItems) {
-      final itemId = item['item_id'] as int;
-      final controller = _qtyControllers[itemId];
+      final id = item['id'] as int;
+      final tipe = item['tipe'] as String;
+      final key = _getControllerKey(id, tipe);
+      final controller = _qtyControllers[key];
       if (controller != null && controller.text.isNotEmpty) {
         final qty = int.tryParse(controller.text) ?? 0;
         if (qty > 0) {
           selectedItems.add(MutasiItem(
-            itemId: itemId,
-            itemNama: item['item_nama']?.toString() ?? 'Unknown Item',
+            itemId: id,
+            itemNama: item['nama']?.toString() ?? 'Unknown Item',
+            tipe: tipe,
             qty: qty,
             keterangan: '',
           ));
@@ -2132,6 +2172,19 @@ class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
     Navigator.pop(context, selectedItems);
   }
 
+  Color _getTipeColor(String tipe) {
+    return tipe == 'BJ' ? _accentSky : _accentMint;
+  }
+
+  String _getTipeLabel(String tipe) {
+    return tipe == 'BJ' ? 'Barang Jadi' : 'Setengah Jadi';
+  }
+
+  IconData _getTipeIcon(String tipe) {
+    return tipe == 'BJ' ? Icons.inventory_2_outlined : Icons.precision_manufacturing_outlined;
+  }
+
+  @override
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -2164,13 +2217,28 @@ class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    'Tambah Item',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Tambah Item',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      if (widget.isPusat) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Hanya item Setengah Jadi (STJ)',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 10,
+                            color: Colors.white.withOpacity(0.8),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 IconButton(
@@ -2235,11 +2303,14 @@ class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
               itemCount: _filteredItems.length,
               itemBuilder: (context, index) {
                 final item = _filteredItems[index];
-                final itemId = item['item_id'] as int;
-                final isExisting = widget.existingItems.any((i) => i.itemId == itemId);
+                final itemId = item['id'] as int;
+                final tipe = item['tipe'] as String;
+                final key = _getControllerKey(itemId, tipe);
+                final isExisting = widget.existingItems.any((i) => i.itemId == itemId && i.tipe == tipe);
+                final tipeColor = _getTipeColor(tipe);
 
-                if (!_qtyControllers.containsKey(itemId)) {
-                  _qtyControllers[itemId] = TextEditingController();
+                if (!_qtyControllers.containsKey(key)) {
+                  _qtyControllers[key] = TextEditingController();
                 }
 
                 return Container(
@@ -2259,10 +2330,10 @@ class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: _primaryDark.withOpacity(0.1),
+                          color: tipeColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFF2C3E50)),
+                        child: Icon(_getTipeIcon(tipe), size: 18, color: tipeColor),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -2270,7 +2341,7 @@ class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              item['item_nama']?.toString() ?? 'Unknown Item',
+                              item['nama']?.toString() ?? 'Unknown Item',
                               style: GoogleFonts.montserrat(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
@@ -2279,12 +2350,33 @@ class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            Text(
-                              'ID: ${item['item_id']}',
-                              style: GoogleFonts.montserrat(
-                                fontSize: 8,
-                                color: _textLight,
-                              ),
+                            const SizedBox(height: 2),
+                            Wrap(
+                              spacing: 4,
+                              children: [
+                                Text(
+                                  'ID: $itemId',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 8,
+                                    color: _textLight,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: tipeColor.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    _getTipeLabel(tipe),
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.w600,
+                                      color: tipeColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             if (isExisting)
                               Container(
@@ -2309,7 +2401,7 @@ class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
                         width: 70,
                         height: 34,
                         child: TextField(
-                          controller: _qtyControllers[itemId],
+                          controller: _qtyControllers[key],
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
                           inputFormatters: [FilteringTextInputFormatter.digitsOnly],

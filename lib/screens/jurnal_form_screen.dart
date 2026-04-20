@@ -53,6 +53,9 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
   final Color _textLight = const Color(0xFFA0AEC0);
   final Color _borderSoft = const Color(0xFFE2E8F0);
 
+  final Map<int, TextEditingController> _nilaiControllers = {};
+  final Map<int, TextEditingController> _keteranganControllers = {};
+
   @override
   void initState() {
     super.initState();
@@ -148,6 +151,15 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
         ))
             .toList();
 
+        _disposeAllControllers();
+        for (int i = 0; i < _details.length; i++) {
+          final detail = _details[i];
+          _nilaiControllers[i] = TextEditingController(
+            text: detail.nilai > 0 ? NumberFormat('#,###', 'id_ID').format(detail.nilai.toInt()) : '',
+          );
+          _keteranganControllers[i] = TextEditingController(text: detail.keterangan);
+        }
+
         _loadRekeningHeader();
       });
     } catch (e) {
@@ -163,6 +175,7 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
   void dispose() {
     _keteranganController.dispose();
     _nilaiController.dispose();
+    _disposeAllControllers();
     super.dispose();
   }
 
@@ -208,7 +221,7 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
@@ -243,6 +256,7 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
 
   void _addDetail() {
     setState(() {
+      final newIndex = _details.length;
       _details.add(JurnalDetailInput(
         account: '',
         accountName: '',
@@ -251,13 +265,57 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
         costcenter: '',
         costcenterName: '',
       ));
+      // Buat controller baru
+      _nilaiControllers[newIndex] = TextEditingController();
+      _keteranganControllers[newIndex] = TextEditingController();
     });
   }
 
   void _removeDetail(int index) {
     setState(() {
       _details.removeAt(index);
+      // Hapus dan dispose controller
+      _nilaiControllers[index]?.dispose();
+      _keteranganControllers[index]?.dispose();
+
+      // Re-index controllers
+      final newNilaiControllers = <int, TextEditingController>{};
+      final newKeteranganControllers = <int, TextEditingController>{};
+
+      for (int i = 0; i < _details.length; i++) {
+        // Cari controller dengan index lama yang sesuai
+        for (var entry in _nilaiControllers.entries) {
+          if (entry.key > index) {
+            newNilaiControllers[entry.key - 1] = entry.value;
+          } else if (entry.key < index) {
+            newNilaiControllers[entry.key] = entry.value;
+          }
+        }
+        for (var entry in _keteranganControllers.entries) {
+          if (entry.key > index) {
+            newKeteranganControllers[entry.key - 1] = entry.value;
+          } else if (entry.key < index) {
+            newKeteranganControllers[entry.key] = entry.value;
+          }
+        }
+      }
+
+      _nilaiControllers.clear();
+      _keteranganControllers.clear();
+      _nilaiControllers.addAll(newNilaiControllers);
+      _keteranganControllers.addAll(newKeteranganControllers);
     });
+  }
+
+  void _disposeAllControllers() {
+    for (var controller in _nilaiControllers.values) {
+      controller.dispose();
+    }
+    for (var controller in _keteranganControllers.values) {
+      controller.dispose();
+    }
+    _nilaiControllers.clear();
+    _keteranganControllers.clear();
   }
 
   void _updateDetail(int index, JurnalDetailInput newDetail) {
@@ -1159,10 +1217,19 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
 
   Widget _buildDetailRow(int index, JurnalDetailInput detail) {
     final isEven = index % 2 == 0;
-    final detailController = TextEditingController(
-      text: detail.nilai > 0 ? NumberFormat('#,###', 'id_ID').format(detail.nilai.toInt()) : '',
-    );
-    final keteranganController = TextEditingController(text: detail.keterangan);
+
+    // Dapatkan atau buat controller
+    if (!_nilaiControllers.containsKey(index)) {
+      _nilaiControllers[index] = TextEditingController(
+        text: detail.nilai > 0 ? NumberFormat('#,###', 'id_ID').format(detail.nilai.toInt()) : '',
+      );
+    }
+    if (!_keteranganControllers.containsKey(index)) {
+      _keteranganControllers[index] = TextEditingController(text: detail.keterangan);
+    }
+
+    final nilaiController = _nilaiControllers[index]!;
+    final keteranganController = _keteranganControllers[index]!;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 1),
@@ -1192,10 +1259,6 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
               borderRadius: BorderRadius.circular(6),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
-                ),
                 child: Row(
                   children: [
                     Icon(Icons.account_balance_wallet, size: 12, color: _textLight),
@@ -1224,7 +1287,7 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
             ),
           ),
 
-          // Keterangan
+          // Keterangan - TANPA SETSTATE
           Expanded(
             flex: 2,
             child: Container(
@@ -1240,20 +1303,22 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
                   contentPadding: EdgeInsets.zero,
                 ),
                 onChanged: (value) {
-                  _updateDetail(index, JurnalDetailInput(
+                  // Update detail langsung di list TANPA setState
+                  _details[index] = JurnalDetailInput(
                     account: detail.account,
                     accountName: detail.accountName,
                     nilai: detail.nilai,
                     keterangan: value,
                     costcenter: detail.costcenter,
                     costcenterName: detail.costcenterName,
-                  ));
+                  );
+                  // TIDAK PANGGIL setState() di sini!
                 },
               ),
             ),
           ),
 
-          // Nilai
+          // Nilai - dengan format currency
           Expanded(
             flex: 1,
             child: Container(
@@ -1267,8 +1332,8 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: TextField(
-                      controller: detailController,
-                      keyboardType: TextInputType.number,
+                      controller: nilaiController,
+                      keyboardType: TextInputType.numberWithOptions(signed: false, decimal: false),
                       style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _accentGold),
                       decoration: InputDecoration(
                         hintText: '0',
@@ -1278,16 +1343,37 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
                         contentPadding: EdgeInsets.zero,
                       ),
                       onChanged: (value) {
+                        // Hapus titik dan parse angka
                         final cleanValue = value.replaceAll('.', '');
                         final newNilai = double.tryParse(cleanValue) ?? 0;
-                        _updateDetail(index, JurnalDetailInput(
+
+                        // Format dengan titik (1000 -> 1.000)
+                        if (newNilai > 0) {
+                          final formatter = NumberFormat('#,###', 'id_ID');
+                          final formatted = formatter.format(newNilai.toInt());
+
+                          // Update controller tanpa kehilangan cursor position
+                          final currentSelection = nilaiController.selection;
+                          nilaiController.value = nilaiController.value.copyWith(
+                            text: formatted,
+                            selection: TextSelection.collapsed(
+                              offset: formatted.length,
+                            ),
+                          );
+                        } else if (value.isEmpty) {
+                          // Biarkan kosong
+                        }
+
+                        // Update detail TANPA setState
+                        _details[index] = JurnalDetailInput(
                           account: detail.account,
                           accountName: detail.accountName,
                           nilai: newNilai,
                           keterangan: detail.keterangan,
                           costcenter: detail.costcenter,
                           costcenterName: detail.costcenterName,
-                        ));
+                        );
+                        // TIDAK PANGGIL setState() di sini!
                       },
                     ),
                   ),

@@ -43,12 +43,17 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
         search: _searchController.text.isNotEmpty ? _searchController.text : null,
       );
 
+      // DEBUG: Print hasil
+      print('Search results length: ${results?.length}');
+      print('Search results: $results');
+
       setState(() {
         _searchResults = results ?? [];
         _selectedItems.clear();
         _initializeQtyControllers();
       });
     } catch (e) {
+      print('Error searching items: $e'); // DEBUG
       _showErrorSnackbar('Error: ${e.toString()}');
     } finally {
       setState(() => _isSearching = false);
@@ -57,7 +62,7 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
 
   void _initializeQtyControllers() {
     for (var item in _searchResults) {
-      final itemId = item['item_id'];
+      final itemId = item['id'];  // <-- GANTI
       if (itemId != null && !_qtyControllers.containsKey(itemId)) {
         _qtyControllers[itemId] = TextEditingController(text: '0');
       }
@@ -65,14 +70,17 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
   }
 
   void _toggleItem(Map<String, dynamic> item) {
-    final itemId = item['item_id'];
+    final itemId = item['id'];
+    final itemName = item['nama']?.toString() ?? 'Tanpa Nama';
+    final tipe = item['tipe']?.toString() ?? 'BJ';
+
+    print('Toggle Item - ID: $itemId, Nama: $itemName, Tipe: $tipe');
 
     if (itemId == null) {
       _showErrorSnackbar('Item ID tidak valid');
       return;
     }
 
-    final itemName = item['item_nama']?.toString() ?? 'Tanpa Nama';
     final alreadyInList = widget.existingItems.any((i) => i.itemId == itemId);
 
     if (alreadyInList) {
@@ -90,6 +98,7 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
         _selectedItems.add(MintaItem(
           itemId: itemId,
           itemNama: itemName,
+          tipe: item['tipe']?.toString() ?? 'BJ',  // <-- SUDAH BENAR
           qty: qty,
         ));
       });
@@ -106,7 +115,7 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
 
   void _toggleSelectAll() {
     final allSelected = _searchResults.every((item) {
-      final itemId = item['item_id'];
+      final itemId = item['id'];  // <-- GANTI
       return itemId != null && _selectedItems.any((i) => i.itemId == itemId);
     });
 
@@ -114,7 +123,7 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
       setState(() {
         _selectedItems.clear();
         for (var item in _searchResults) {
-          final itemId = item['item_id'];
+          final itemId = item['id'];  // <-- GANTI
           if (itemId != null) {
             final controller = _qtyControllers[itemId];
             if (controller != null) {
@@ -127,7 +136,7 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
       setState(() {
         _selectedItems.clear();
         for (var item in _searchResults) {
-          final itemId = item['item_id'];
+          final itemId = item['id'];  // <-- GANTI
           if (itemId == null) continue;
 
           if (widget.existingItems.any((i) => i.itemId == itemId)) {
@@ -139,7 +148,8 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
 
           _selectedItems.add(MintaItem(
             itemId: itemId,
-            itemNama: item['item_nama']?.toString() ?? 'Tanpa Nama',
+            itemNama: item['nama']?.toString() ?? 'Tanpa Nama',  // <-- GANTI
+            tipe: item['tipe']?.toString() ?? 'BJ',  // <-- TAMBAHKAN TIPE
             qty: qty,
           ));
         }
@@ -169,6 +179,34 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  void _addSelectedItems() {
+    final selectedItems = <MintaItem>[];
+    for (var item in _searchResults) {
+      final itemId = item['id'];
+      if (itemId == null) continue;
+
+      final controller = _qtyControllers[itemId];
+      if (controller != null && controller.text.isNotEmpty) {
+        final qty = int.tryParse(controller.text) ?? 0;
+        if (qty > 0) {
+          selectedItems.add(MintaItem(
+            itemId: itemId,
+            itemNama: item['nama']?.toString() ?? 'Unknown Item',
+            tipe: item['tipe']?.toString() ?? 'BJ', // <-- PASTIKAN INI
+            qty: qty,
+          ));
+        }
+      }
+    }
+
+    print('Selected items to return:');
+    for (var item in selectedItems) {
+      print('  - ID: ${item.itemId}, Tipe: ${item.tipe}, Qty: ${item.qty}');
+    }
+
+    Navigator.pop(context, selectedItems);
   }
 
   @override
@@ -394,160 +432,187 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
               itemCount: _searchResults.length,
               itemBuilder: (context, index) {
                 final item = _searchResults[index];
-                final itemId = item['item_id'];
-                final itemName = item['item_nama']?.toString() ?? 'Tanpa Nama';
+                print('Item $index: ${item['id']}, ${item['nama']}, ${item['tipe']}');
+                final itemId = item['id'];  // <-- GANTI
+                  final itemName = item['nama']?.toString() ?? 'Tanpa Nama';  // <-- GANTI
+                  final tipe = item['tipe']?.toString() ?? 'BJ';  // <-- TAMBAHKAN
 
-                if (itemId == null) return const SizedBox();
+                  if (itemId == null) return const SizedBox();
 
-                final isSelected = _isItemSelected(itemId);
-                final controller = _qtyControllers[itemId];
+                  final isSelected = _isItemSelected(itemId);
+                  final controller = _qtyControllers[itemId];
 
-                if (controller == null) {
-                  _qtyControllers[itemId] = TextEditingController(text: '0');
-                }
+                  if (controller == null) {
+                    _qtyControllers[itemId] = TextEditingController(text: '0');
+                  }
 
-                final currentController = _qtyControllers[itemId]!;
-                final alreadyInList = widget.existingItems.any((i) => i.itemId == itemId);
+                  final currentController = _qtyControllers[itemId]!;
+                  final alreadyInList = widget.existingItems.any((i) => i.itemId == itemId);
 
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
-                        blurRadius: 2,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Row(
-                        children: [
-                          if (!alreadyInList)
-                            Checkbox(
-                              value: isSelected,
-                              onChanged: (_) => _toggleItem(item),
-                              activeColor: const Color(0xFFF6A918),
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
-                            )
-                          else
-                            Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade50,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Icon(
-                                Icons.block,
-                                size: 12,
-                                color: Colors.red.shade700,
-                              ),
-                            ),
-
-                          const SizedBox(width: 8),
-
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  itemName,
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: alreadyInList
-                                        ? Colors.grey.shade500
-                                        : Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'ID: $itemId',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 9,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(width: 8),
-
-                          StatefulBuilder(
-                            builder: (context, setLocalState) {
-                              return Container(
-                                width: 70,
-                                height: 30,
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? const Color(0xFFF6A918)
-                                        : Colors.grey.shade300,
-                                    width: 1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: TextField(
-                                  controller: currentController,
-                                  keyboardType: TextInputType.number,
-                                  textAlign: TextAlign.center,
-                                  textAlignVertical: TextAlignVertical.center,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                  ],
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: isSelected
-                                        ? const Color(0xFFF6A918)
-                                        : Colors.grey.shade600,
-                                    height: 1.0,
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: '0',
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.zero,
-                                    isDense: true,
-                                    hintStyle: GoogleFonts.montserrat(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade400,
-                                      height: 1.0,
-                                    ),
-                                  ),
-                                  enabled: isSelected || (int.tryParse(currentController.text) ?? 0) > 0,
-                                  onChanged: (value) {
-                                    setLocalState(() {});
-
-                                    final qty = int.tryParse(value) ?? 0;
-                                    final selectedIndex = _selectedItems.indexWhere((i) => i.itemId == itemId);
-                                    if (selectedIndex != -1) {
-                                      _selectedItems[selectedIndex] = MintaItem(
-                                        itemId: _selectedItems[selectedIndex].itemId,
-                                        itemNama: _selectedItems[selectedIndex].itemNama,
-                                        qty: qty,
-                                      );
-                                    }
-                                  },
-                                ),
-                              );
-                            },
+                  return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.02),
+                            blurRadius: 2,
+                            offset: const Offset(0, 1),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                );
-              },
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Row(
+                            children: [
+                              if (!alreadyInList)
+                                Checkbox(
+                                  value: isSelected,
+                                  onChanged: (_) => _toggleItem(item),
+                                  activeColor: const Color(0xFFF6A918),
+                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                )
+                              else
+                                Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Icon(
+                                    Icons.block,
+                                    size: 12,
+                                    color: Colors.red.shade700,
+                                  ),
+                                ),
+
+                              const SizedBox(width: 8),
+
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      itemName,
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: alreadyInList
+                                            ? Colors.grey.shade500
+                                            : Colors.black87,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Wrap(
+                                      spacing: 4,
+                                      children: [
+                                        Text(
+                                          'ID: $itemId',
+                                          style: GoogleFonts.montserrat(
+                                            fontSize: 9,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                        // Tipe badge
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: tipe == 'BJ' ? Colors.blue.shade50 : Colors.green.shade50,
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: Border.all(
+                                              color: tipe == 'BJ' ? Colors.blue.shade200 : Colors.green.shade200,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            tipe == 'BJ' ? 'BJ' : 'STJ',
+                                            style: GoogleFonts.montserrat(
+                                              fontSize: 8,
+                                              fontWeight: FontWeight.w600,
+                                              color: tipe == 'BJ' ? Colors.blue.shade700 : Colors.green.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(width: 8),
+
+                              StatefulBuilder(
+                                builder: (context, setLocalState) {
+                                  return Container(
+                                    width: 70,
+                                    height: 30,
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? const Color(0xFFF6A918)
+                                            : Colors.grey.shade300,
+                                        width: 1,
+                                      ),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: TextField(
+                                      controller: currentController,
+                                      keyboardType: TextInputType.number,
+                                      textAlign: TextAlign.center,
+                                      textAlignVertical: TextAlignVertical.center,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: isSelected
+                                            ? const Color(0xFFF6A918)
+                                            : Colors.grey.shade600,
+                                        height: 1.0,
+                                      ),
+                                      decoration: InputDecoration(
+                                        hintText: '0',
+                                        border: InputBorder.none,
+                                        contentPadding: EdgeInsets.zero,
+                                        isDense: true,
+                                        hintStyle: GoogleFonts.montserrat(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade400,
+                                          height: 1.0,
+                                        ),
+                                      ),
+                                      enabled: isSelected || (int.tryParse(currentController.text) ?? 0) > 0,
+                                      onChanged: (value) {
+                                        setLocalState(() {});
+
+                                        final qty = int.tryParse(value) ?? 0;
+                                        final selectedIndex = _selectedItems.indexWhere((i) => i.itemId == itemId);
+                                        if (selectedIndex != -1) {
+                                          _selectedItems[selectedIndex] = MintaItem(
+                                            itemId: _selectedItems[selectedIndex].itemId,
+                                            itemNama: _selectedItems[selectedIndex].itemNama,
+                                            tipe: _selectedItems[selectedIndex].tipe,
+                                            qty: qty,
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  );
+                },
             ),
           ),
 

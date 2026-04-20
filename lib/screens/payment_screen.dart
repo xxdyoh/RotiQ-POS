@@ -1951,6 +1951,93 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return false;
   }
 
+  // Future<void> _processPayment() async {
+  //   if (!_isPaymentComplete) {
+  //     _showSnackbar('Pembayaran belum lengkap', _accentGold);
+  //     return;
+  //   }
+  //
+  //   setState(() => _isProcessing = true);
+  //
+  //   try {
+  //     final currentUser = SessionManager.getCurrentUser();
+  //
+  //     final itemsForPrint = widget.orderItems.map((item) {
+  //       return {
+  //         'product_name': item.product.name,
+  //         'quantity': item.quantity,
+  //         'price': item.product.price,
+  //         'total': item.total,
+  //         'discount': item.discountAmount,
+  //       };
+  //     }).toList();
+  //
+  //     final paymentMethodsForPrint = _paymentItems.map((payment) {
+  //       return {
+  //         'type': payment.type.toString().split('.').last,
+  //         'subType': payment.subType,
+  //         'amount': payment.amount,
+  //         'reference': payment.reference,
+  //       };
+  //     }).toList();
+  //
+  //     final change = _change;
+  //
+  //     final order = Order(
+  //       customer: widget.customer,
+  //       items: widget.orderItems,
+  //       paymentMethod: _determinePaymentMethod(),
+  //       paidAmount: _totalPaid,
+  //       userName: currentUser?.kduser ?? 'ADMIN',
+  //       userId: currentUser?.id ?? '01',
+  //       globalDiscount: _orderDiscount,
+  //     );
+  //
+  //     await _printReceipt(
+  //       orderId: '${DateTime.now().millisecondsSinceEpoch}',
+  //       items: itemsForPrint,
+  //       paymentMethods: paymentMethodsForPrint,
+  //       change: change,
+  //       order: order,
+  //     );
+  //
+  //     final orderPayload = {
+  //       'customer_id': widget.customer.id,
+  //       'items': order.items.map((item) => item.toJson()).toList(),
+  //       'payment_methods': paymentMethodsForPrint,
+  //       'grand_total': _grandTotal,
+  //       'created_at': order.createdAt.toIso8601String(),
+  //       'user_name': order.userName,
+  //       'user_id': order.userId,
+  //       'global_discount': _orderDiscount,
+  //       'promo_name': widget.promoName,
+  //       'change': change,
+  //       'paid_amount': _totalPaid,
+  //     };
+  //
+  //     final result = await ApiService.submitOrder(orderPayload);
+  //
+  //     if (result['success']) {
+  //       for (final payment in _paymentItems.where((p) => p.type == PaymentType.dp && p.reference != null)) {
+  //         try {
+  //           await UangMukaService.markAsRealisasi(payment.reference!);
+  //         } catch (e) {
+  //           print('Error marking DP as realisasi: $e');
+  //         }
+  //       }
+  //
+  //       final orderId = result['order_id']?.toString() ?? '';
+  //       _showSuccessDialog(order, orderId);
+  //     } else {
+  //       setState(() => _isProcessing = false);
+  //       _showSnackbar(result['message'] ?? 'Gagal menyimpan order', _accentCoral);
+  //     }
+  //   } catch (e) {
+  //     setState(() => _isProcessing = false);
+  //     _showSnackbar('Error: ${e.toString()}', _accentCoral);
+  //   }
+  // }
+
   Future<void> _processPayment() async {
     if (!_isPaymentComplete) {
       _showSnackbar('Pembayaran belum lengkap', _accentGold);
@@ -1962,6 +2049,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
     try {
       final currentUser = SessionManager.getCurrentUser();
 
+      // Validasi user
+      if (currentUser == null) {
+        throw Exception('Session user tidak valid');
+      }
+
+      // Prepare data for printing
       final itemsForPrint = widget.orderItems.map((item) {
         return {
           'product_name': item.product.name,
@@ -1981,26 +2074,31 @@ class _PaymentScreenState extends State<PaymentScreen> {
         };
       }).toList();
 
-      final change = _change;
-
       final order = Order(
         customer: widget.customer,
         items: widget.orderItems,
         paymentMethod: _determinePaymentMethod(),
         paidAmount: _totalPaid,
-        userName: currentUser?.kduser ?? 'ADMIN',
-        userId: currentUser?.id ?? '01',
+        userName: currentUser.kduser ?? 'ADMIN',
+        userId: currentUser.id ?? '01',
         globalDiscount: _orderDiscount,
       );
 
-      await _printReceipt(
-        orderId: '${DateTime.now().millisecondsSinceEpoch}',
-        items: itemsForPrint,
-        paymentMethods: paymentMethodsForPrint,
-        change: change,
-        order: order,
-      );
+      // Print receipt dengan timeout
+      try {
+        await _printReceipt(
+          orderId: '${DateTime.now().millisecondsSinceEpoch}',
+          items: itemsForPrint,
+          paymentMethods: paymentMethodsForPrint,
+          change: _change,
+          order: order,
+        );
+      } catch (printError) {
+        print('Print error (non-fatal): $printError');
+        // Lanjutkan meskipun print gagal
+      }
 
+      // Submit order dengan timeout
       final orderPayload = {
         'customer_id': widget.customer.id,
         'items': order.items.map((item) => item.toJson()).toList(),
@@ -2011,20 +2109,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
         'user_id': order.userId,
         'global_discount': _orderDiscount,
         'promo_name': widget.promoName,
-        'change': change,
+        'change': _change,
         'paid_amount': _totalPaid,
       };
 
-      final result = await ApiService.submitOrder(orderPayload);
+      
 
-      if (result['success']) {
-        for (final payment in _paymentItems.where((p) => p.type == PaymentType.dp && p.reference != null)) {
-          try {
-            await UangMukaService.markAsRealisasi(payment.reference!);
-          } catch (e) {
-            print('Error marking DP as realisasi: $e');
-          }
-        }
+      final result = await ApiService.submitOrder(orderPayload).timeout(
+        Duration(seconds: 30),
+        onTimeout: () => throw Exception('Koneksi timeout. Periksa jaringan Anda.'),
+      );
+
+      if (result['success'] == true) {
+        // Update DP status (non-blocking)
+        _updateDpStatusAsync();
 
         final orderId = result['order_id']?.toString() ?? '';
         _showSuccessDialog(order, orderId);
@@ -2035,6 +2133,23 @@ class _PaymentScreenState extends State<PaymentScreen> {
     } catch (e) {
       setState(() => _isProcessing = false);
       _showSnackbar('Error: ${e.toString()}', _accentCoral);
+      print('Payment process error: $e');
+    }
+  }
+
+// Method baru untuk update DP secara async (tidak blocking)
+  void _updateDpStatusAsync() {
+    for (final payment in _paymentItems.where((p) => p.type == PaymentType.dp && p.reference != null)) {
+      UangMukaService.markAsRealisasi(payment.reference!)
+          .timeout(
+        Duration(seconds: 10),
+        onTimeout: () {
+          print('DP update timeout for: ${payment.reference}');
+          // Kembalikan Future<void> yang completed
+          return Future.value();
+        },
+      )
+          .catchError((e) => print('DP update error: $e'));
     }
   }
 

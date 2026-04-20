@@ -6,7 +6,8 @@ import 'package:syncfusion_flutter_datagrid_export/export.dart';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' hide Row, Border, Column;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import 'dart:html' as html;
+// import 'dart:html' as html;
+import 'package:universal_html/html.dart' as html;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/stokin_service.dart';
 import '../widgets/base_layout.dart';
@@ -231,7 +232,7 @@ class _StokinListScreenState extends State<StokinListScreen> with SingleTickerPr
       context: context,
       initialDate: isStartDate ? _startDate : _endDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(

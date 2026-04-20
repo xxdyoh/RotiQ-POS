@@ -148,7 +148,7 @@ class _SetengahJadiStockReportScreenState extends State<SetengahJadiStockReportS
       context: context,
       initialDate: _startDate ?? DateTime.now(),
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
@@ -175,7 +175,7 @@ class _SetengahJadiStockReportScreenState extends State<SetengahJadiStockReportS
       context: context,
       initialDate: _endDate ?? DateTime.now(),
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(

@@ -1,0 +1,2 @@
+D:/Projects/Work/2025/BSM/Mobile/RotiQ-POS/android/app/.cxx/RelWithDebInfo/51n2g3ns/x86/CMakeFiles/edit_cache.dir
+D:/Projects/Work/2025/BSM/Mobile/RotiQ-POS/android/app/.cxx/RelWithDebInfo/51n2g3ns/x86/CMakeFiles/rebuild_cache.dir

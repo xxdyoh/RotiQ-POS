@@ -6,7 +6,8 @@ import 'package:syncfusion_flutter_datagrid_export/export.dart';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' hide Row, Border, Column;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import 'dart:html' as html;
+// import 'dart:html' as html;
+import 'package:universal_html/html.dart' as html;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/do_service.dart';
 import '../widgets/base_layout.dart';
@@ -224,7 +225,7 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
       context: context,
       initialDate: isStartDate ? _startDate : _endDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
@@ -811,7 +812,9 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                                     textDark: _textDark,
                                     textMedium: _textMedium,
                                     accentMint: _accentMint,
+                                    accentSky: _accentSky,        // <-- TAMBAHKAN
                                     accentMintSoft: _accentMintSoft,
+                                    accentSkySoft: _accentSkySoft, // <-- TAMBAHKAN
                                   ),
                                   columnWidthMode: ColumnWidthMode.fill,
                                   headerRowHeight: 34,
@@ -822,18 +825,11 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                                   columns: [
                                     GridColumn(
                                       columnName: 'no',
-                                      width: 60,
+                                      width: 50,
                                       label: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8),
                                         alignment: Alignment.center,
-                                        child: Text(
-                                          'No',
-                                          style: GoogleFonts.montserrat(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 10,
-                                            color: _textDark,
-                                          ),
-                                        ),
+                                        child: Text('No', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
                                       ),
                                     ),
                                     GridColumn(
@@ -841,30 +837,25 @@ class _DoListScreenState extends State<DoListScreen> with SingleTickerProviderSt
                                       label: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8),
                                         alignment: Alignment.centerLeft,
-                                        child: Text(
-                                          'Nama Item',
-                                          style: GoogleFonts.montserrat(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 10,
-                                            color: _textDark,
-                                          ),
-                                        ),
+                                        child: Text('Nama Item', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
+                                      ),
+                                    ),
+                                    GridColumn(
+                                      columnName: 'tipe',
+                                      width: 70,
+                                      label: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        alignment: Alignment.center,
+                                        child: Text('Tipe', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
                                       ),
                                     ),
                                     GridColumn(
                                       columnName: 'qty',
-                                      width: 100,
+                                      width: 80,
                                       label: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8),
                                         alignment: Alignment.center,
-                                        child: Text(
-                                          'Qty',
-                                          style: GoogleFonts.montserrat(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 10,
-                                            color: _textDark,
-                                          ),
-                                        ),
+                                        child: Text('Qty', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
                                       ),
                                     ),
                                   ],
@@ -1990,17 +1981,22 @@ class MutasiDetailDataSource extends DataGridSource {
     required Color textDark,
     required Color textMedium,
     required Color accentMint,
+    required Color accentSky, // <-- TAMBAHKAN
     required Color accentMintSoft,
+    required Color accentSkySoft, // <-- TAMBAHKAN
   }) {
     _accentGold = accentGold;
     _textDark = textDark;
     _textMedium = textMedium;
     _accentMint = accentMint;
+    _accentSky = accentSky;
     _accentMintSoft = accentMintSoft;
+    _accentSkySoft = accentSkySoft;
 
     _data = details.asMap().entries.map((entry) {
       final index = entry.key + 1;
       final item = entry.value;
+      final tipe = item['mutcd_tipe'] ?? 'BJ';
 
       int qty = 0;
       final rawQty = item['mutcd_qty'];
@@ -2011,6 +2007,7 @@ class MutasiDetailDataSource extends DataGridSource {
       return DataGridRow(cells: [
         DataGridCell<int>(columnName: 'no', value: index),
         DataGridCell<String>(columnName: 'nama', value: item['item_nama']?.toString() ?? '-'),
+        DataGridCell<String>(columnName: 'tipe', value: tipe),
         DataGridCell<int>(columnName: 'qty', value: qty),
       ]);
     }).toList();
@@ -2021,7 +2018,9 @@ class MutasiDetailDataSource extends DataGridSource {
   late Color _textDark;
   late Color _textMedium;
   late Color _accentMint;
+  late Color _accentSky;
   late Color _accentMintSoft;
+  late Color _accentSkySoft;
 
   @override
   List<DataGridRow> get rows => _data;
@@ -2030,6 +2029,33 @@ class MutasiDetailDataSource extends DataGridSource {
   DataGridRowAdapter buildRow(DataGridRow row) {
     return DataGridRowAdapter(
       cells: row.getCells().map<Widget>((cell) {
+        if (cell.columnName == 'tipe') {
+          final tipe = cell.value.toString();
+          final isBJ = tipe == 'BJ';
+          final color = isBJ ? _accentSky : _accentMint;
+
+          return Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: color.withOpacity(0.3)),
+              ),
+              child: Text(
+                isBJ ? 'BJ' : 'STJ',
+                style: GoogleFonts.montserrat(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ),
+          );
+        }
+
         if (cell.columnName == 'qty') {
           return Container(
             alignment: Alignment.center,

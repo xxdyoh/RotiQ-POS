@@ -397,7 +397,7 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(

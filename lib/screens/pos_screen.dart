@@ -2235,30 +2235,59 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   void _openTutupKasirForm() async {
+    // Cek apakah ada item di keranjang
     if (_cartItems.isNotEmpty) {
       final proceed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Ada Item di Keranjang', style: GoogleFonts.montserrat(color: _textPrimary)),
-          content: Text('Ada ${_cartItems.length} item di keranjang. Kosongkan dulu?'),
+          title: Text(
+            'Ada Item di Keranjang',
+            style: GoogleFonts.montserrat(color: _textPrimary),
+          ),
+          content: Text(
+            'Ada ${_cartItems.length} item di keranjang. Kosongkan dulu?',
+            style: GoogleFonts.montserrat(color: _textSecondary),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: Text('Batal', style: GoogleFonts.montserrat(color: _textSecondary)),
+              child: Text(
+                'Batal',
+                style: GoogleFonts.montserrat(color: _textSecondary),
+              ),
             ),
             ElevatedButton(
               onPressed: () {
                 setState(() => _cartItems.clear());
                 Navigator.pop(context, true);
               },
-              style: ElevatedButton.styleFrom(backgroundColor: _primaryDark),
-              child: Text('Kosongkan & Lanjut', style: GoogleFonts.montserrat(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryDark,
+              ),
+              child: Text(
+                'Kosongkan & Lanjut',
+                style: GoogleFonts.montserrat(color: Colors.white),
+              ),
             ),
           ],
         ),
       );
 
-      if (proceed != true) return;
+      if (proceed != true) return; // User membatalkan
+    }
+
+    // ✅ BUKA HALAMAN TUTUP KASIR
+    try {
+      final result = await Navigator.pushNamed(
+        context,
+        AppRoutes.tutupKasir, // Pastikan route ini terdaftar di AppRoutes
+      );
+
+      if (result == true) {
+        _showSnackbar('Tutup kasir berhasil', _accentMint);
+      }
+    } catch (e) {
+      _showSnackbar('Gagal membuka form tutup kasir: $e', _accentCoral);
     }
   }
 
@@ -2458,7 +2487,7 @@ class _ReprintOrderDialogState extends State<ReprintOrderDialog> {
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(

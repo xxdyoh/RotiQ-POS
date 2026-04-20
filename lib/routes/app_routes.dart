@@ -35,6 +35,7 @@ import '../screens/user_permission_screen.dart';
 import '../screens/koreksi_list_screen.dart';
 import '../screens/mutasi_in_form_screen.dart';
 import '../screens/mutasi_in_form_screen.dart';
+import '../screens/posting_penjualan_list_screen.dart';
 
 class AppRoutes {
   static const String dashboard = '/dashboard';
@@ -95,6 +96,9 @@ class AppRoutes {
 
   static const String deviceCheck = '/device-check';
 
+  static const String postingPenjualanList = '/posting-penjualan';
+  static const String postingPenjualanForm = '/posting-penjualan/form';
+
   static Map<String, WidgetBuilder> get routes {
     return {
       dashboard: (context) => DashboardScreen(),
@@ -116,6 +120,8 @@ class AppRoutes {
       mintaForm: (context) => MintaFormScreen(
         onMintaSaved: () {},
       ),
+
+      postingPenjualanList: (context) => const PostingPenjualanListScreen(),
 
       doList: (context) => DoListScreen(),
       // HAPUS doForm dari sini - tidak perlu karena sudah ditangani di onGenerateRoute
