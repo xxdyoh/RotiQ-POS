@@ -334,6 +334,24 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         indent: true,
       ),
       _buildMenuItem(
+        icon: Icons.inbox_rounded,
+        label: 'Permintaan Barang',
+        routeName: AppRoutes.mintaList,
+        indent: true,
+      ),
+      _buildMenuItem(
+        icon: Icons.assignment_rounded,
+        label: 'SPK',
+        routeName: AppRoutes.spkList,
+        indent: true,
+      ),
+      _buildMenuItem(
+        icon: Icons.inventory_rounded,
+        label: 'Serah Terima BJ',
+        routeName: AppRoutes.serahTerimaList,
+        indent: true,
+      ),
+      _buildMenuItem(
         icon: Icons.local_shipping_rounded,
         label: 'Mutasi Out',
         routeName: AppRoutes.doList,
@@ -376,27 +394,9 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         indent: true,
       ),
       _buildMenuItem(
-        icon: Icons.inbox_rounded,
-        label: 'Permintaan Barang',
-        routeName: AppRoutes.mintaList,
-        indent: true,
-      ),
-      _buildMenuItem(
         icon: Icons.receipt_long_rounded,
         label: 'Biaya Lain',
         routeName: AppRoutes.biayaLain,
-        indent: true,
-      ),
-      _buildMenuItem(
-        icon: Icons.assignment_rounded,
-        label: 'SPK',
-        routeName: AppRoutes.spkList,
-        indent: true,
-      ),
-      _buildMenuItem(
-        icon: Icons.inventory_rounded,
-        label: 'Serah Terima BJ',
-        routeName: AppRoutes.serahTerimaList,
         indent: true,
       ),
     ];
@@ -450,15 +450,15 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         indent: true,
       ),
       _buildMenuItem(
-        icon: Icons.inventory_rounded,
-        label: 'Lap Stock',
-        routeName: AppRoutes.lapStock,
-        indent: true,
-      ),
-      _buildMenuItem(
         icon: Icons.pie_chart_outline,
         label: 'Lap. Permintaan',
         routeName: '/minta-report',
+        indent: true,
+      ),
+      _buildMenuItem(
+        icon: Icons.inventory_rounded,
+        label: 'Lap Stock',
+        routeName: AppRoutes.lapStock,
         indent: true,
       ),
       _buildMenuItem(

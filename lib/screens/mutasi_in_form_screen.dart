@@ -458,10 +458,10 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
           return MutasiInItem(
             itemId: detail['mutcd_brg_kode'],
             itemNama: detail['item_nama'] ?? '',
-            tipe: detail['mutcd_tipe'] ?? 'BJ', // <-- TAMBAHKAN
+            tipe: detail['mutcd_tipe'] ?? 'BJ',
             qty: qty,
             qtyMutasi: 0,
-            referensi: '',
+            referensi: detail['mutcd_mt_nomor'], // <-- SIMPAN mt_nomor
           );
         }).toList();
         _filteredItems = List.from(_items);
@@ -498,21 +498,20 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
   }
 
   void _updateItemQty(int itemId, int newQty) {
-    setState(() {
-      final itemIndex = _items.indexWhere((item) => item.itemId == itemId);
-      if (itemIndex != -1) {
-        _items[itemIndex] = _items[itemIndex].copyWith(qtyMutasi: newQty);
-      }
+    // Update data
+    final itemIndex = _items.indexWhere((item) => item.itemId == itemId);
+    if (itemIndex != -1) {
+      _items[itemIndex] = _items[itemIndex].copyWith(qtyMutasi: newQty);
+    }
+    final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
+    if (filteredIndex != -1) {
+      _filteredItems[filteredIndex] = _filteredItems[filteredIndex].copyWith(qtyMutasi: newQty);
+    }
 
-      final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
-      if (filteredIndex != -1) {
-        _filteredItems[filteredIndex] = _filteredItems[filteredIndex].copyWith(qtyMutasi: newQty);
-      }
+    // JANGAN update controller.text di sini, karena controller sudah di-update oleh onChanged
 
-      if (_qtyControllers.containsKey(itemId)) {
-        _qtyControllers[itemId]?.text = newQty.toString();
-      }
-    });
+    // Hanya refresh UI
+    setState(() {});
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -877,8 +876,9 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
         'items': itemsWithQty.map((item) => {
           'item_id': item.itemId,
           'item_nama': item.itemNama,
-          'tipe': item.tipe, // <-- TAMBAHKAN
+          'tipe': item.tipe,
           'qty': item.qtyMutasi,
+          'mt_nomor': item.referensi, // <-- KIRIM mt_nomor
         }).toList(),
       };
 
@@ -1654,12 +1654,30 @@ class _MutasiInFormScreenState extends State<MutasiInFormScreen> with SingleTick
                 ),
                 onChanged: (value) {
                   final intValue = int.tryParse(value) ?? 0;
+
+                  // Validasi tidak boleh melebihi qty out
                   if (intValue > item.qty) {
                     _showToast('Qty tidak boleh melebihi qty out (${item.qty})', type: ToastType.error);
+                    // Kembalikan ke nilai sebelumnya tanpa rebuild
                     controller.text = item.qtyMutasi.toString();
+                    controller.selection = TextSelection.fromPosition(
+                      TextPosition(offset: controller.text.length),
+                    );
                     return;
                   }
-                  _updateItemQty(item.itemId, intValue);
+
+                  // Update data TANPA setState (biar controller tidak di-reset)
+                  final itemIndex = _items.indexWhere((i) => i.itemId == item.itemId);
+                  if (itemIndex != -1) {
+                    _items[itemIndex] = _items[itemIndex].copyWith(qtyMutasi: intValue);
+                  }
+                  final filteredIndex = _filteredItems.indexWhere((i) => i.itemId == item.itemId);
+                  if (filteredIndex != -1) {
+                    _filteredItems[filteredIndex] = _filteredItems[filteredIndex].copyWith(qtyMutasi: intValue);
+                  }
+
+                  // Hanya update UI untuk badge (panggil setState tanpa recreate controller)
+                  setState(() {});
                 },
               ),
             ),

@@ -4,10 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import 'package:syncfusion_flutter_datagrid_export/export.dart';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' hide Row, Border, Column;
-import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-// import 'dart:html' as html;
 import 'package:universal_html/html.dart' as html;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/item_service.dart';
@@ -27,29 +25,30 @@ class _ItemListScreenState extends State<ItemListScreen> {
   final GlobalKey<SfDataGridState> _key = GlobalKey<SfDataGridState>();
   final DataGridController _dataGridController = DataGridController();
 
-  final Color _primaryDark = const Color(0xFF2C3E50);
-  final Color _primaryLight = const Color(0xFF34495E);
-  final Color _accentGold = const Color(0xFFF6A918);
-  final Color _accentMint = const Color(0xFF06D6A0);
-  final Color _accentCoral = const Color(0xFFFF6B6B);
-  final Color _accentSky = const Color(0xFF4CC9F0);
-  final Color _bgLight = const Color(0xFFFAFAFA);
-  final Color _bgCard = const Color(0xFFFFFFFF);
-  final Color _textPrimary = const Color(0xFF1A202C);
-  final Color _textSecondary = const Color(0xFF718096);
-  final Color _borderColor = const Color(0xFFE2E8F0);
+  // Color Palette - Minimalis & Elegan
+  static const Color _primaryDark = Color(0xFF1A202C);
+  static const Color _surfaceWhite = Color(0xFFFFFFFF);
+  static const Color _bgLight = Color(0xFFF7F9FC);
+  static const Color _textPrimary = Color(0xFF1A202C);
+  static const Color _textSecondary = Color(0xFF64748B);
+  static const Color _textTertiary = Color(0xFF94A3B8);
+  static const Color _borderColor = Color(0xFFE2E8F0);
+  static const Color _accentBlue = Color(0xFF3B82F6);
+  static const Color _accentRed = Color(0xFFEF4444);
+  static const Color _accentGreen = Color(0xFF10B981);
+  static const Color _accentOrange = Color(0xFFF59E0B);
 
   final currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
   final NumberFormat _numberFormat = NumberFormat('#,##0');
 
   late Map<String, double> _columnWidths = {
     'no': 120,
-    'nama': 250,
-    'category': 180,
-    'harga': 180,
-    'stok': 130,
-    'nilai': 200,
-    'aksi': 140,
+    'nama': 260,
+    'category': 170,
+    'harga': 160,
+    'stok': 140,
+    'nilai': 160,
+    'aksi': 180,
   };
 
   bool _isLoading = false;
@@ -86,17 +85,10 @@ class _ItemListScreenState extends State<ItemListScreen> {
           onDelete: _deleteItem,
           formatCurrency: currencyFormat,
           numberFormat: _numberFormat,
-          primaryDark: _primaryDark,
-          accentGold: _accentGold,
-          accentCoral: _accentCoral,
-          accentSky: _accentSky,
-          borderColor: _borderColor,
-          textPrimary: _textPrimary,
-          textSecondary: _textSecondary,
         );
       });
     } catch (e) {
-      _showErrorSnackbar('Gagal memuat data: ${e.toString()}');
+      _showSnackbar('Gagal memuat data', isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -118,7 +110,6 @@ class _ItemListScreenState extends State<ItemListScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_dataSource.effectiveRows != null) {
         final filteredRows = _dataSource.effectiveRows!;
-
         List<Map<String, dynamic>> filteredData = [];
 
         for (var row in filteredRows) {
@@ -127,7 +118,6 @@ class _ItemListScreenState extends State<ItemListScreen> {
                 (cell) => cell.columnName == 'aksi',
             orElse: () => DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: null),
           );
-
           if (aksiCell.value != null) {
             filteredData.add(aksiCell.value as Map<String, dynamic>);
           }
@@ -148,38 +138,15 @@ class _ItemListScreenState extends State<ItemListScreen> {
     });
   }
 
-  void _showErrorSnackbar(String message) {
+  void _showSnackbar(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.error_outline, color: Colors.white, size: 16),
-            const SizedBox(width: 6),
-            Expanded(child: Text(message, style: GoogleFonts.montserrat(fontSize: 12))),
-          ],
-        ),
-        backgroundColor: _accentCoral,
+        content: Text(message, style: GoogleFonts.montserrat(fontSize: 12, color: Colors.white)),
+        backgroundColor: isError ? _accentRed : _accentGreen,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        margin: const EdgeInsets.all(12),
-      ),
-    );
-  }
-
-  void _showSuccessSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 16),
-            const SizedBox(width: 6),
-            Expanded(child: Text(message, style: GoogleFonts.montserrat(fontSize: 12))),
-          ],
-        ),
-        backgroundColor: _accentMint,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        margin: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -211,19 +178,13 @@ class _ItemListScreenState extends State<ItemListScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: _accentCoral, size: 20),
-            const SizedBox(width: 8),
-            Text('Hapus Item?', style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w600, color: _textPrimary)),
-          ],
-        ),
-        content: Text('Apakah Anda yakin ingin menghapus "${item['Nama']}"?',
-            style: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('Hapus Item', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w600)),
+        content: Text('Hapus "${item['Nama']}"?', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary)),
+            child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -231,15 +192,13 @@ class _ItemListScreenState extends State<ItemListScreen> {
               await _performDelete(item);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: _accentCoral,
+              backgroundColor: _accentRed,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: Text('Hapus', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600)),
+            child: Text('Hapus', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w500)),
           ),
         ],
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -249,13 +208,13 @@ class _ItemListScreenState extends State<ItemListScreen> {
     try {
       final result = await ItemService.deleteItem(item['id'].toString());
       if (result['success']) {
-        _showSuccessSnackbar(result['message']);
+        _showSnackbar(result['message']);
         await _loadData();
       } else {
-        _showErrorSnackbar(result['message']);
+        _showSnackbar(result['message'], isError: true);
       }
     } catch (e) {
-      _showErrorSnackbar('Error: ${e.toString()}');
+      _showSnackbar('Error: ${e.toString()}', isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -272,24 +231,20 @@ class _ItemListScreenState extends State<ItemListScreen> {
       final Worksheet sheet = workbook.worksheets[0];
       sheet.name = 'Data Item';
 
-      // Set column widths
-      sheet.getRangeByIndex(1, 1).columnWidth = 8;  // No
-      sheet.getRangeByIndex(1, 2).columnWidth = 35; // Nama
-      sheet.getRangeByIndex(1, 3).columnWidth = 25; // Kategori
-      sheet.getRangeByIndex(1, 4).columnWidth = 20; // Harga
-      sheet.getRangeByIndex(1, 5).columnWidth = 10; // Stok
-      sheet.getRangeByIndex(1, 6).columnWidth = 25; // Nilai
+      sheet.getRangeByIndex(1, 1).columnWidth = 6;
+      sheet.getRangeByIndex(1, 2).columnWidth = 30;
+      sheet.getRangeByIndex(1, 3).columnWidth = 20;
+      sheet.getRangeByIndex(1, 4).columnWidth = 18;
+      sheet.getRangeByIndex(1, 5).columnWidth = 10;
+      sheet.getRangeByIndex(1, 6).columnWidth = 20;
 
-      // Header style
       final headerRange = sheet.getRangeByIndex(1, 1, 1, 6);
-      headerRange.cellStyle.backColor = '#2C3E50';
+      headerRange.cellStyle.backColor = '#1A202C';
       headerRange.cellStyle.fontColor = '#FFFFFF';
       headerRange.cellStyle.bold = true;
       headerRange.cellStyle.hAlign = HAlignType.center;
-      headerRange.cellStyle.vAlign = VAlignType.center;
-      headerRange.cellStyle.fontSize = 11;
+      headerRange.cellStyle.fontSize = 10;
 
-      // Headers
       sheet.getRangeByName('A1').setText('No');
       sheet.getRangeByName('B1').setText('Nama Item');
       sheet.getRangeByName('C1').setText('Kategori');
@@ -301,27 +256,17 @@ class _ItemListScreenState extends State<ItemListScreen> {
       for (var row in visibleRows) {
         final cells = row.getCells();
 
-        String no = '';
-        String nama = '';
-        String kategori = '';
-        String harga = '';
+        String no = '', nama = '', kategori = '', harga = '';
         int stok = 0;
         double nilai = 0;
 
         for (var cell in cells) {
-          if (cell.columnName == 'no') {
-            no = cell.value.toString();
-          } else if (cell.columnName == 'nama') {
-            nama = cell.value.toString();
-          } else if (cell.columnName == 'category') {
-            kategori = cell.value.toString();
-          } else if (cell.columnName == 'harga') {
-            harga = cell.value.toString();
-          } else if (cell.columnName == 'stok') {
-            stok = cell.value as int;
-          } else if (cell.columnName == 'nilai') {
-            nilai = cell.value as double;
-          }
+          if (cell.columnName == 'no') no = cell.value.toString();
+          else if (cell.columnName == 'nama') nama = cell.value.toString();
+          else if (cell.columnName == 'category') kategori = cell.value.toString();
+          else if (cell.columnName == 'harga') harga = cell.value.toString();
+          else if (cell.columnName == 'stok') stok = cell.value as int;
+          else if (cell.columnName == 'nilai') nilai = cell.value as double;
         }
 
         sheet.getRangeByName('A$rowIndex').setText(no);
@@ -331,12 +276,9 @@ class _ItemListScreenState extends State<ItemListScreen> {
         sheet.getRangeByName('E$rowIndex').setNumber(stok.toDouble());
         sheet.getRangeByName('F$rowIndex').setNumber(nilai);
 
-        // Style for data rows
         final dataRange = sheet.getRangeByIndex(rowIndex, 1, rowIndex, 6);
-        dataRange.cellStyle.fontSize = 10;
-        dataRange.cellStyle.vAlign = VAlignType.center;
+        dataRange.cellStyle.fontSize = 9;
 
-        // Alignment
         sheet.getRangeByName('A$rowIndex').cellStyle.hAlign = HAlignType.center;
         sheet.getRangeByName('B$rowIndex').cellStyle.hAlign = HAlignType.left;
         sheet.getRangeByName('C$rowIndex').cellStyle.hAlign = HAlignType.left;
@@ -344,47 +286,40 @@ class _ItemListScreenState extends State<ItemListScreen> {
         sheet.getRangeByName('E$rowIndex').cellStyle.hAlign = HAlignType.right;
         sheet.getRangeByName('F$rowIndex').cellStyle.hAlign = HAlignType.right;
 
-        // Stok rendah styling
-        if (stok <= 10) {
-          sheet.getRangeByName('E$rowIndex').cellStyle.fontColor = '#FF6B6B';
+        if (stok <= 0) {
+          sheet.getRangeByName('E$rowIndex').cellStyle.fontColor = '#EF4444';
           sheet.getRangeByName('E$rowIndex').cellStyle.bold = true;
         }
 
-        // Alternating row colors
         if (rowIndex % 2 == 0) {
-          dataRange.cellStyle.backColor = '#F8F9FA';
+          dataRange.cellStyle.backColor = '#F8FAFC';
         }
 
         rowIndex++;
       }
 
-      // Add total row
       final totalRow = rowIndex + 1;
       sheet.getRangeByName('A$totalRow').setText('TOTAL');
       sheet.getRangeByName('A$totalRow').cellStyle.bold = true;
-      sheet.getRangeByName('A$totalRow').cellStyle.backColor = '#E9ECEF';
+      sheet.getRangeByName('A$totalRow').cellStyle.backColor = '#F1F5F9';
 
       sheet.getRangeByName('B$totalRow').setText('$_totalFilteredItems Item');
-      sheet.getRangeByName('B$totalRow').cellStyle.backColor = '#E9ECEF';
-
+      sheet.getRangeByName('B$totalRow').cellStyle.backColor = '#F1F5F9';
       sheet.getRangeByName('C$totalRow').setText('${_categories.length} Kategori');
-      sheet.getRangeByName('C$totalRow').cellStyle.backColor = '#E9ECEF';
-
+      sheet.getRangeByName('C$totalRow').cellStyle.backColor = '#F1F5F9';
       sheet.getRangeByName('D$totalRow').setText('Total Stok:');
-      sheet.getRangeByName('D$totalRow').cellStyle.backColor = '#E9ECEF';
+      sheet.getRangeByName('D$totalRow').cellStyle.backColor = '#F1F5F9';
       sheet.getRangeByName('D$totalRow').cellStyle.hAlign = HAlignType.right;
-
       sheet.getRangeByName('E$totalRow').setNumber(_totalFilteredStock.toDouble());
-      sheet.getRangeByName('E$totalRow').cellStyle.backColor = '#E9ECEF';
+      sheet.getRangeByName('E$totalRow').cellStyle.backColor = '#F1F5F9';
       sheet.getRangeByName('E$totalRow').cellStyle.bold = true;
-      sheet.getRangeByName('E$totalRow').cellStyle.fontColor = '#4CC9F0';
+      sheet.getRangeByName('E$totalRow').cellStyle.fontColor = '#3B82F6';
       sheet.getRangeByName('E$totalRow').cellStyle.hAlign = HAlignType.right;
-
       sheet.getRangeByName('F$totalRow').setNumber(_totalFilteredValue);
       sheet.getRangeByName('F$totalRow').numberFormat = '"Rp "#,##0';
-      sheet.getRangeByName('F$totalRow').cellStyle.backColor = '#E9ECEF';
+      sheet.getRangeByName('F$totalRow').cellStyle.backColor = '#F1F5F9';
       sheet.getRangeByName('F$totalRow').cellStyle.bold = true;
-      sheet.getRangeByName('F$totalRow').cellStyle.fontColor = '#F6A918';
+      sheet.getRangeByName('F$totalRow').cellStyle.fontColor = '#F59E0B';
       sheet.getRangeByName('F$totalRow').cellStyle.hAlign = HAlignType.right;
 
       final List<int> bytes = workbook.saveAsStream();
@@ -393,22 +328,20 @@ class _ItemListScreenState extends State<ItemListScreen> {
       if (kIsWeb) {
         final blob = html.Blob([bytes], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         final url = html.Url.createObjectUrlFromBlob(blob);
-        final anchor = html.AnchorElement(href: url)
+        html.AnchorElement(href: url)
           ..target = 'blank'
           ..download = 'Item_List_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx'
           ..click();
         html.Url.revokeObjectUrl(url);
-
-        _showSuccessSnackbar('File Excel berhasil di-download');
+        _showSnackbar('File Excel berhasil di-download');
       } else {
         final directory = await getApplicationDocumentsDirectory();
         final file = File('${directory.path}/Item_List_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx');
         await file.writeAsBytes(bytes);
-        _showSuccessSnackbar('File Excel berhasil disimpan');
+        _showSnackbar('File Excel berhasil disimpan');
       }
     } catch (e) {
-      print('Error export Excel: $e');
-      _showErrorSnackbar('Gagal export Excel: ${e.toString()}');
+      _showSnackbar('Gagal export Excel', isError: true);
     }
   }
 
@@ -423,477 +356,214 @@ class _ItemListScreenState extends State<ItemListScreen> {
       showBackButton: false,
       showSidebar: !isMobile,
       isFormScreen: false,
-      child: Column(
-        children: [
-          Container(
-            padding: EdgeInsets.all(isTablet ? 16 : 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Container(
-                  height: 36,
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [_accentMint, _accentMint.withOpacity(0.8)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _accentMint.withOpacity(0.3),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: ElevatedButton.icon(
+      child: Container(
+        color: _bgLight,
+        child: Column(
+          children: [
+            // Header Actions - Minimalis
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 12, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // Export Button
+                  _buildActionButton(
+                    icon: Icons.download_outlined,
+                    label: 'Export',
+                    color: _accentBlue,
                     onPressed: _exportToExcel,
-                    icon: const Icon(Icons.table_chart, size: 14, color: Colors.white),
-                    label: Text(
-                      'Export Excel',
-                      style: GoogleFonts.montserrat(
-                        fontSize: isMobile ? 11 : 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                      shadowColor: Colors.transparent,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isMobile ? 10 : 14,
-                        vertical: 0,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
+                    isMobile: isMobile,
                   ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  height: 36,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [_primaryDark, _primaryLight],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _primaryDark.withOpacity(0.3),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: ElevatedButton.icon(
+                  const SizedBox(width: 8),
+                  // Add Button
+                  _buildActionButton(
+                    icon: Icons.add,
+                    label: isMobile ? 'Tambah' : 'Tambah Item',
+                    color: _primaryDark,
                     onPressed: _openAddItem,
-                    icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                    label: Text(
-                      isMobile ? 'Tambah' : 'Tambah Item',
-                      style: GoogleFonts.montserrat(
-                        fontSize: isMobile ? 11 : 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                      shadowColor: Colors.transparent,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isMobile ? 10 : 14,
-                        vertical: 0,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
+                    isMobile: isMobile,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
-          Expanded(
-            child: _isLoading
-                ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: CircularProgressIndicator(
-                      color: _accentGold,
-                      strokeWidth: 2.5,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Memuat data item...',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 12,
-                      color: _textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            )
-                : _items.isEmpty
-                ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: _bgLight,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.inventory_2_outlined,
-                      size: 35,
-                      color: _textSecondary.withOpacity(0.5),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Belum ada data item',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: _textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Klik tombol Tambah Item untuk memulai',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 12,
-                      color: _textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            )
-                : Padding(
-              padding: EdgeInsets.only(
-                left: isTablet ? 16 : 12,
-                right: isTablet ? 16 : 12,
-                bottom: isTablet ? 16 : 12,
-              ),
-              child: Container(
-                width: double.infinity,
-                height: double.infinity,
-                decoration: BoxDecoration(
-                  color: _bgCard,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+            // Data Grid
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  : _items.isEmpty
+                  ? _buildEmptyState()
+                  : Padding(
+                padding: EdgeInsets.only(
+                  left: isTablet ? 16 : 12,
+                  right: isTablet ? 16 : 12,
+                  bottom: isTablet ? 16 : 12,
                 ),
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(10),
-                          topRight: Radius.circular(10),
-                        ),
-                        child: SfDataGrid(
-                          key: _key,
-                          controller: _dataGridController,
-                          source: _dataSource,
-                          allowColumnsResizing: true,
-                          columnResizeMode: ColumnResizeMode.onResizeEnd,
-                          onColumnResizeUpdate: (ColumnResizeUpdateDetails details) {
-                            setState(() {
-                              _columnWidths[details.column.columnName] = details.width;
-                            });
-                            return true;
-                          },
-                          columnWidthMode: ColumnWidthMode.fill,
-                          columnWidthCalculationRange: ColumnWidthCalculationRange.allRows,
-                          headerRowHeight: 32,
-                          rowHeight: 28,
-                          allowSorting: true,
-                          allowFiltering: true,
-                          onFilterChanged: _onFilterChanged,
-                          gridLinesVisibility: GridLinesVisibility.both,
-                          headerGridLinesVisibility: GridLinesVisibility.both,
-                          selectionMode: SelectionMode.none,
-                          columns: [
-                            GridColumn(
-                              columnName: 'no',
-                              width: _columnWidths['no'] ?? 120,
-                              minimumWidth: 80,
-                              maximumWidth: 150,
-                              label: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  'No',
-                                  style: GoogleFonts.montserrat(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 10,
-                                    color: _textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'nama',
-                              width: _columnWidths['nama'] ?? 250,
-                              minimumWidth: 150,
-                              maximumWidth: 400,
-                              label: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  'Nama Item',
-                                  style: GoogleFonts.montserrat(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 10,
-                                    color: _textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'category',
-                              width: _columnWidths['category'] ?? 180,
-                              minimumWidth: 120,
-                              maximumWidth: 300,
-                              label: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  'Kategori',
-                                  style: GoogleFonts.montserrat(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 10,
-                                    color: _textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'harga',
-                              width: _columnWidths['harga'] ?? 180,
-                              minimumWidth: 120,
-                              maximumWidth: 250,
-                              label: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  'Harga',
-                                  style: GoogleFonts.montserrat(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 10,
-                                    color: _textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GridColumn(
-                              columnName: 'stok',
-                              width: _columnWidths['stok'] ?? 130,
-                              minimumWidth: 80,
-                              maximumWidth: 150,
-                              label: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  'Stok',
-                                  style: GoogleFonts.montserrat(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 10,
-                                    color: _textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (!isMobile)
-                              GridColumn(
-                                columnName: 'nilai',
-                                width: _columnWidths['nilai'] ?? 200,
-                                minimumWidth: 140,
-                                maximumWidth: 300,
-                                label: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    'Nilai',
-                                    style: GoogleFonts.montserrat(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 10,
-                                      color: _textPrimary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            GridColumn(
-                              columnName: 'aksi',
-                              width: _columnWidths['aksi'] ?? 140,
-                              minimumWidth: 100,
-                              maximumWidth: 180,
-                              label: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  'Aksi',
-                                  style: GoogleFonts.montserrat(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 10,
-                                    color: _textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: _bgLight,
-                        border: Border(
-                          top: BorderSide(color: _borderColor),
-                        ),
-                        borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(10),
-                          bottomRight: Radius.circular(10),
-                        ),
-                      ),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Container(
-                          width: screenWidth - (isTablet ? 52 : 44),
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: _columnWidths['no'] ?? 120,
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  'Total',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: _textPrimary,
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                width: _columnWidths['nama'] ?? 250,
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                alignment: Alignment.centerLeft,
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.inventory_2, size: 11, color: _primaryDark),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '$_totalFilteredItems Item',
-                                      style: GoogleFonts.montserrat(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: _primaryDark,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                width: _columnWidths['category'] ?? 180,
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  '${_categories.length} Kategori',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
-                                    color: _textSecondary,
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                width: (_columnWidths['harga'] ?? 180) + (_columnWidths['stok'] ?? 130) - 16,
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                alignment: Alignment.centerRight,
-                                child: Text(
-                                  'Total Stok: ${_numberFormat.format(_totalFilteredStock)}',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: _primaryDark,
-                                  ),
-                                ),
-                              ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _surfaceWhite,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _borderColor, width: 1),
+                  ),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: SfDataGrid(
+                            key: _key,
+                            controller: _dataGridController,
+                            source: _dataSource,
+                            allowColumnsResizing: true,
+                            columnResizeMode: ColumnResizeMode.onResizeEnd,
+                            onColumnResizeUpdate: (ColumnResizeUpdateDetails details) {
+                              setState(() => _columnWidths[details.column.columnName] = details.width);
+                              return true;
+                            },
+                            columnWidthMode: ColumnWidthMode.fill,
+                            headerRowHeight: 32,
+                            rowHeight: 28,
+                            allowSorting: true,
+                            allowFiltering: true,
+                            onFilterChanged: _onFilterChanged,
+                            gridLinesVisibility: GridLinesVisibility.both,
+                            headerGridLinesVisibility: GridLinesVisibility.both,
+                            selectionMode: SelectionMode.none,
+                            columns: [
+                              _buildGridColumn('no', 'No', width: _columnWidths['no'], alignment: Alignment.center),
+                              _buildGridColumn('nama', 'Nama Item', width: _columnWidths['nama']),
+                              _buildGridColumn('category', 'Kategori', width: _columnWidths['category']),
+                              _buildGridColumn('harga', 'Harga', width: _columnWidths['harga'], alignment: Alignment.centerRight),
+                              _buildGridColumn('stok', 'Stok', width: _columnWidths['stok'], alignment: Alignment.centerRight),
                               if (!isMobile)
-                                Container(
-                                  width: _columnWidths['nilai'] ?? 200,
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  alignment: Alignment.centerRight,
-                                  child: Text(
-                                    currencyFormat.format(_totalFilteredValue),
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: _primaryDark,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              Container(
-                                width: _columnWidths['aksi'] ?? 140,
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                alignment: Alignment.center,
-                                child: _totalFilteredItems < _items.length
-                                    ? Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: _accentGold.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    '${_items.length - _totalFilteredItems} filter',
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.w600,
-                                      color: _accentGold,
-                                    ),
-                                  ),
-                                )
-                                    : const SizedBox(),
-                              ),
+                                _buildGridColumn('nilai', 'Nilai', width: _columnWidths['nilai'], alignment: Alignment.centerRight),
+                              _buildGridColumn('aksi', 'Aksi', width: _columnWidths['aksi'], alignment: Alignment.center),
                             ],
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                      // Footer - Minimalis
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // <-- vertical 10 -> 8
+                        decoration: BoxDecoration(
+                          color: _bgLight,
+                          border: Border(top: BorderSide(color: _borderColor)),
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(12),
+                            bottomRight: Radius.circular(12),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Text('Total', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _textPrimary)),
+                            const SizedBox(width: 16),
+                            Row(
+                              children: [
+                                const Icon(Icons.inventory_2_outlined, size: 12, color: _textSecondary),
+                                const SizedBox(width: 4),
+                                Text('$_totalFilteredItems item', style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary)),
+                              ],
+                            ),
+                            const SizedBox(width: 16),
+                            Row(
+                              children: [
+                                const Icon(Icons.category_outlined, size: 12, color: _textSecondary),
+                                const SizedBox(width: 4),
+                                Text('${_categories.length} kategori', style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary)),
+                              ],
+                            ),
+                            const Spacer(),
+                            Text('Stok: ${_numberFormat.format(_totalFilteredStock)}', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w500)),
+                            const SizedBox(width: 16),
+                            if (!isMobile)
+                              Text(currencyFormat.format(_totalFilteredValue), style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w500, color: _textPrimary)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+    required bool isMobile,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(8),
           ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: Colors.white),
+              const SizedBox(width: 6),
+              Text(label, style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  GridColumn _buildGridColumn(String name, String label, {double? width, Alignment alignment = Alignment.centerLeft}) {
+    return GridColumn(
+      columnName: name,
+      width: width ?? double.nan,
+      label: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: alignment,
+        child: Text(
+          label,
+          style: GoogleFonts.montserrat(
+            fontWeight: FontWeight.w600,
+            fontSize: 10, // <-- Diperkecil
+            color: _textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(color: _bgLight, shape: BoxShape.circle),
+            child: Icon(Icons.inventory_2_outlined, size: 28, color: _textTertiary),
+          ),
+          const SizedBox(height: 16),
+          Text('Belum ada data item', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w500, color: _textPrimary)),
+          const SizedBox(height: 4),
+          Text('Klik "Tambah Item" untuk memulai', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
         ],
       ),
     );
   }
 }
 
+// ========== MINIMALIS DATASOURCE ==========
+// ========== MINIMALIS DATASOURCE ==========
 class ItemDataSource extends DataGridSource {
   ItemDataSource({
     required List<Map<String, dynamic>> items,
@@ -901,43 +571,26 @@ class ItemDataSource extends DataGridSource {
     required Function(Map<String, dynamic>) onDelete,
     required NumberFormat formatCurrency,
     required NumberFormat numberFormat,
-    required Color primaryDark,
-    required Color accentGold,
-    required Color accentCoral,
-    required Color accentSky,
-    required Color borderColor,
-    required Color textPrimary,
-    required Color textSecondary,
   }) {
     _onEdit = onEdit;
     _onDelete = onDelete;
     _formatCurrency = formatCurrency;
     _numberFormat = numberFormat;
-    _primaryDark = primaryDark;
-    _accentGold = accentGold;
-    _accentCoral = accentCoral;
-    _accentSky = accentSky;
-    _borderColor = borderColor;
-    _textPrimary = textPrimary;
-    _textSecondary = textSecondary;
-
-    _originalItems = items;
     _updateDataSource(items);
   }
 
-  List<Map<String, dynamic>> _originalItems = [];
   List<DataGridRow> _data = [];
-  late NumberFormat _formatCurrency;
-  late NumberFormat _numberFormat;
   late Function(Map<String, dynamic>) _onEdit;
   late Function(Map<String, dynamic>) _onDelete;
-  late Color _primaryDark;
-  late Color _accentGold;
-  late Color _accentCoral;
-  late Color _accentSky;
-  late Color _borderColor;
-  late Color _textPrimary;
-  late Color _textSecondary;
+  late NumberFormat _formatCurrency;
+  late NumberFormat _numberFormat;
+
+  static const Color _textPrimary = Color(0xFF1A202C);
+  static const Color _textSecondary = Color(0xFF64748B);
+  static const Color _textTertiary = Color(0xFF94A3B8);
+  static const Color _stockZero = Color(0xFFDC2626);   // Merah gelap (<= 0)
+  static const Color _stockNormal = Color(0xFF059669); // Hijau gelap (>= 1)
+  static const Color _borderColor = Color(0xFFE2E8F0);
 
   void _updateDataSource(List<Map<String, dynamic>> items) {
     _data = items.asMap().entries.map((entry) {
@@ -954,7 +607,7 @@ class ItemDataSource extends DataGridSource {
         DataGridCell<int>(columnName: 'no', value: index),
         DataGridCell<String>(columnName: 'nama', value: name),
         DataGridCell<String>(columnName: 'category', value: category),
-        DataGridCell<String>(columnName: 'harga', value: _formatCurrency.format(price)),
+        DataGridCell<double>(columnName: 'harga', value: price),
         DataGridCell<int>(columnName: 'stok', value: stock),
         DataGridCell<double>(columnName: 'nilai', value: totalValue),
         DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: item),
@@ -973,77 +626,63 @@ class ItemDataSource extends DataGridSource {
           final item = cell.value as Map<String, dynamic>;
           return Container(
             alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 2),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: _primaryDark.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: IconButton(
-                    icon: Icon(Icons.edit, size: 12, color: _primaryDark),
-                    onPressed: () => _onEdit(item),
-                    padding: EdgeInsets.zero,
-                    iconSize: 12,
-                    tooltip: 'Edit',
-                  ),
-                ),
+                _buildIconButton(Icons.edit_outlined, () => _onEdit(item)),
                 const SizedBox(width: 4),
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: _accentCoral.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: IconButton(
-                    icon: Icon(Icons.delete, size: 12, color: _accentCoral),
-                    onPressed: () => _onDelete(item),
-                    padding: EdgeInsets.zero,
-                    iconSize: 12,
-                    tooltip: 'Hapus',
-                  ),
-                ),
+                _buildIconButton(Icons.delete_outlined, () => _onDelete(item), color: _stockZero),
               ],
             ),
           );
         }
 
-        final isLowStock = cell.columnName == 'stok' &&
-            (cell.value is int ? cell.value : 0) <= 10;
+        final stockValue = cell.columnName == 'stok' ? (cell.value as int) : 0;
+        final isZeroStock = cell.columnName == 'stok' && stockValue <= 0;
+        final isValue = cell.columnName == 'nilai' || cell.columnName == 'harga';
 
+        // Warna teks
         Color textColor = _textPrimary;
-        FontWeight fontWeight = FontWeight.normal;
+        if (cell.columnName == 'no') textColor = _textSecondary;
+        if (cell.columnName == 'stok') {
+          textColor = isZeroStock ? _stockZero : _stockNormal;
+        }
 
-        if (cell.columnName == 'stok' && isLowStock) {
-          textColor = _accentCoral;
-          fontWeight = FontWeight.w600;
-        } else if (cell.columnName == 'no') {
-          textColor = _textSecondary;
+        // Font weight
+        FontWeight fontWeight = FontWeight.normal;
+        if (cell.columnName == 'stok' || isValue) {
+          fontWeight = FontWeight.w500;
         }
 
         return Container(
           alignment: _getAlignment(cell.columnName),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
-            cell.columnName == 'nilai'
-                ? _formatCurrency.format(cell.value)
-                : cell.value.toString(),
-            textAlign: _getTextAlign(cell.columnName),
+            isValue ? _formatCurrency.format(cell.value) : cell.value.toString(),
             style: GoogleFonts.montserrat(
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: fontWeight,
               color: textColor,
             ),
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildIconButton(IconData icon, VoidCallback onTap, {Color? color}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.all(5), // <-- sedikit diperkecil
+          child: Icon(icon, size: 15, color: color ?? _textTertiary),
+        ),
+      ),
     );
   }
 
@@ -1054,22 +693,10 @@ class ItemDataSource extends DataGridSource {
       case 'nilai':
         return Alignment.centerRight;
       case 'aksi':
+      case 'no':
         return Alignment.center;
       default:
         return Alignment.centerLeft;
-    }
-  }
-
-  TextAlign _getTextAlign(String columnName) {
-    switch (columnName) {
-      case 'harga':
-      case 'stok':
-      case 'nilai':
-        return TextAlign.right;
-      case 'aksi':
-        return TextAlign.center;
-      default:
-        return TextAlign.left;
     }
   }
 }
