@@ -78,7 +78,11 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
       final items = await SetengahJadiService.getSetengahJadi();
       setState(() => _setengahJadiList = items);
     } catch (e) {
-      _showSnackbar('Gagal memuat data', isError: true);
+      // Jangan tampilkan toast error, biarkan list kosong
+      print('Error loading setengah jadi: $e'); // <-- DEBUG SAJA
+      setState(() {
+        _setengahJadiList = [];
+      });
     } finally {
       setState(() => _isLoadingSetengahJadi = false);
     }
@@ -102,7 +106,11 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         }).toList();
       });
     } catch (e) {
-      _showSnackbar('Gagal memuat detail', isError: true);
+      // Jangan tampilkan toast error, ini normal jika item tidak punya detail
+      // _showSnackbar('Gagal memuat detail', isError: true); // <-- HAPUS/KOMENTAR
+      setState(() {
+        _setengahJadiDetails = []; // Kosongkan
+      });
     } finally {
       setState(() => _isLoadingDetails = false);
     }
@@ -202,23 +210,28 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         return;
       }
 
-      final itemId = widget.item?['id']?.toString() ?? itemResult['data']['item_id']?.toString();
-      if (itemId != null) {
-        final details = _setengahJadiDetails.map((detail) {
-          return ItemSetengahJadiDetail(
+      // Hanya update detail jika ada item yang dipilih
+      if (_setengahJadiDetails.isNotEmpty) {
+        final itemId = widget.item?['id']?.toString() ?? itemResult['data']['item_id']?.toString();
+        if (itemId != null) {
+          final details = _setengahJadiDetails.map((detail) {
+            return ItemSetengahJadiDetail(
+              itemId: int.parse(itemId),
+              stjId: detail['stjId'],
+              qty: detail['qty'].toDouble(),
+            );
+          }).toList();
+
+          final detailResult = await ItemService.updateItemSetengahJadiDetails(
             itemId: int.parse(itemId),
-            stjId: detail['stjId'],
-            qty: detail['qty'].toDouble(),
+            details: details.map((d) => d.toJson()).toList(),
           );
-        }).toList();
 
-        final detailResult = await ItemService.updateItemSetengahJadiDetails(
-          itemId: int.parse(itemId),
-          details: details.map((d) => d.toJson()).toList(),
-        );
-
-        if (!detailResult['success']) {
-          _showSnackbar(detailResult['message'], isError: true);
+          if (!detailResult['success']) {
+            _showSnackbar(detailResult['message'], isError: true);
+            setState(() => _isLoading = false);
+            return; // <-- JANGAN LANJUT JIKA GAGAL
+          }
         }
       }
 

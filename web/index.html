@@ -111,7 +111,7 @@
 <!--</script>-->
 
 <script>
-  const APP_VERSION = '20260420_001';
+  const APP_VERSION = '20260422_003';
 
   (function() {
     // Deteksi apakah sedang di local development
@@ -183,14 +183,14 @@
   })();
 </script>
 
-<script src="flutter.js?v=20260420_001" defer></script>
+<script src="flutter.js?v=20260422_003" defer></script>
 
 <script>
   window.addEventListener('load', function(ev) {
     if (typeof _flutter !== 'undefined' && _flutter.loader) {
       _flutter.loader.loadEntrypoint({
         // 🔥 GANTI ?v=XXXX SETIAP DEPLOY (sama dengan yang di atas)
-        entrypointUrl: 'main.dart.js?v=20260420_001',
+        entrypointUrl: 'main.dart.js?v=20260422_003',
         onEntrypointLoaded: async function(engineInitializer) {
           console.log('Initializing engine...');
           const appRunner = await engineInitializer.initializeEngine();
