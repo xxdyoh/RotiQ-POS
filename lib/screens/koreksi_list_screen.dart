@@ -6,7 +6,6 @@ import 'package:syncfusion_flutter_datagrid_export/export.dart';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' hide Row, Border, Column;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-// import 'dart:html' as html;
 import 'package:universal_html/html.dart' as html;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/koreksi_service.dart';
@@ -21,40 +20,39 @@ class KoreksiListScreen extends StatefulWidget {
   State<KoreksiListScreen> createState() => _KoreksiListScreenState();
 }
 
-class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTickerProviderStateMixin {
+class _KoreksiListScreenState extends State<KoreksiListScreen> {
   final GlobalKey<SfDataGridState> _key = GlobalKey<SfDataGridState>();
   final DataGridController _dataGridController = DataGridController();
 
-  final Color _primaryDark = const Color(0xFF2C3E50);
-  final Color _primaryLight = const Color(0xFF34495E);
-  final Color _accentGold = const Color(0xFFF6A918);
-  final Color _accentMint = const Color(0xFF06D6A0);
-  final Color _accentCoral = const Color(0xFFFF6B6B);
-  final Color _accentSky = const Color(0xFF4CC9F0);
-  final Color _bgSoft = const Color(0xFFF8FAFC);
-  final Color _surfaceWhite = Colors.white;
-  final Color _textDark = const Color(0xFF1A202C);
-  final Color _textMedium = const Color(0xFF718096);
-  final Color _textLight = const Color(0xFFA0AEC0);
-  final Color _borderSoft = const Color(0xFFE2E8F0);
-  final Color _shadowColor = const Color(0xFF2C3E50).withOpacity(0.1);
+  // Color Palette - Minimalis dengan aksen primary
+  static const Color _primaryDark = Color(0xFF2C3E50);
+  static const Color _primaryLight = Color(0xFF34495E);
+  static const Color _surfaceWhite = Color(0xFFFFFFFF);
+  static const Color _bgLight = Color(0xFFF7F9FC);
+  static const Color _textPrimary = Color(0xFF1A202C);
+  static const Color _textSecondary = Color(0xFF64748B);
+  static const Color _textTertiary = Color(0xFF94A3B8);
+  static const Color _borderColor = Color(0xFFE2E8F0);
+  static const Color _accentBlue = Color(0xFF3B82F6);
+  static const Color _accentRed = Color(0xFFEF4444);
+  static const Color _accentGreen = Color(0xFF10B981);
+  static const Color _accentMint = Color(0xFF06D6A0);
+  static const Color _accentGold = Color(0xFFF6A918);
+  static const Color _accentCoral = Color(0xFFFF6B6B);
 
-  final Color _primarySoft = const Color(0xFF2C3E50).withOpacity(0.1);
-  final Color _accentGoldSoft = const Color(0xFFF6A918).withOpacity(0.1);
-  final Color _accentMintSoft = const Color(0xFF06D6A0).withOpacity(0.1);
-  final Color _accentCoralSoft = const Color(0xFFFF6B6B).withOpacity(0.1);
-  final Color _accentSkySoft = const Color(0xFF4CC9F0).withOpacity(0.1);
+  final NumberFormat _numberFormat = NumberFormat('#,##0');
+  final DateFormat _dateFormat = DateFormat('dd/MM/yyyy');
+  final DateFormat _apiDateFormat = DateFormat('yyyy-MM-dd');
 
   late Map<String, double> _columnWidths = {
-    'no': 80,
+    'no': 60,
     'nomor': 160,
     'tanggal': 120,
-    'keterangan': 350,
-    'aksi': 70,
+    'keterangan': 400,
+    // 'aksi': 80,
   };
 
   bool _isLoading = false;
-  bool _showDateFilter = false;
   List<Map<String, dynamic>> _koreksiList = [];
 
   DateTime _startDate = DateTime.now();
@@ -65,22 +63,9 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
   late KoreksiDataSource _dataSource;
   int _totalFilteredKoreksi = 0;
 
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-
   @override
   void initState() {
     super.initState();
-
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-    _animationController.forward();
-
     _endDate = DateTime.now();
     _startDate = DateTime(_endDate.year, _endDate.month, 1);
     _updateDateControllers();
@@ -89,20 +74,17 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
 
   @override
   void dispose() {
-    _animationController.dispose();
     _startDateController.dispose();
     _endDateController.dispose();
     super.dispose();
   }
 
   void _updateDateControllers() {
-    _startDateController.text = DateFormat('dd/MM/yyyy').format(_startDate);
-    _endDateController.text = DateFormat('dd/MM/yyyy').format(_endDate);
+    _startDateController.text = _dateFormat.format(_startDate);
+    _endDateController.text = _dateFormat.format(_endDate);
   }
 
-  String _formatDateForApi(DateTime date) {
-    return DateFormat('yyyy-MM-dd').format(date);
-  }
+  String _formatDateForApi(DateTime date) => _apiDateFormat.format(date);
 
   String _formatDate(String dateString) {
     try {
@@ -116,32 +98,21 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
   Future<void> _loadKoreksiData() async {
     setState(() => _isLoading = true);
     try {
-      final koreksiData = await KoreksiService.getKoreksiList(
+      final data = await KoreksiService.getKoreksiList(
         startDate: _formatDateForApi(_startDate),
         endDate: _formatDateForApi(_endDate),
       );
 
       setState(() {
-        _koreksiList = koreksiData;
-        _totalFilteredKoreksi = koreksiData.length;
+        _koreksiList = data;
+        _totalFilteredKoreksi = data.length;
         _dataSource = KoreksiDataSource(
-          koreksiList: koreksiData,
-          onDelete: _deleteKoreksi,
-          onView: _showItemDetailDialog,
-          primaryDark: _primaryDark,
-          accentGold: _accentGold,
-          accentMint: _accentMint,
-          accentCoral: _accentCoral,
-          accentSky: _accentSky,
-          borderSoft: _borderSoft,
-          textDark: _textDark,
-          textMedium: _textMedium,
-          textLight: _textLight,
+          koreksiList: data,
           formatDate: _formatDate,
         );
       });
     } catch (e) {
-      _showToast('Gagal memuat data koreksi: ${e.toString()}', type: ToastType.error);
+      _showSnackbar('Gagal memuat data koreksi', isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -150,51 +121,19 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
   void _onFilterChanged(DataGridFilterChangeDetails details) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_dataSource.effectiveRows != null) {
-        final filteredRows = _dataSource.effectiveRows!;
-        List<Map<String, dynamic>> filteredData = [];
-
-        for (var row in filteredRows) {
-          final cells = row.getCells();
-          final aksiCell = cells.firstWhere(
-                (cell) => cell.columnName == 'aksi',
-            orElse: () => DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: null),
-          );
-
-          if (aksiCell.value != null) {
-            filteredData.add(aksiCell.value as Map<String, dynamic>);
-          }
-        }
-
-        setState(() {
-          _totalFilteredKoreksi = filteredData.length;
-        });
+        setState(() => _totalFilteredKoreksi = _dataSource.effectiveRows!.length);
       }
     });
   }
 
-  void _showToast(String message, {required ToastType type}) {
+  void _showSnackbar(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              type == ToastType.success ? Icons.check_circle_rounded :
-              type == ToastType.error ? Icons.error_rounded : Icons.info_rounded,
-              color: Colors.white,
-              size: 18,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(message, style: GoogleFonts.montserrat(color: Colors.white, fontSize: 12)),
-            ),
-          ],
-        ),
-        backgroundColor: type == ToastType.success ? _accentMint :
-        type == ToastType.error ? _accentCoral : _accentSky,
+        content: Text(message, style: GoogleFonts.montserrat(fontSize: 12, color: Colors.white)),
+        backgroundColor: isError ? _accentRed : _accentGreen,
         behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -206,52 +145,34 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
       initialDate: isStartDate ? _startDate : _endDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            colorScheme: ColorScheme.light(
-              primary: _primaryDark,
-              onPrimary: Colors.white,
-              surface: _surfaceWhite,
-              onSurface: _textDark,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      builder: (context, child) => Theme(
+        data: ThemeData.light().copyWith(
+          colorScheme: ColorScheme.light(primary: _primaryDark, onPrimary: Colors.white),
+          dialogBackgroundColor: _surfaceWhite,
+        ),
+        child: child!,
+      ),
     );
 
     if (picked != null) {
       setState(() {
         if (isStartDate) {
           _startDate = picked;
-          if (_startDate.isAfter(_endDate)) {
-            _endDate = _startDate;
-          }
+          if (_startDate.isAfter(_endDate)) _endDate = _startDate;
         } else {
           _endDate = picked;
-          if (_endDate.isBefore(_startDate)) {
-            _startDate = _endDate;
-          }
+          if (_endDate.isBefore(_startDate)) _startDate = _endDate;
         }
         _updateDateControllers();
       });
     }
   }
 
-  void _toggleDateFilter() {
-    setState(() {
-      _showDateFilter = !_showDateFilter;
-    });
-  }
-
   void _openAddKoreksi() {
     Navigator.pushNamed(
       context,
-      '/koreksi-form',
-      arguments: {
-        'onSaved': _loadKoreksiData,
-      },
+      AppRoutes.koreksiForm,
+      arguments: {'onSaved': _loadKoreksiData},
     );
   }
 
@@ -259,36 +180,13 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _accentCoralSoft,
-            borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: _accentCoral.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                child: Icon(Icons.warning_amber_rounded, color: _accentCoral, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Text('Hapus Koreksi Stok', style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w600, color: _textDark)),
-            ],
-          ),
-        ),
-        content: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            'Apakah Anda yakin ingin menghapus "${koreksi['kor_nomor']}"?',
-            style: GoogleFonts.montserrat(fontSize: 12, color: _textMedium),
-          ),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('Hapus Koreksi Stok', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w600)),
+        content: Text('Hapus "${koreksi['kor_nomor']}"?', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 11, color: _textMedium)),
+            child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -296,10 +194,11 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
               await _performDelete(koreksi);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: _accentCoral,
+              backgroundColor: _accentRed,
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: Text('Hapus', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white)),
+            child: Text('Hapus', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w500)),
           ),
         ],
       ),
@@ -311,13 +210,13 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
     try {
       final result = await KoreksiService.deleteKoreksi(koreksi['kor_nomor'].toString());
       if (result['success']) {
-        _showToast(result['message'], type: ToastType.success);
+        _showSnackbar(result['message']);
         await _loadKoreksiData();
       } else {
-        _showToast(result['message'], type: ToastType.error);
+        _showSnackbar(result['message'], isError: true);
       }
     } catch (e) {
-      _showToast('Error: ${e.toString()}', type: ToastType.error);
+      _showSnackbar('Error: ${e.toString()}', isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -360,16 +259,15 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.close, size: 16, color: Colors.white),
+                      icon: const Icon(Icons.close, size: 16, color: Colors.white),
                       onPressed: () => Navigator.pop(context),
-                      padding: const EdgeInsets.all(8),
                     ),
                   ],
                 ),
               ),
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: _bgSoft, border: Border(bottom: BorderSide(color: _borderSoft))),
+                decoration: BoxDecoration(color: _bgLight, border: Border(bottom: BorderSide(color: _borderColor))),
                 child: Row(
                   children: [
                     Expanded(
@@ -378,7 +276,7 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
                           Container(
                             width: 32,
                             height: 32,
-                            decoration: BoxDecoration(color: _accentGoldSoft, borderRadius: BorderRadius.circular(8)),
+                            decoration: BoxDecoration(color: _accentGold.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
                             child: Icon(Icons.calendar_today, size: 14, color: _accentGold),
                           ),
                           const SizedBox(width: 8),
@@ -386,11 +284,9 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Tanggal', style: GoogleFonts.montserrat(fontSize: 9, color: _textLight)),
-                                Text(
-                                  DateFormat('dd MMMM yyyy').format(DateTime.parse(koreksi['kor_tanggal'])),
-                                  style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _textDark),
-                                ),
+                                Text('Tanggal', style: GoogleFonts.montserrat(fontSize: 9, color: _textTertiary)),
+                                Text(DateFormat('dd MMMM yyyy').format(DateTime.parse(koreksi['kor_tanggal'])),
+                                    style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _textPrimary)),
                               ],
                             ),
                           ),
@@ -403,21 +299,17 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
                           Container(
                             width: 32,
                             height: 32,
-                            decoration: BoxDecoration(color: _accentSkySoft, borderRadius: BorderRadius.circular(8)),
-                            child: Icon(Icons.description, size: 14, color: _accentSky),
+                            decoration: BoxDecoration(color: _accentBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                            child: Icon(Icons.description, size: 14, color: _accentBlue),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Keterangan', style: GoogleFonts.montserrat(fontSize: 9, color: _textLight)),
-                                Text(
-                                  koreksi['kor_keterangan'] ?? '-',
-                                  style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _textDark),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                Text('Keterangan', style: GoogleFonts.montserrat(fontSize: 9, color: _textTertiary)),
+                                Text(koreksi['kor_keterangan'] ?? '-',
+                                    style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
                               ],
                             ),
                           ),
@@ -432,127 +324,64 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
                   future: KoreksiService.getKoreksiDetail(koreksi['kor_nomor'].toString()),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(width: 32, height: 32, child: CircularProgressIndicator(color: _accentGold, strokeWidth: 2)),
-                            const SizedBox(height: 12),
-                            Text('Memuat detail items...', style: GoogleFonts.montserrat(fontSize: 11, color: _textMedium)),
-                          ],
-                        ),
-                      );
+                      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
                     }
-
                     if (snapshot.hasError || !snapshot.hasData) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.error_outline, size: 40, color: _accentCoral),
-                            const SizedBox(height: 12),
-                            Text('Gagal memuat detail', style: GoogleFonts.montserrat(fontSize: 11, color: _textMedium)),
-                          ],
-                        ),
-                      );
+                      return Center(child: Text('Gagal memuat detail', style: GoogleFonts.montserrat(fontSize: 11, color: _textSecondary)));
                     }
-
                     final details = List<Map<String, dynamic>>.from(snapshot.data?['details'] ?? []);
-
                     if (details.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 60,
-                              height: 60,
-                              decoration: BoxDecoration(color: _bgSoft, shape: BoxShape.circle),
-                              child: Icon(Icons.inventory_2_outlined, size: 30, color: _textLight),
-                            ),
-                            const SizedBox(height: 12),
-                            Text('Tidak ada item dalam transaksi ini', style: GoogleFonts.montserrat(fontSize: 11, color: _textMedium)),
-                          ],
-                        ),
-                      );
+                      return Center(child: Text('Tidak ada item', style: GoogleFonts.montserrat(fontSize: 11, color: _textSecondary)));
                     }
-
                     return Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(color: _bgSoft, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderSoft)),
+                            decoration: BoxDecoration(color: _bgLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderColor)),
                             child: Row(
                               children: [
                                 Container(
                                   padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(color: _accentMintSoft, borderRadius: BorderRadius.circular(6)),
+                                  decoration: BoxDecoration(color: _accentMint.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
                                   child: Icon(Icons.inventory_2_outlined, size: 12, color: _accentMint),
                                 ),
                                 const SizedBox(width: 8),
-                                Text('Daftar Items (${details.length})', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _textDark)),
+                                Text('Daftar Items (${details.length})',
+                                    style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _textPrimary)),
                               ],
                             ),
                           ),
                           const SizedBox(height: 12),
                           Expanded(
                             child: Container(
-                              decoration: BoxDecoration(border: Border.all(color: _borderSoft), borderRadius: BorderRadius.circular(8)),
+                              decoration: BoxDecoration(border: Border.all(color: _borderColor), borderRadius: BorderRadius.circular(8)),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
                                 child: SfDataGrid(
-                                  source: KoreksiDetailDataSource(
-                                    details: details,
-                                    accentGold: _accentGold,
-                                    textDark: _textDark,
-                                    textMedium: _textMedium,
-                                    accentMint: _accentMint,
-                                    accentMintSoft: _accentMintSoft,
-                                    accentCoral: _accentCoral,
-                                    accentCoralSoft: _accentCoralSoft,
-                                  ),
+                                  source: KoreksiDetailDataSource(details: details, numberFormat: _numberFormat),
                                   columnWidthMode: ColumnWidthMode.fill,
                                   headerRowHeight: 34,
                                   rowHeight: 32,
-                                  allowSorting: true,
                                   gridLinesVisibility: GridLinesVisibility.both,
                                   headerGridLinesVisibility: GridLinesVisibility.both,
                                   columns: [
                                     GridColumn(
-                                      columnName: 'no',
-                                      width: 60,
-                                      label: Container(
-                                        alignment: Alignment.center,
-                                        child: Text('No', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
-                                      ),
-                                    ),
+                                        columnName: 'no',
+                                        width: 50,
+                                        label: Container(alignment: Alignment.center, child: Text('No', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10)))),
                                     GridColumn(
-                                      columnName: 'nama',
-                                      label: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                                        alignment: Alignment.centerLeft,
-                                        child: Text('Nama Item', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
-                                      ),
-                                    ),
+                                        columnName: 'nama',
+                                        label: Container(alignment: Alignment.centerLeft, child: Text('Nama Item', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10)))),
                                     GridColumn(
-                                      columnName: 'stok_sistem',
-                                      width: 100,
-                                      label: Container(
-                                        alignment: Alignment.center,
-                                        child: Text('Stok Sistem', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
-                                      ),
-                                    ),
+                                        columnName: 'stok_sistem',
+                                        width: 100,
+                                        label: Container(alignment: Alignment.center, child: Text('Stok Sistem', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10)))),
                                     GridColumn(
-                                      columnName: 'selisih',
-                                      width: 100,
-                                      label: Container(
-                                        alignment: Alignment.center,
-                                        child: Text('Selisih', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
-                                      ),
-                                    ),
-                                  ],
+                                        columnName: 'selisih',
+                                        width: 100,
+                                        label: Container(alignment: Alignment.center, child: Text('Qty Koreksi', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10)))),                                  ],
                                 ),
                               ),
                             ),
@@ -565,17 +394,24 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
               ),
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: _bgSoft, border: Border(top: BorderSide(color: _borderSoft))),
+                decoration: BoxDecoration(color: _bgLight, border: Border(top: BorderSide(color: _borderColor))),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _accentGold,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    Container(
+                      width: 90,
+                      height: 36,
+                      decoration: BoxDecoration(color: _primaryDark, borderRadius: BorderRadius.circular(8)),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => Navigator.pop(context),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Center(
+                            child: Text('Tutup', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white)),
+                          ),
+                        ),
                       ),
-                      child: Text('Tutup', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white)),
                     ),
                   ],
                 ),
@@ -589,97 +425,125 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
 
   Future<void> _exportToExcel() async {
     try {
-      final currentState = _key.currentState;
-      if (currentState == null) return;
-
-      final visibleRows = _dataSource.effectiveRows ?? _dataSource.rows;
-
       final Workbook workbook = Workbook();
       final Worksheet sheet = workbook.worksheets[0];
       sheet.name = 'Data Koreksi Stok';
 
       sheet.getRangeByIndex(1, 1).columnWidth = 6;
       sheet.getRangeByIndex(1, 2).columnWidth = 18;
-      sheet.getRangeByIndex(1, 3).columnWidth = 10;
-      sheet.getRangeByIndex(1, 4).columnWidth = 35;
+      sheet.getRangeByIndex(1, 3).columnWidth = 12;
+      sheet.getRangeByIndex(1, 4).columnWidth = 30;
+      sheet.getRangeByIndex(1, 5).columnWidth = 6;
+      sheet.getRangeByIndex(1, 6).columnWidth = 25;
+      sheet.getRangeByIndex(1, 7).columnWidth = 12;
+      sheet.getRangeByIndex(1, 8).columnWidth = 12;
 
-      final headerRange = sheet.getRangeByIndex(1, 1, 1, 4);
-      headerRange.cellStyle.backColor = '#2C3E50';
-      headerRange.cellStyle.fontColor = '#FFFFFF';
-      headerRange.cellStyle.bold = true;
-      headerRange.cellStyle.hAlign = HAlignType.center;
-      headerRange.cellStyle.vAlign = VAlignType.center;
-      headerRange.cellStyle.fontSize = 10;
+      // Periode
+      final periodeRange = sheet.getRangeByIndex(1, 1, 1, 4);
+      periodeRange.merge();
+      periodeRange.setText('Periode: ${_dateFormat.format(_startDate)} - ${_dateFormat.format(_endDate)}');
+      periodeRange.cellStyle.fontSize = 11;
+      periodeRange.cellStyle.bold = true;
+      periodeRange.cellStyle.backColor = '#F1F5F9';
 
-      sheet.getRangeByName('A1').setText('No');
-      sheet.getRangeByName('B1').setText('Nomor');
-      sheet.getRangeByName('C1').setText('Tanggal');
-      sheet.getRangeByName('D1').setText('Keterangan');
+      int row = 3;
 
-      int rowIndex = 2;
-      for (var row in visibleRows) {
-        final cells = row.getCells();
+      // Header Koreksi
+      final korHeaderRange = sheet.getRangeByIndex(row, 1, row, 4);
+      korHeaderRange.cellStyle.backColor = '#2C3E50';
+      korHeaderRange.cellStyle.fontColor = '#FFFFFF';
+      korHeaderRange.cellStyle.bold = true;
+      korHeaderRange.cellStyle.hAlign = HAlignType.center;
+      korHeaderRange.cellStyle.fontSize = 10;
 
-        String no = '';
-        String nomor = '';
-        String tanggal = '';
-        String keterangan = '';
+      sheet.getRangeByIndex(row, 1).setText('No');
+      sheet.getRangeByIndex(row, 2).setText('Nomor');
+      sheet.getRangeByIndex(row, 3).setText('Tanggal');
+      sheet.getRangeByIndex(row, 4).setText('Keterangan');
+      row++;
 
-        for (var cell in cells) {
-          if (cell.columnName == 'no') {
-            no = cell.value.toString();
-          } else if (cell.columnName == 'nomor') {
-            nomor = cell.value.toString();
-          } else if (cell.columnName == 'tanggal') {
-            tanggal = cell.value.toString();
-          } else if (cell.columnName == 'keterangan') {
-            keterangan = cell.value.toString();
-          }
-        }
+      int noKor = 1;
+      for (var koreksi in _koreksiList) {
+        final nomor = koreksi['kor_nomor']?.toString() ?? '-';
+        final tanggal = _formatDate(koreksi['kor_tanggal'] ?? '');
+        final keterangan = koreksi['kor_keterangan']?.toString() ?? '-';
 
-        sheet.getRangeByName('A$rowIndex').setText(no);
-        sheet.getRangeByName('B$rowIndex').setText(nomor);
-        sheet.getRangeByName('C$rowIndex').setText(tanggal);
-        sheet.getRangeByName('D$rowIndex').setText(keterangan);
+        sheet.getRangeByIndex(row, 1).setText(noKor.toString());
+        sheet.getRangeByIndex(row, 2).setText(nomor);
+        sheet.getRangeByIndex(row, 3).setText(tanggal);
+        sheet.getRangeByIndex(row, 4).setText(keterangan);
 
-        final dataRange = sheet.getRangeByIndex(rowIndex, 1, rowIndex, 4);
+        final dataRange = sheet.getRangeByIndex(row, 1, row, 4);
         dataRange.cellStyle.fontSize = 9;
-        dataRange.cellStyle.vAlign = VAlignType.center;
+        sheet.getRangeByIndex(row, 1).cellStyle.hAlign = HAlignType.center;
+        sheet.getRangeByIndex(row, 3).cellStyle.hAlign = HAlignType.center;
+        row++;
 
-        sheet.getRangeByName('A$rowIndex').cellStyle.hAlign = HAlignType.center;
-        sheet.getRangeByName('B$rowIndex').cellStyle.hAlign = HAlignType.left;
-        sheet.getRangeByName('C$rowIndex').cellStyle.hAlign = HAlignType.center;
-        sheet.getRangeByName('D$rowIndex').cellStyle.hAlign = HAlignType.left;
+        // Header Detail
+        final detailHeaderRange = sheet.getRangeByIndex(row, 5, row, 8);
+        detailHeaderRange.cellStyle.backColor = '#34495E';
+        detailHeaderRange.cellStyle.fontColor = '#FFFFFF';
+        detailHeaderRange.cellStyle.bold = true;
+        detailHeaderRange.cellStyle.fontSize = 9;
+        detailHeaderRange.cellStyle.hAlign = HAlignType.center;
 
-        if (rowIndex % 2 == 0) {
-          dataRange.cellStyle.backColor = '#F8F9FA';
+        sheet.getRangeByIndex(row, 5).setText('No');
+        sheet.getRangeByIndex(row, 6).setText('Nama Item');
+        sheet.getRangeByIndex(row, 7).setText('Stok Sistem');
+        sheet.getRangeByIndex(row, 8).setText('Selisih');
+        row++;
+
+        // Detail Items
+        try {
+          final detailData = await KoreksiService.getKoreksiDetail(nomor);
+          final details = List<Map<String, dynamic>>.from(detailData['details'] ?? []);
+
+          if (details.isNotEmpty) {
+            int noDetail = 1;
+            for (var item in details) {
+              final stokSistem = (item['kord_stok'] ?? 0).toDouble();
+              final selisih = (item['kord_qty'] ?? 0).toDouble();
+              final selisihStr = '${selisih > 0 ? '+' : ''}${_numberFormat.format(selisih)}';
+
+              sheet.getRangeByIndex(row, 5).setText(noDetail.toString());
+              sheet.getRangeByIndex(row, 6).setText(item['item_nama']?.toString() ?? '-');
+              sheet.getRangeByIndex(row, 7).setNumber(stokSistem);
+              sheet.getRangeByIndex(row, 8).setText(selisihStr);
+
+              final detailRange = sheet.getRangeByIndex(row, 5, row, 8);
+              detailRange.cellStyle.fontSize = 9;
+              sheet.getRangeByIndex(row, 5).cellStyle.hAlign = HAlignType.center;
+              sheet.getRangeByIndex(row, 7).cellStyle.hAlign = HAlignType.center;
+              sheet.getRangeByIndex(row, 8).cellStyle.hAlign = HAlignType.center;
+
+              // Warna selisih
+              if (selisih > 0) {
+                sheet.getRangeByIndex(row, 8).cellStyle.fontColor = '#06D6A0';
+              } else if (selisih < 0) {
+                sheet.getRangeByIndex(row, 8).cellStyle.fontColor = '#EF4444';
+              }
+
+              if (row % 2 == 0) detailRange.cellStyle.backColor = '#F8FAFC';
+
+              noDetail++;
+              row++;
+            }
+          } else {
+            sheet.getRangeByIndex(row, 5).setText('');
+            sheet.getRangeByIndex(row, 6).setText('(Tidak ada item)');
+            sheet.getRangeByIndex(row, 6).cellStyle.italic = true;
+            row++;
+          }
+        } catch (e) {
+          sheet.getRangeByIndex(row, 5).setText('');
+          sheet.getRangeByIndex(row, 6).setText('(Gagal memuat)');
+          sheet.getRangeByIndex(row, 6).cellStyle.fontColor = '#EF4444';
+          row++;
         }
 
-        rowIndex++;
+        row++;
+        noKor++;
       }
-
-      final totalRow = rowIndex + 1;
-      sheet.getRangeByName('A$totalRow').setText('TOTAL');
-      sheet.getRangeByName('A$totalRow').cellStyle.bold = true;
-      sheet.getRangeByName('A$totalRow').cellStyle.backColor = '#E9ECEF';
-      sheet.getRangeByName('A$totalRow').cellStyle.fontSize = 9;
-
-      sheet.getRangeByName('B$totalRow').setText('$_totalFilteredKoreksi Transaksi');
-      sheet.getRangeByName('B$totalRow').cellStyle.backColor = '#E9ECEF';
-      sheet.getRangeByName('B$totalRow').cellStyle.hAlign = HAlignType.left;
-      sheet.getRangeByName('B$totalRow').cellStyle.fontSize = 9;
-
-      sheet.getRangeByName('C$totalRow').setText('Periode:');
-      sheet.getRangeByName('C$totalRow').cellStyle.backColor = '#E9ECEF';
-      sheet.getRangeByName('C$totalRow').cellStyle.hAlign = HAlignType.right;
-      sheet.getRangeByName('C$totalRow').cellStyle.fontSize = 9;
-
-      sheet.getRangeByName('D$totalRow').setText(
-          '${DateFormat('dd/MM/yyyy').format(_startDate)} - ${DateFormat('dd/MM/yyyy').format(_endDate)}'
-      );
-      sheet.getRangeByName('D$totalRow').cellStyle.backColor = '#E9ECEF';
-      sheet.getRangeByName('D$totalRow').cellStyle.hAlign = HAlignType.left;
-      sheet.getRangeByName('D$totalRow').cellStyle.fontSize = 9;
 
       final List<int> bytes = workbook.saveAsStream();
       workbook.dispose();
@@ -687,20 +551,20 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
       if (kIsWeb) {
         final blob = html.Blob([bytes], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         final url = html.Url.createObjectUrlFromBlob(blob);
-        final anchor = html.AnchorElement(href: url)
+        html.AnchorElement(href: url)
           ..target = 'blank'
-          ..download = 'KoreksiStok_List_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx'
+          ..download = 'KoreksiStok_Detail_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx'
           ..click();
         html.Url.revokeObjectUrl(url);
-        _showToast('File Excel berhasil di-download', type: ToastType.success);
+        _showSnackbar('File Excel berhasil di-download');
       } else {
         final directory = await getApplicationDocumentsDirectory();
-        final file = File('${directory.path}/KoreksiStok_List_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx');
+        final file = File('${directory.path}/KoreksiStok_Detail_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx');
         await file.writeAsBytes(bytes);
-        _showToast('File Excel berhasil disimpan', type: ToastType.success);
+        _showSnackbar('File Excel berhasil disimpan');
       }
     } catch (e) {
-      _showToast('Gagal export Excel: ${e.toString()}', type: ToastType.error);
+      _showSnackbar('Gagal export Excel', isError: true);
     }
   }
 
@@ -708,465 +572,310 @@ class _KoreksiListScreenState extends State<KoreksiListScreen> with SingleTicker
   Widget build(BuildContext context) {
     final isMobile = ResponsiveHelper.isMobile(context);
     final isTablet = MediaQuery.of(context).size.width >= 600;
-    final screenWidth = MediaQuery.of(context).size.width;
 
     return BaseLayout(
       title: 'Koreksi Stok',
       showBackButton: false,
       showSidebar: !isMobile,
       isFormScreen: false,
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Container(
-          color: _bgSoft,
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _surfaceWhite,
-                  border: Border(bottom: BorderSide(color: _borderSoft)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: _showDateFilter ? _accentGoldSoft : _bgSoft,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _showDateFilter ? _accentGold : _borderSoft),
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _toggleDateFilter,
+      child: Container(
+        color: _bgLight,
+        child: Column(
+          children: [
+            // Header Actions - 1 Row dengan Filter
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 12, vertical: 12),
+              child: Row(
+                children: [
+                  // Tanggal Mulai
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: () => _selectDate(context, true),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: _surfaceWhite,
                           borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Row(
-                              children: [
-                                Icon(Icons.date_range, size: 14, color: _showDateFilter ? _accentGold : _textLight),
-                                const SizedBox(width: 6),
-                                Text('Filter', style: GoogleFonts.montserrat(fontSize: 11, color: _showDateFilter ? _accentGold : _textMedium)),
-                                const SizedBox(width: 4),
-                                Icon(_showDateFilter ? Icons.expand_less : Icons.expand_more, size: 14, color: _showDateFilter ? _accentGold : _textLight),
-                              ],
+                          border: Border.all(color: _borderColor),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 14, color: _primaryDark),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _startDateController.text,
+                                style: GoogleFonts.montserrat(fontSize: 11, color: _textPrimary),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
                     ),
-                    const Spacer(),
-                    Container(
-                      height: 36,
-                      margin: const EdgeInsets.only(right: 6),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [_accentMint, _accentMint.withOpacity(0.8)]),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _exportToExcel,
+                  ),
+                  const SizedBox(width: 8),
+                  // Tanggal Selesai
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: () => _selectDate(context, false),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: _surfaceWhite,
                           borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Row(
-                              children: [
-                                Icon(Icons.table_chart, size: 14, color: Colors.white),
-                                if (!isMobile) ...[
-                                  const SizedBox(width: 6),
-                                  Text('Export Excel', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white)),
-                                ],
-                              ],
+                          border: Border.all(color: _borderColor),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 14, color: _primaryDark),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _endDateController.text,
+                                style: GoogleFonts.montserrat(fontSize: 11, color: _textPrimary),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
                     ),
-                    Container(
-                      height: 36,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [_primaryDark, _primaryLight]),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _openAddKoreksi,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Row(
-                              children: [
-                                Icon(Icons.add, size: 14, color: Colors.white),
-                                if (!isMobile) ...[
-                                  const SizedBox(width: 6),
-                                  Text('Tambah', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white)),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Load Button
+                  _buildActionButton(
+                    icon: Icons.refresh_rounded,
+                    label: 'Load',
+                    color: _accentMint,
+                    onPressed: _loadKoreksiData,
+                    isMobile: isMobile,
+                  ),
+                  const SizedBox(width: 8),
+                  // Export Button
+                  _buildActionButton(
+                    icon: Icons.download_outlined,
+                    label: 'Export',
+                    color: _accentBlue,
+                    onPressed: _exportToExcel,
+                    isMobile: isMobile,
+                  ),
+                  const SizedBox(width: 8),
+                  // Tambah Button
+                  _buildActionButton(
+                    icon: Icons.add,
+                    label: isMobile ? 'Tambah' : 'Tambah',
+                    color: _primaryDark,
+                    onPressed: _openAddKoreksi,
+                    isMobile: isMobile,
+                  ),
+                ],
               ),
-              if (_showDateFilter) ...[
-                Container(
-                  margin: const EdgeInsets.all(12),
-                  padding: const EdgeInsets.all(12),
+            ),
+
+            // Data Grid
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  : _koreksiList.isEmpty
+                  ? _buildEmptyState()
+                  : Padding(
+                padding: EdgeInsets.only(
+                  left: isTablet ? 16 : 12,
+                  right: isTablet ? 16 : 12,
+                  bottom: isTablet ? 16 : 12,
+                ),
+                child: Container(
                   decoration: BoxDecoration(
                     color: _surfaceWhite,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _borderSoft),
-                    boxShadow: [BoxShadow(color: _shadowColor, blurRadius: 8, offset: const Offset(0, 2))],
+                    border: Border.all(color: _borderColor, width: 1),
                   ),
-                  child: Row(
+                  child: Column(
                     children: [
                       Expanded(
-                        child: InkWell(
-                          onTap: () => _selectDate(context, true),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            height: 40,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            decoration: BoxDecoration(color: _bgSoft, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderSoft)),
-                            child: Row(
-                              children: [
-                                Icon(Icons.calendar_today, size: 14, color: _accentGold),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('Tanggal Mulai', style: GoogleFonts.montserrat(fontSize: 9, color: _textLight)),
-                                      Text(_startDateController.text, style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: _textDark)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => _selectDate(context, false),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            height: 40,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            decoration: BoxDecoration(color: _bgSoft, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderSoft)),
-                            child: Row(
-                              children: [
-                                Icon(Icons.calendar_today, size: 14, color: _accentGold),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('Tanggal Selesai', style: GoogleFonts.montserrat(fontSize: 9, color: _textLight)),
-                                      Text(_endDateController.text, style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: _textDark)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 90,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: [_accentMint, _accentMint.withOpacity(0.8)]),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => _loadKoreksiData(),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Center(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.refresh_rounded, size: 16, color: Colors.white),
-                                  const SizedBox(width: 6),
-                                  Text('Load', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white)),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              Expanded(
-                child: _isLoading
-                    ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(width: 32, height: 32, child: CircularProgressIndicator(color: _accentGold, strokeWidth: 2)),
-                      const SizedBox(height: 12),
-                      Text('Memuat data koreksi...', style: GoogleFonts.montserrat(fontSize: 11, color: _textMedium)),
-                    ],
-                  ),
-                )
-                    : _koreksiList.isEmpty
-                    ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 70,
-                        height: 70,
-                        decoration: BoxDecoration(color: _bgSoft, shape: BoxShape.circle),
-                        child: Icon(Icons.inventory_2_outlined, size: 35, color: _textLight),
-                      ),
-                      const SizedBox(height: 12),
-                      Text('Belum ada data koreksi', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600, color: _textDark)),
-                      const SizedBox(height: 4),
-                      Text('Klik tombol Tambah untuk memulai', style: GoogleFonts.montserrat(fontSize: 11, color: _textLight)),
-                    ],
-                  ),
-                )
-                    : Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: _surfaceWhite,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _borderSoft),
-                      boxShadow: [BoxShadow(color: _shadowColor, blurRadius: 8, offset: const Offset(0, 2))],
-                    ),
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
-                            child: SfDataGrid(
-                              key: _key,
-                              controller: _dataGridController,
-                              source: _dataSource,
-                              allowColumnsResizing: true,
-                              columnResizeMode: ColumnResizeMode.onResizeEnd,
-                              onColumnResizeUpdate: (ColumnResizeUpdateDetails details) {
-                                setState(() {
-                                  _columnWidths[details.column.columnName] = details.width;
-                                });
-                                return true;
-                              },
-                              columnWidthMode: ColumnWidthMode.fill,
-                              headerRowHeight: 28,
-                              rowHeight: 30,
-                              allowSorting: true,
-                              allowFiltering: true,
-                              onFilterChanged: _onFilterChanged,
-                              gridLinesVisibility: GridLinesVisibility.both,
-                              headerGridLinesVisibility: GridLinesVisibility.both,
-                              selectionMode: SelectionMode.none,
-                              onCellTap: (details) {
-                                if (details.rowColumnIndex.rowIndex > 0) {
-                                  final rowIndex = details.rowColumnIndex.rowIndex - 1;
-                                  if (rowIndex < _dataSource.rows.length) {
-                                    final row = _dataSource.rows[rowIndex];
-                                    final cells = row.getCells();
-                                    final aksiCell = cells.firstWhere(
-                                          (cell) => cell.columnName == 'aksi',
-                                      orElse: () => DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: null),
-                                    );
-                                    if (aksiCell.value != null) {
-                                      _showItemDetailDialog(aksiCell.value as Map<String, dynamic>);
-                                    }
-                                  }
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: SfDataGrid(
+                            key: _key,
+                            controller: _dataGridController,
+                            source: _dataSource,
+                            allowColumnsResizing: true,
+                            columnResizeMode: ColumnResizeMode.onResizeEnd,
+                            onColumnResizeUpdate: (ColumnResizeUpdateDetails details) {
+                              setState(() => _columnWidths[details.column.columnName] = details.width);
+                              return true;
+                            },
+                            columnWidthMode: ColumnWidthMode.fill,
+                            headerRowHeight: 32,
+                            rowHeight: 28,
+                            allowSorting: true,
+                            allowFiltering: true,
+                            onFilterChanged: _onFilterChanged,
+                            gridLinesVisibility: GridLinesVisibility.both,
+                            headerGridLinesVisibility: GridLinesVisibility.both,
+                            selectionMode: SelectionMode.none,
+                            onCellTap: (details) {
+                              if (details.rowColumnIndex.rowIndex > 0) {
+                                final rowIndex = details.rowColumnIndex.rowIndex - 1;
+                                if (rowIndex < _dataSource.effectiveRows!.length) {
+                                  final effectiveRows = _dataSource.effectiveRows!;
+                                  final row = effectiveRows[rowIndex];
+                                  final cells = row.getCells();
+                                  // Ambil nomor dari cell
+                                  final nomorCell = cells.firstWhere((c) => c.columnName == 'nomor');
+                                  final nomor = nomorCell.value.toString();
+                                  // Cari data koreksi
+                                  final koreksi = _koreksiList.firstWhere((k) => k['kor_nomor']?.toString() == nomor);
+                                  _showItemDetailDialog(koreksi);
                                 }
-                              },
-                              columns: [
-                                GridColumn(
-                                  columnName: 'no',
-                                  width: _columnWidths['no'] ?? 80,
-                                  label: Container(
-                                    alignment: Alignment.center,
-                                    child: Text('No', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
-                                  ),
-                                ),
-                                GridColumn(
-                                  columnName: 'nomor',
-                                  width: _columnWidths['nomor'] ?? 160,
-                                  label: Container(
-                                    alignment: Alignment.center,
-                                    child: Text('Nomor', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
-                                  ),
-                                ),
-                                GridColumn(
-                                  columnName: 'tanggal',
-                                  width: _columnWidths['tanggal'] ?? 120,
-                                  label: Container(
-                                    alignment: Alignment.center,
-                                    child: Text('Tanggal', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
-                                  ),
-                                ),
-                                GridColumn(
-                                  columnName: 'keterangan',
-                                  width: _columnWidths['keterangan'] ?? 350,
-                                  label: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    alignment: Alignment.center,
-                                    child: Text('Keterangan', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
-                                  ),
-                                ),
-                                GridColumn(
-                                  columnName: 'aksi',
-                                  width: _columnWidths['aksi'] ?? 70,
-                                  label: Container(
-                                    alignment: Alignment.center,
-                                    child: Text('Aksi', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10, color: _textDark)),
-                                  ),
-                                ),
+                              }
+                            },
+                            columns: [
+                              _buildGridColumn('no', 'No', width: _columnWidths['no'], alignment: Alignment.center),
+                              _buildGridColumn('nomor', 'Nomor', width: _columnWidths['nomor']),
+                              _buildGridColumn('tanggal', 'Tanggal', width: _columnWidths['tanggal'], alignment: Alignment.center),
+                              _buildGridColumn('keterangan', 'Keterangan', width: _columnWidths['keterangan']),
+                              // _buildGridColumn('aksi', 'Aksi', width: _columnWidths['aksi'], alignment: Alignment.center),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Footer
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _bgLight,
+                          border: Border(top: BorderSide(color: _borderColor)),
+                          borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(12), bottomRight: Radius.circular(12)),
+                        ),
+                        child: Row(
+                          children: [
+                            Text('Total', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _textPrimary)),
+                            const SizedBox(width: 16),
+                            Row(
+                              children: [
+                                const Icon(Icons.receipt_outlined, size: 12, color: _textSecondary),
+                                const SizedBox(width: 4),
+                                Text('$_totalFilteredKoreksi Transaksi', style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary)),
                               ],
                             ),
-                          ),
-                        ),
-                        Container(
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: _bgSoft,
-                            border: Border(top: BorderSide(color: _borderSoft)),
-                            borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(12), bottomRight: Radius.circular(12)),
-                          ),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SizedBox(
-                              width: screenWidth - (isTablet ? 64 : 56),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: _columnWidths['no'] ?? 80,
-                                    alignment: Alignment.center,
-                                    child: Text('Total', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w700, color: _textDark)),
-                                  ),
-                                  Container(
-                                    width: _columnWidths['nomor'] ?? 160,
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    alignment: Alignment.centerLeft,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.receipt, size: 11, color: _primaryDark),
-                                        const SizedBox(width: 4),
-                                        Text('$_totalFilteredKoreksi Transaksi', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _primaryDark)),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    width: _columnWidths['tanggal'] ?? 120,
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      '${DateFormat('dd/MM').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}',
-                                      style: GoogleFonts.montserrat(fontSize: 9, color: _textDark),
-                                    ),
-                                  ),
-                                  Container(
-                                    width: _columnWidths['keterangan'] ?? 350,
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    alignment: Alignment.centerLeft,
-                                    child: const SizedBox(),
-                                  ),
-                                  Container(
-                                    width: _columnWidths['aksi'] ?? 70,
-                                    alignment: Alignment.center,
-                                    child: _totalFilteredKoreksi < _koreksiList.length
-                                        ? Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(color: _accentGoldSoft, borderRadius: BorderRadius.circular(4)),
-                                      child: Text('${_koreksiList.length - _totalFilteredKoreksi} filter', style: GoogleFonts.montserrat(fontSize: 8, fontWeight: FontWeight.w600, color: _accentGold)),
-                                    )
-                                        : const SizedBox(),
-                                  ),
-                                ],
-                              ),
+                            const Spacer(),
+                            Text(
+                              '${DateFormat('dd/MM').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}',
+                              style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+    required bool isMobile,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: Colors.white),
+              if (!isMobile) ...[
+                const SizedBox(width: 6),
+                Text(label, style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white)),
+              ],
             ],
           ),
         ),
       ),
     );
   }
+
+  GridColumn _buildGridColumn(String name, String label, {double? width, Alignment alignment = Alignment.centerLeft}) {
+    return GridColumn(
+      columnName: name,
+      width: width ?? double.nan,
+      label: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: alignment,
+        child: Text(label, style: GoogleFonts.montserrat(fontWeight: FontWeight.w600, fontSize: 10, color: _textSecondary)),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(color: _bgLight, shape: BoxShape.circle),
+            child: Icon(Icons.inventory_2_outlined, size: 28, color: _textTertiary),
+          ),
+          const SizedBox(height: 16),
+          Text('Belum ada data koreksi', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w500, color: _textPrimary)),
+          const SizedBox(height: 4),
+          Text('Klik "Tambah" untuk memulai', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
+        ],
+      ),
+    );
+  }
 }
 
+// ========== DATASOURCE ==========
 class KoreksiDataSource extends DataGridSource {
   KoreksiDataSource({
     required List<Map<String, dynamic>> koreksiList,
-    required Function(Map<String, dynamic>) onDelete,
-    required Function(Map<String, dynamic>) onView,
-    required Color primaryDark,
-    required Color accentGold,
-    required Color accentMint,
-    required Color accentCoral,
-    required Color accentSky,
-    required Color borderSoft,
-    required Color textDark,
-    required Color textMedium,
-    required Color textLight,
     required String Function(String) formatDate,
   }) {
-    _onDelete = onDelete;
-    _primaryDark = primaryDark;
-    _accentGold = accentGold;
-    _accentMint = accentMint;
-    _accentCoral = accentCoral;
-    _accentSky = accentSky;
-    _borderSoft = borderSoft;
-    _textDark = textDark;
-    _textMedium = textMedium;
-    _textLight = textLight;
     _formatDate = formatDate;
-
-    _originalKoreksiList = koreksiList;
     _updateDataSource(koreksiList);
   }
 
-  List<Map<String, dynamic>> _originalKoreksiList = [];
   List<DataGridRow> _data = [];
-  late Function(Map<String, dynamic>) _onDelete;
-  late Color _primaryDark;
-  late Color _accentGold;
-  late Color _accentMint;
-  late Color _accentCoral;
-  late Color _accentSky;
-  late Color _borderSoft;
-  late Color _textDark;
-  late Color _textMedium;
-  late Color _textLight;
   late String Function(String) _formatDate;
+
+  static const Color _textPrimary = Color(0xFF1A202C);
+  static const Color _textSecondary = Color(0xFF64748B);
+  static const Color _accentRed = Color(0xFFEF4444);
 
   void _updateDataSource(List<Map<String, dynamic>> koreksiList) {
     _data = koreksiList.asMap().entries.map((entry) {
       final index = entry.key + 1;
       final koreksi = entry.value;
-
       return DataGridRow(cells: [
         DataGridCell<int>(columnName: 'no', value: index),
         DataGridCell<String>(columnName: 'nomor', value: koreksi['kor_nomor']?.toString() ?? '-'),
         DataGridCell<String>(columnName: 'tanggal', value: _formatDate(koreksi['kor_tanggal'] ?? '')),
         DataGridCell<String>(columnName: 'keterangan', value: koreksi['kor_keterangan']?.toString() ?? '-'),
-        DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: koreksi),
+        // DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: koreksi),
       ]);
     }).toList();
   }
@@ -1178,51 +887,20 @@ class KoreksiDataSource extends DataGridSource {
   DataGridRowAdapter buildRow(DataGridRow row) {
     return DataGridRowAdapter(
       cells: row.getCells().map<Widget>((cell) {
-        if (cell.columnName == 'aksi') {
-          final koreksi = cell.value as Map<String, dynamic>;
-          return Container(
-            alignment: Alignment.center,
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: _accentCoral.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _onDelete(koreksi),
-                  borderRadius: BorderRadius.circular(6),
-                  child: Center(
-                    child: Icon(
-                      Icons.delete_rounded,
-                      size: 14,
-                      color: _accentCoral,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
+        // if (cell.columnName == 'aksi') {
+        //   // Tidak ada action, tampilkan kosong
+        //   return const SizedBox.shrink();
+        // }
 
-        Color textColor = _textDark;
-        if (cell.columnName == 'no' || cell.columnName == 'tanggal') {
-          textColor = _textMedium;
-        }
+        Color textColor = _textPrimary;
+        if (cell.columnName == 'no' || cell.columnName == 'tanggal') textColor = _textSecondary;
 
         return Container(
           alignment: _getAlignment(cell.columnName),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
             cell.value.toString(),
-            textAlign: _getTextAlign(cell.columnName),
-            style: GoogleFonts.montserrat(
-              fontSize: 10,
-              fontWeight: cell.columnName == 'nomor' ? FontWeight.w600 : FontWeight.normal,
-              color: textColor,
-            ),
+            style: GoogleFonts.montserrat(fontSize: 11, fontWeight: cell.columnName == 'nomor' ? FontWeight.w500 : FontWeight.normal, color: textColor),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1231,65 +909,49 @@ class KoreksiDataSource extends DataGridSource {
     );
   }
 
-  Alignment _getAlignment(String columnName) {
-    switch (columnName) {
-      case 'aksi':
-        return Alignment.center;
-      default:
-        return Alignment.centerLeft;
-    }
+  Widget _buildIconButton(IconData icon, VoidCallback onTap, {Color? color}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.all(5),
+          child: Icon(icon, size: 15, color: color ?? _textSecondary),
+        ),
+      ),
+    );
   }
 
-  TextAlign _getTextAlign(String columnName) {
-    switch (columnName) {
-      case 'aksi':
-        return TextAlign.center;
-      default:
-        return TextAlign.left;
-    }
+  Alignment _getAlignment(String columnName) {
+    if (columnName == 'no' || columnName == 'tanggal') return Alignment.center;
+    return Alignment.centerLeft;
   }
 }
 
 class KoreksiDetailDataSource extends DataGridSource {
-  KoreksiDetailDataSource({
-    required List<Map<String, dynamic>> details,
-    required Color accentGold,
-    required Color textDark,
-    required Color textMedium,
-    required Color accentMint,
-    required Color accentMintSoft,
-    required Color accentCoral,
-    required Color accentCoralSoft,
-  }) {
-    _accentGold = accentGold;
-    _textDark = textDark;
-    _textMedium = textMedium;
-    _accentMint = accentMint;
-    _accentMintSoft = accentMintSoft;
-    _accentCoral = accentCoral;
-    _accentCoralSoft = accentCoralSoft;
-
+  KoreksiDetailDataSource({required List<Map<String, dynamic>> details, required NumberFormat numberFormat}) {
+    _numberFormat = numberFormat;
     _data = details.asMap().entries.map((entry) {
       final index = entry.key + 1;
       final item = entry.value;
-
+      final selisih = (item['kord_qty'] ?? 0).toDouble();
       return DataGridRow(cells: [
         DataGridCell<int>(columnName: 'no', value: index),
         DataGridCell<String>(columnName: 'nama', value: item['item_nama']?.toString() ?? '-'),
-        DataGridCell<double>(columnName: 'stok_sistem', value: item['kord_stok']?.toDouble() ?? 0),
-        DataGridCell<double>(columnName: 'selisih', value: item['kord_qty']?.toDouble() ?? 0),
+        DataGridCell<double>(columnName: 'stok_sistem', value: (item['kord_stok'] ?? 0).toDouble()),
+        DataGridCell<double>(columnName: 'selisih', value: selisih),
       ]);
     }).toList();
   }
 
   List<DataGridRow> _data = [];
-  late Color _accentGold;
-  late Color _textDark;
-  late Color _textMedium;
-  late Color _accentMint;
-  late Color _accentMintSoft;
-  late Color _accentCoral;
-  late Color _accentCoralSoft;
+  late NumberFormat _numberFormat;
+
+  static const Color _textPrimary = Color(0xFF1A202C);
+  static const Color _textSecondary = Color(0xFF64748B);
+  static const Color _accentMint = Color(0xFF06D6A0);
+  static const Color _accentRed = Color(0xFFEF4444);
 
   @override
   List<DataGridRow> get rows => _data;
@@ -1302,59 +964,31 @@ class KoreksiDetailDataSource extends DataGridSource {
           final selisih = cell.value as double;
           final isPositive = selisih > 0;
           final isNegative = selisih < 0;
-
+          final color = isPositive ? _accentMint : (isNegative ? _accentRed : _textSecondary);
           return Container(
             alignment: Alignment.center,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              decoration: BoxDecoration(
-                color: isPositive ? _accentMintSoft : (isNegative ? _accentCoralSoft : Colors.transparent),
-                borderRadius: BorderRadius.circular(6),
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
               child: Text(
-                '${selisih > 0 ? '+' : ''}${selisih.toStringAsFixed(0)}',
-                style: GoogleFonts.montserrat(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: isPositive ? _accentMint : (isNegative ? _accentCoral : _textMedium),
-                ),
+                '${selisih > 0 ? '+' : ''}${_numberFormat.format(selisih)}',
+                style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: color),
               ),
             ),
           );
         }
-
         if (cell.columnName == 'stok_sistem') {
           return Container(
             alignment: Alignment.center,
-            child: Text(
-              (cell.value as double).toStringAsFixed(0),
-              style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _textDark),
-            ),
+            child: Text(_numberFormat.format(cell.value), style: GoogleFonts.montserrat(fontSize: 10, color: _textPrimary)),
           );
         }
-
-        Color textColor = _textDark;
-        if (cell.columnName == 'no') {
-          textColor = _textMedium;
-        }
-
         return Container(
           alignment: cell.columnName == 'no' ? Alignment.center : Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          child: Text(
-            cell.value.toString(),
-            style: GoogleFonts.montserrat(
-              fontSize: 11,
-              fontWeight: cell.columnName == 'nama' ? FontWeight.w600 : FontWeight.normal,
-              color: textColor,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(cell.value.toString(), style: GoogleFonts.montserrat(fontSize: 10, color: cell.columnName == 'no' ? _textSecondary : _textPrimary)),
         );
       }).toList(),
     );
   }
 }
-
-enum ToastType { success, error, info }

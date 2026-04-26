@@ -3,7 +3,10 @@ class StockReport {
   final String NAMA;
   final String CATEGORY;
   final int Awal;
-  final int Stok_in;
+  final int STBJ;
+  final int Mutasi_in;
+  final int Mutasi_out;
+  final int Koreksi;      // <-- TAMBAHKAN
   final int Retur;
   final int Sales;
   final int Akhir;
@@ -13,7 +16,10 @@ class StockReport {
     required this.NAMA,
     required this.CATEGORY,
     required this.Awal,
-    required this.Stok_in,
+    required this.STBJ,
+    required this.Mutasi_in,
+    required this.Mutasi_out,
+    required this.Koreksi, // <-- TAMBAHKAN
     required this.Retur,
     required this.Sales,
     required this.Akhir,
@@ -25,7 +31,10 @@ class StockReport {
       NAMA: json['NAMA'] ?? '',
       CATEGORY: json['CATEGORY'] ?? '',
       Awal: _safeToInt(json['Awal']),
-      Stok_in: _safeToInt(json['Stok_in']),
+      STBJ: _safeToInt(json['STBJ']),
+      Mutasi_in: _safeToInt(json['Mutasi_in']),
+      Mutasi_out: _safeToInt(json['Mutasi_out']),
+      Koreksi: _safeToInt(json['Koreksi']),  // <-- TAMBAHKAN
       Retur: _safeToInt(json['Retur']),
       Sales: _safeToInt(json['Sales']),
       Akhir: _safeToInt(json['Akhir']),
@@ -43,13 +52,15 @@ class StockReport {
     return 0;
   }
 
-  // Calculate changes
-  int get change => Stok_in - Retur - Sales;
+  int get change => (STBJ + Mutasi_in + Koreksi) - (Mutasi_out + Retur + Sales);
 }
 
 class StockSummary {
   final int totalAwal;
-  final int totalStokIn;
+  final int totalSTBJ;
+  final int totalMutasiIn;
+  final int totalMutasiOut;
+  final int totalKoreksi;   // <-- TAMBAHKAN
   final int totalRetur;
   final int totalSales;
   final int totalAkhir;
@@ -57,7 +68,10 @@ class StockSummary {
 
   StockSummary({
     required this.totalAwal,
-    required this.totalStokIn,
+    required this.totalSTBJ,
+    required this.totalMutasiIn,
+    required this.totalMutasiOut,
+    required this.totalKoreksi, // <-- TAMBAHKAN
     required this.totalRetur,
     required this.totalSales,
     required this.totalAkhir,
@@ -67,7 +81,10 @@ class StockSummary {
   factory StockSummary.fromJson(Map<String, dynamic> json) {
     return StockSummary(
       totalAwal: _safeToInt(json['total_awal']),
-      totalStokIn: _safeToInt(json['total_stok_in']),
+      totalSTBJ: _safeToInt(json['total_stbj']),
+      totalMutasiIn: _safeToInt(json['total_mutasi_in']),
+      totalMutasiOut: _safeToInt(json['total_mutasi_out']),
+      totalKoreksi: _safeToInt(json['total_koreksi'] ?? 0), // <-- TAMBAHKAN
       totalRetur: _safeToInt(json['total_retur']),
       totalSales: _safeToInt(json['total_sales']),
       totalAkhir: _safeToInt(json['total_akhir']),
@@ -86,5 +103,5 @@ class StockSummary {
     return 0;
   }
 
-  int get totalChange => totalStokIn - totalRetur - totalSales;
+  int get totalChange => (totalSTBJ + totalMutasiIn + totalKoreksi) - (totalMutasiOut + totalRetur + totalSales);
 }

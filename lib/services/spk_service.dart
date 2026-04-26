@@ -120,6 +120,29 @@ class SpkService {
     }
   }
 
+  static Future<Map<String, dynamic>> getSpkDetailForExport(String nomor) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/spk/$nomor/export'),
+        headers: await _getHeadersWithCabang(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return data['data'];
+        } else {
+          throw Exception(data['message'] ?? 'Gagal mengambil detail SPK untuk export');
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error getSpkDetailForExport: $e');
+      rethrow;
+    }
+  }
+
   static Future<Map<String, dynamic>> updateSpk(String nomor, String keterangan) async {
     try {
       final response = await http.put(
@@ -172,6 +195,41 @@ class SpkService {
     } catch (e) {
       return {
         'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> checkSpkByDate(String tanggal) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/spk/check-by-date?tanggal=$tanggal'),
+        headers: await _getHeadersWithCabang(),
+      );
+
+      print("Check SPK");
+      print(tanggal);
+      print(response.body);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'exists': data['exists'] ?? false,
+          'data': data['data'],
+          'message': data['message'] ?? '',
+        };
+      } else {
+        return {
+          'success': false,
+          'exists': false,
+          'message': 'Gagal cek SPK',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'exists': false,
         'message': 'Error: ${e.toString()}',
       };
     }

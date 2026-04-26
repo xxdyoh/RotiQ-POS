@@ -183,28 +183,36 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> with Sing
       final detail = await SerahTerimaService.getSerahTerimaDetail(_nomorSerahTerima!);
       final details = List<Map<String, dynamic>>.from(detail['details']);
 
-      final spkDetail = await SerahTerimaService.getSpkDetail(_selectedSpk!['spk_nomor']);
-      final spkDetails = Map.fromIterable(
-        spkDetail['details'],
-        key: (item) => item['spkd_brg_kode'],
-        value: (item) => item['spkd_qty'],
-      );
+      // Ambil detail SPK untuk dapat qty SPK
+      Map<int, int> spkDetails = {};
+      if (_selectedSpk != null) {
+        try {
+          final spkDetail = await SerahTerimaService.getSpkDetail(_selectedSpk!['spk_nomor']);
+          final spkDetailList = List<Map<String, dynamic>>.from(spkDetail['details']);
+          for (var spk in spkDetailList) {
+            final id = _parseInt(spk['spkd_brg_kode']);
+            final qty = _parseInt(spk['spkd_qty']);
+            spkDetails[id] = qty;
+          }
+        } catch (e) {
+          print('Gagal load SPK detail: $e');
+        }
+      }
 
       setState(() {
         _items = details.map((detail) {
-          int qtySpk = 0;
-          final rawQty = spkDetails[detail['stbjd_brg_kode']];
-          if (rawQty is int) qtySpk = rawQty;
-          else if (rawQty is double) qtySpk = rawQty.toInt();
-          else if (rawQty is String) qtySpk = int.tryParse(rawQty) ?? 0;
+          final itemId = _parseInt(detail['stbjd_brg_kode']);
+          final qtySpk = spkDetails[itemId] ?? 0;
+          final qtyTerima = _parseInt(detail['stbjd_qty']);
+          final nourut = _parseInt(detail['stbjd_nourut']);
 
           return SerahTerimaItem(
-            itemId: detail['stbjd_brg_kode'],
-            itemNama: detail['item_nama'] ?? '',
+            itemId: itemId,
+            itemNama: detail['item_nama']?.toString() ?? '',
             qtySpk: qtySpk,
-            qtyTerima: detail['stbjd_qty']?.toInt() ?? 0,
-            keterangan: detail['stbjd_keterangan'] ?? '',
-            nourut: detail['stbjd_nourut'],
+            qtyTerima: qtyTerima,
+            keterangan: detail['stbjd_keterangan']?.toString() ?? '',
+            nourut: nourut,
           );
         }).toList();
 
@@ -216,6 +224,14 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> with Sing
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+// Helper parsing integer
+  int _parseInt(dynamic value) {
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
   }
 
   Future<void> _loadSpkDetail(String spkNomor) async {
@@ -232,16 +248,10 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> with Sing
 
       setState(() {
         _items = details.map((detail) {
-          int qtySpk = 0;
-          final rawQty = detail['spkd_qty'];
-          if (rawQty is int) qtySpk = rawQty;
-          else if (rawQty is double) qtySpk = rawQty.toInt();
-          else if (rawQty is String) qtySpk = int.tryParse(rawQty) ?? 0;
-
           return SerahTerimaItem(
-            itemId: detail['spkd_brg_kode'],
-            itemNama: detail['item_nama'] ?? '',
-            qtySpk: qtySpk,
+            itemId: _parseInt(detail['spkd_brg_kode']),
+            itemNama: detail['item_nama']?.toString() ?? '',
+            qtySpk: _parseInt(detail['spkd_qty']),
             qtyTerima: 0,
             keterangan: '',
           );

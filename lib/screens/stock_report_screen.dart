@@ -33,12 +33,25 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
 
   StockSummary _stockSummary = StockSummary(
     totalAwal: 0,
-    totalStokIn: 0,
+    totalSTBJ: 0,
+    totalMutasiIn: 0,
+    totalMutasiOut: 0,
+    totalKoreksi: 0,
     totalRetur: 0,
     totalSales: 0,
     totalAkhir: 0,
     totalItems: 0,
   );
+
+  // Color Palette
+  static const Color _primaryDark = Color(0xFF2C3E50);
+  static const Color _surfaceWhite = Color(0xFFFFFFFF);
+  static const Color _bgLight = Color(0xFFF7F9FC);
+  static const Color _textPrimary = Color(0xFF1A202C);
+  static const Color _textSecondary = Color(0xFF64748B);
+  static const Color _borderColor = Color(0xFFE2E8F0);
+  static const Color _accentGold = Color(0xFFF6A918);
+  static const Color _accentMint = Color(0xFF06D6A0);
 
   @override
   void initState() {
@@ -46,7 +59,7 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
     _tabController = TabController(length: 2, vsync: this);
     _endDate = DateTime.now();
     _startDate = _endDate!.subtract(const Duration(days: 30));
-    _dataSource = StockDataSource(stockData: [], currencyFormat: _currencyFormat, numberFormat: _numberFormat);
+    _dataSource = StockDataSource(stockData: [], numberFormat: _numberFormat);
     _loadCategories();
     _loadData();
   }
@@ -65,7 +78,7 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
         _selectedCategories = List.from(categories);
       });
     } catch (e) {
-      print('Error loading categories: $e');
+      debugPrint('Error loading categories: $e');
     }
   }
 
@@ -92,7 +105,6 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
         _stockSummary = StockSummary.fromJson(response['summary'] ?? {});
         _dataSource = StockDataSource(
           stockData: items,
-          currencyFormat: _currencyFormat,
           numberFormat: _numberFormat,
         );
       });
@@ -113,24 +125,17 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
       initialDate: _startDate ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            colorScheme: ColorScheme.light(
-              primary: const Color(0xFFF6A918),
-              onPrimary: Colors.white,
-            ),
-            dialogBackgroundColor: Colors.white,
-          ),
-          child: child!,
-        );
-      },
+      builder: (context, child) => Theme(
+        data: ThemeData.light().copyWith(
+          colorScheme: ColorScheme.light(primary: _accentGold, onPrimary: Colors.white),
+          dialogBackgroundColor: _surfaceWhite,
+        ),
+        child: child!,
+      ),
     );
 
     if (picked != null && picked != _startDate) {
-      setState(() {
-        _startDate = picked;
-      });
+      setState(() => _startDate = picked);
     }
   }
 
@@ -140,32 +145,18 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
       initialDate: _endDate ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            colorScheme: ColorScheme.light(
-              primary: const Color(0xFFF6A918),
-              onPrimary: Colors.white,
-            ),
-            dialogBackgroundColor: Colors.white,
-          ),
-          child: child!,
-        );
-      },
+      builder: (context, child) => Theme(
+        data: ThemeData.light().copyWith(
+          colorScheme: ColorScheme.light(primary: _accentGold, onPrimary: Colors.white),
+          dialogBackgroundColor: _surfaceWhite,
+        ),
+        child: child!,
+      ),
     );
 
     if (picked != null && picked != _endDate) {
-      setState(() {
-        _endDate = picked;
-      });
+      setState(() => _endDate = picked);
     }
-  }
-
-  String _formatPeriod() {
-    if (_startDate == null || _endDate == null) return '';
-    final startStr = DateFormat('dd/MM').format(_startDate!);
-    final endStr = DateFormat('dd/MM').format(_endDate!);
-    return '$startStr - $endStr';
   }
 
   Color _getStockColor(int stock) {
@@ -182,7 +173,10 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
         'NAMA': item.NAMA,
         'CATEGORY': item.CATEGORY,
         'Awal': item.Awal,
-        'Stok_in': item.Stok_in,
+        'STBJ': item.STBJ,
+        'Mutasi_in': item.Mutasi_in,
+        'Mutasi_out': item.Mutasi_out,
+        'Koreksi': item.Koreksi,
         'Retur': item.Retur,
         'Sales': item.Sales,
         'Akhir': item.Akhir,
@@ -194,579 +188,326 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final isTablet = MediaQuery.of(context).size.width >= 600;
+
     return BaseLayout(
       title: 'Lap Stock',
       showBackButton: false,
-      showSidebar: true,
+      showSidebar: !isMobile,
       isFormScreen: false,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isTablet = constraints.maxWidth >= 600;
-
-          return Column(
-            children: [
-              // Filter Section
-              Container(
-                margin: EdgeInsets.all(isTablet ? 12 : 10),
-                padding: EdgeInsets.all(isTablet ? 14 : 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
-                      blurRadius: 3,
-                      offset: const Offset(0, 1),
+      child: Container(
+        color: _bgLight,
+        child: Column(
+          children: [
+            // Filter Section
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 12, vertical: 12),
+              child: Row(
+                children: [
+                  // Tanggal Mulai
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: () => _selectStartDate(context),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: _surfaceWhite,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: _borderColor),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 14, color: _primaryDark),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _startDate != null ? _displayDateFormat.format(_startDate!) : 'Dari',
+                                style: GoogleFonts.montserrat(fontSize: 11, color: _textPrimary),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 5,
-                          child: _buildDateField(
-                            label: 'Dari Tanggal',
-                            date: _startDate,
-                            onTap: () => _selectStartDate(context),
+                  ),
+                  const SizedBox(width: 8),
+                  // Tanggal Selesai
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: () => _selectEndDate(context),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: _surfaceWhite,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: _borderColor),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 14, color: _primaryDark),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _endDate != null ? _displayDateFormat.format(_endDate!) : 'Sampai',
+                                style: GoogleFonts.montserrat(fontSize: 11, color: _textPrimary),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Kategori Dropdown
+                  Expanded(
+                    flex: 3,
+                    child: Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: _surfaceWhite,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _borderColor),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          isExpanded: true,
+                          value: _selectedCategories.length == 1 ? _selectedCategories.first : null,
+                          hint: Text(
+                            _selectedCategories.length > 1 ? '${_selectedCategories.length} kategori' : 'Semua',
+                            style: GoogleFonts.montserrat(fontSize: 11, color: _textSecondary),
                           ),
+                          icon: Icon(Icons.arrow_drop_down, size: 18, color: _textSecondary),
+                          style: GoogleFonts.montserrat(fontSize: 11, color: _textPrimary),
+                          items: [
+                            DropdownMenuItem(value: 'all', child: Text('Semua Kategori', style: GoogleFonts.montserrat(fontSize: 11))),
+                            ..._allCategories.map((category) => DropdownMenuItem(value: category, child: Text(category, style: GoogleFonts.montserrat(fontSize: 11)))),
+                          ],
+                          onChanged: (value) {
+                            if (value == 'all') {
+                              setState(() => _selectedCategories = List.from(_allCategories));
+                            } else if (value != null) {
+                              setState(() => _selectedCategories = [value]);
+                            }
+                          },
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 5,
-                          child: _buildDateField(
-                            label: 'Sampai Tanggal',
-                            date: _endDate,
-                            onTap: () => _selectEndDate(context),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 7,
-                          child: _buildCategoryFilter(),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 3,
-                          child: _buildLoadButton(),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Load Button
+                  _buildActionButton(
+                    icon: Icons.refresh_rounded,
+                    label: 'Load',
+                    color: _accentMint,
+                    onPressed: _isLoading ? null : _loadData,
+                    isMobile: isMobile,
+                  ),
+                ],
               ),
+            ),
 
-              // Tab Bar
-              _buildTabBar(),
-
-              // Content
-              Expanded(
-                child: _isLoading
-                    ? _buildLoadingIndicator()
-                    : _error != null
-                    ? _buildErrorState()
-                    : _stockData.isEmpty
-                    ? _buildEmptyState('Tidak ada data stok untuk ditampilkan')
-                    : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildDataGridView(),
-                    _buildPivotView(),
-                  ],
-                ),
+            // Tab Bar
+            Container(
+              color: _surfaceWhite,
+              child: TabBar(
+                controller: _tabController,
+                indicatorColor: _accentGold,
+                indicatorWeight: 2,
+                labelColor: _accentGold,
+                unselectedLabelColor: _textSecondary,
+                labelStyle: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600),
+                unselectedLabelStyle: GoogleFonts.montserrat(fontSize: 10),
+                tabs: const [
+                  Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.grid_on, size: 14), SizedBox(width: 4), Text('DATA GRID')])),
+                  Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.pivot_table_chart, size: 14), SizedBox(width: 4), Text('PIVOT')])),
+                ],
               ),
+            ),
 
-              // Bottom Total Bar
-              _buildBottomTotalBar(isTablet),
-            ],
-          );
-        },
+            // Content
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  : _error != null
+                  ? _buildErrorState()
+                  : _stockData.isEmpty
+                  ? _buildEmptyState()
+                  : TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildDataGridView(isTablet),
+                  _buildPivotView(),
+                ],
+              ),
+            ),
+
+            // Bottom Total Bar
+            _buildBottomTotalBar(isTablet),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildDateField({
+  Widget _buildActionButton({
+    required IconData icon,
     required String label,
-    required DateTime? date,
-    required VoidCallback onTap,
+    required Color color,
+    required VoidCallback? onPressed,
+    required bool isMobile,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.montserrat(
-            fontSize: 11,
-            color: Colors.grey.shade600,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        InkWell(
-          onTap: onTap,
-          child: Container(
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.calendar_today, size: 14, color: const Color(0xFFF6A918)),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    date != null
-                        ? DateFormat('dd/MM/yy').format(date)
-                        : 'Pilih',
-                    style: const TextStyle(fontSize: 12),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCategoryFilter() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Kategori',
-          style: GoogleFonts.montserrat(
-            fontSize: 11,
-            color: Colors.grey.shade600,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.grey.shade300),
+            color: color,
+            borderRadius: BorderRadius.circular(8),
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              isExpanded: true,
-              value: _selectedCategories.length == 1 ? _selectedCategories.first : null,
-              hint: Text(
-                _selectedCategories.length > 1
-                    ? '${_selectedCategories.length} kategori dipilih'
-                    : 'Pilih kategori',
-                style: const TextStyle(fontSize: 12, color: Colors.black54),
-              ),
-              icon: Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
-              items: [
-                const DropdownMenuItem(
-                  value: 'all',
-                  child: Text('Semua Kategori', style: TextStyle(fontSize: 12)),
-                ),
-                ..._allCategories.map((category) {
-                  return DropdownMenuItem(
-                    value: category,
-                    child: Text(category, style: const TextStyle(fontSize: 12)),
-                  );
-                }),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: Colors.white),
+              if (!isMobile) ...[
+                const SizedBox(width: 6),
+                Text(label, style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white)),
               ],
-              onChanged: (value) {
-                if (value == 'all') {
-                  setState(() {
-                    _selectedCategories = List.from(_allCategories);
-                  });
-                } else if (value != null) {
-                  setState(() {
-                    _selectedCategories = [value];
-                  });
-                }
-              },
-            ),
+            ],
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _buildLoadButton() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 13),
-        Container(
-          height: 36,
-          width: 80,
-          child: ElevatedButton.icon(
-            onPressed: _isLoading ? null : _loadData,
-            icon: _isLoading
-                ? SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-                : Icon(Icons.refresh, size: 14, color: Colors.white),
-            label: Text(
-              'Load',
-              style: GoogleFonts.montserrat(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF6A918),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-              minimumSize: const Size(70, 36),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTabBar() {
-    return Container(
-      color: Colors.white,
-      child: TabBar(
-        controller: _tabController,
-        tabs: const [
-          Tab(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.grid_on, size: 16),
-                SizedBox(width: 4),
-                Text('DATA GRID'),
-              ],
-            ),
-          ),
-          Tab(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.pivot_table_chart, size: 16),
-                SizedBox(width: 4),
-                Text('PIVOT'),
-              ],
-            ),
-          ),
-        ],
-        indicatorColor: const Color(0xFFF6A918),
-        labelColor: const Color(0xFFF6A918),
-        unselectedLabelColor: Colors.grey,
-        indicatorWeight: 2,
-        labelStyle: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600),
-        unselectedLabelStyle: GoogleFonts.montserrat(fontSize: 11),
       ),
     );
   }
 
-  Widget _buildLoadingIndicator() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF6A918)),
-            strokeWidth: 2,
+  Widget _buildDataGridView(bool isTablet) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: isTablet ? 16 : 12,
+        right: isTablet ? 16 : 12,
+        bottom: isTablet ? 0 : 0,
+        top: 12,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _surfaceWhite,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(12),
+            topRight: Radius.circular(12),
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Memuat data...',
-            style: GoogleFonts.montserrat(fontSize: 12, color: Colors.grey[600]),
+          border: Border.all(color: _borderColor),
+        ),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(12),
+            topRight: Radius.circular(12),
           ),
-        ],
+          child: SfDataGrid(
+            source: _dataSource,
+            allowColumnsResizing: true,
+            columnResizeMode: ColumnResizeMode.onResizeEnd,
+            columnWidthMode: ColumnWidthMode.fill,
+            headerRowHeight: 32,
+            rowHeight: 28,
+            allowSorting: true,
+            allowFiltering: true,
+            gridLinesVisibility: GridLinesVisibility.both,
+            headerGridLinesVisibility: GridLinesVisibility.both,
+            selectionMode: SelectionMode.none,
+            tableSummaryRows: [
+              GridTableSummaryRow(
+                showSummaryInRow: false,
+                title: 'TOTAL',
+                titleColumnSpan: 3,
+                columns: [
+                  GridSummaryColumn(name: 'TotalAwal', columnName: 'Awal', summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(name: 'TotalSTBJ', columnName: 'STBJ', summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(name: 'TotalMutasiIn', columnName: 'Mutasi_in', summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(name: 'TotalMutasiOut', columnName: 'Mutasi_out', summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(name: 'TotalKoreksi', columnName: 'Koreksi', summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(name: 'TotalRetur', columnName: 'Retur', summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(name: 'TotalSales', columnName: 'Sales', summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(name: 'TotalAkhir', columnName: 'Akhir', summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(name: 'TotalChange', columnName: 'Change', summaryType: GridSummaryType.sum),
+                ],
+                position: GridTableSummaryRowPosition.bottom,
+              ),
+            ],
+            columns: [
+              _buildGridColumn('no', 'No', width: 100, alignment: Alignment.center),
+              _buildGridColumn('ID', 'ID', width: 100, alignment: Alignment.centerLeft),
+              _buildGridColumn('NAMA', 'Nama Item', width: 200, alignment: Alignment.centerLeft),
+              _buildGridColumn('CATEGORY', 'Kategori', width: 140, alignment: Alignment.centerLeft),
+              _buildGridColumn('Awal', 'Awal', width: 120, alignment: Alignment.centerRight),
+              _buildGridColumn('STBJ', 'STBJ', width: 120, alignment: Alignment.centerRight),
+              _buildGridColumn('Mutasi_in', 'Mutasi In', width: 170, alignment: Alignment.centerRight),
+              _buildGridColumn('Mutasi_out', 'Mutasi Out', width: 170, alignment: Alignment.centerRight),
+              _buildGridColumn('Koreksi', 'Koreksi', width: 120, alignment: Alignment.centerRight),
+              _buildGridColumn('Retur', 'Retur', width: 120, alignment: Alignment.centerRight),
+              _buildGridColumn('Sales', 'Sales', width: 120, alignment: Alignment.centerRight),
+              _buildGridColumn('Akhir', 'Akhir', width: 120, alignment: Alignment.centerRight),
+              _buildGridColumn('Change', 'Change', width: 120, alignment: Alignment.centerRight),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildDataGridView() {
-    return Container(
-      margin: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: SfDataGrid(
-          source: _dataSource,
-          allowColumnsResizing: true,
-          columnResizeMode: ColumnResizeMode.onResize,
-          columnWidthMode: ColumnWidthMode.auto,
-          headerRowHeight: 32,
-          allowSorting: true,
-          allowFiltering: true,
-          stackedHeaderRows: [
-            StackedHeaderRow(
-              cells: [
-                StackedHeaderCell(
-                  columnNames: [
-                    'no', 'ID', 'NAMA', 'CATEGORY', 'Awal', 'Stok_in', 'Retur', 'Sales', 'Akhir', 'Change'
-                  ],
-                  child: Container(
-                    height: 12,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Icon(Icons.filter_list, size: 10, color: Colors.grey[500]),
-                        const SizedBox(width: 2),
-                        Icon(Icons.unfold_more, size: 10, color: Colors.grey[500]),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          tableSummaryRows: [
-            GridTableSummaryRow(
-              showSummaryInRow: false,
-              title: 'TOTAL',
-              titleColumnSpan: 3,
-              columns: [
-                GridSummaryColumn(
-                  name: 'TotalAwal',
-                  columnName: 'Awal',
-                  summaryType: GridSummaryType.sum,
-                ),
-                GridSummaryColumn(
-                  name: 'TotalStokIn',
-                  columnName: 'Stok_in',
-                  summaryType: GridSummaryType.sum,
-                ),
-                GridSummaryColumn(
-                  name: 'TotalRetur',
-                  columnName: 'Retur',
-                  summaryType: GridSummaryType.sum,
-                ),
-                GridSummaryColumn(
-                  name: 'TotalSales',
-                  columnName: 'Sales',
-                  summaryType: GridSummaryType.sum,
-                ),
-                GridSummaryColumn(
-                  name: 'TotalAkhir',
-                  columnName: 'Akhir',
-                  summaryType: GridSummaryType.sum,
-                ),
-                GridSummaryColumn(
-                  name: 'TotalChange',
-                  columnName: 'Change',
-                  summaryType: GridSummaryType.sum,
-                ),
-              ],
-              position: GridTableSummaryRowPosition.bottom,
-            ),
-          ],
-          columns: [
-            GridColumn(
-              columnName: 'no',
-              minimumWidth: 50,
-              maximumWidth: 60,
-              label: Container(
-                padding: const EdgeInsets.only(left: 4, top: 4),
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'No',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-            ),
-            GridColumn(
-              columnName: 'ID',
-              minimumWidth: 80,
-              maximumWidth: 100,
-              label: Container(
-                padding: const EdgeInsets.only(left: 4, top: 4),
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'ID',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-            ),
-            GridColumn(
-              columnName: 'NAMA',
-              minimumWidth: 200,
-              maximumWidth: 250,
-              label: Container(
-                padding: const EdgeInsets.only(left: 4, top: 4),
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'Nama Item',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-            ),
-            GridColumn(
-              columnName: 'CATEGORY',
-              minimumWidth: 120,
-              maximumWidth: 150,
-              label: Container(
-                padding: const EdgeInsets.only(left: 4, top: 4),
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'Kategori',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-            ),
-            GridColumn(
-              columnName: 'Awal',
-              minimumWidth: 80,
-              maximumWidth: 100,
-              label: Container(
-                padding: const EdgeInsets.only(left: 4, top: 4),
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'Stok Awal',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-            ),
-            GridColumn(
-              columnName: 'Stok_in',
-              minimumWidth: 80,
-              maximumWidth: 100,
-              label: Container(
-                padding: const EdgeInsets.only(left: 4, top: 4),
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'Stok In',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-            ),
-            GridColumn(
-              columnName: 'Retur',
-              minimumWidth: 70,
-              maximumWidth: 90,
-              label: Container(
-                padding: const EdgeInsets.only(left: 4, top: 4),
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'Retur',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-            ),
-            GridColumn(
-              columnName: 'Sales',
-              minimumWidth: 70,
-              maximumWidth: 90,
-              label: Container(
-                padding: const EdgeInsets.only(left: 4, top: 4),
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'Sales',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-            ),
-            GridColumn(
-              columnName: 'Akhir',
-              minimumWidth: 80,
-              maximumWidth: 100,
-              label: Container(
-                padding: const EdgeInsets.only(left: 4, top: 4),
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'Stok Akhir',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-            ),
-            GridColumn(
-              columnName: 'Change',
-              minimumWidth: 80,
-              maximumWidth: 100,
-              label: Container(
-                padding: const EdgeInsets.only(left: 4, top: 4),
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'Perubahan',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-            ),
-          ],
-          gridLinesVisibility: GridLinesVisibility.both,
-          headerGridLinesVisibility: GridLinesVisibility.both,
-          rowHeight: 30,
-          selectionMode: SelectionMode.single,
-        ),
+  GridColumn _buildGridColumn(String name, String label, {double? width, Alignment alignment = Alignment.centerLeft}) {
+    return GridColumn(
+      columnName: name,
+      width: width ?? double.nan,
+      label: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        alignment: alignment,
+        child: Text(label, style: GoogleFonts.montserrat(fontWeight: FontWeight.w600, fontSize: 10, color: _textSecondary)),
       ),
     );
   }
 
   Widget _buildPivotView() {
     if (_stockData.isEmpty) {
-      return _buildEmptyState('Tidak ada data untuk pivot table');
+      return _buildEmptyState();
     }
 
     try {
       final jsonData = _convertToPivotJson();
 
       return Container(
-        margin: const EdgeInsets.all(10),
+        margin: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _surfaceWhite,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          border: Border.all(color: _borderColor),
         ),
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: Colors.grey.shade200),
-                ),
+                color: _bgLight,
+                border: Border(bottom: BorderSide(color: _borderColor)),
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, size: 14, color: Colors.grey[600]),
+                  Icon(Icons.info_outline, size: 12, color: _textSecondary),
                   const SizedBox(width: 4),
-                  Text(
-                    'Rows: Kategori | Columns: - | Values: Stok Awal, Stok In, Retur, Sales, Stok Akhir',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 10,
-                      color: Colors.grey[600],
+                  Expanded(
+                    child: Text(
+                      'Rows: Kategori | Values: Awal, STBJ, Mutasi In, Mutasi Out, Koreksi, Retur, Sales, Akhir, Change',
+                      style: GoogleFonts.montserrat(fontSize: 9, color: _textSecondary),
                     ),
                   ),
                 ],
@@ -780,10 +521,10 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
                   child: PivotTable(
                     jsonData: jsonData,
                     hiddenAttributes: const [],
-                    cols: const [], // Tidak ada kolom, hanya baris
-                    rows: const ['CATEGORY'], // Kategori sebagai baris
+                    cols: const [],
+                    rows: const ['CATEGORY'],
                     aggregatorName: AggregatorName.sum,
-                    vals: const ['Awal', 'Stok_in', 'Retur', 'Sales', 'Akhir', 'Change'],
+                    vals: const ['Awal', 'STBJ', 'Mutasi_in', 'Mutasi_out', 'Koreksi', 'Retur', 'Sales', 'Akhir', 'Change'],
                     marginLabel: 'Total',
                     rendererName: RendererName.table,
                   ),
@@ -798,126 +539,57 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
         child: Container(
           margin: const EdgeInsets.all(20),
           padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.red.shade50,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline, color: Colors.red[400], size: 32),
-              const SizedBox(height: 8),
-              Text(
-                'Error: ${e.toString()}',
-                style: TextStyle(color: Colors.red[800], fontSize: 11),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
+          decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12)),
+          child: Text('Error: ${e.toString()}', style: GoogleFonts.montserrat(fontSize: 11, color: Colors.red)),
         ),
       );
     }
   }
 
-  Widget _buildEmptyState(String message) {
+  Widget _buildEmptyState() {
     return Center(
-      child: Container(
-        margin: const EdgeInsets.all(20),
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.inbox, size: 32, color: Colors.grey[400]),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              style: GoogleFonts.montserrat(fontSize: 13, color: Colors.grey[600]),
-            ),
-          ],
-        ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(color: _bgLight, shape: BoxShape.circle),
+            child: Icon(Icons.inbox_outlined, size: 28, color: _textSecondary),
+          ),
+          const SizedBox(height: 16),
+          Text('Tidak ada data stok', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w500, color: _textPrimary)),
+          const SizedBox(height: 4),
+          Text('Pilih filter dan klik Load', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
+        ],
       ),
     );
   }
 
   Widget _buildErrorState() {
     return Center(
-      child: Container(
-        margin: const EdgeInsets.all(20),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.error_outline, size: 32, color: Colors.red[400]),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Terjadi Kesalahan',
-              style: GoogleFonts.montserrat(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.red[800],
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _error!,
-              style: GoogleFonts.montserrat(fontSize: 11, color: Colors.red[600]),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loadData,
-              icon: const Icon(Icons.refresh, size: 14),
-              label: Text(
-                'COBA LAGI',
-                style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF6A918),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-            ),
-          ],
-        ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
+            child: Icon(Icons.error_outline, size: 28, color: Colors.red),
+          ),
+          const SizedBox(height: 16),
+          Text('Terjadi Kesalahan', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w500, color: _textPrimary)),
+          const SizedBox(height: 4),
+          Text(_error!, style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
+          const SizedBox(height: 16),
+          _buildActionButton(
+            icon: Icons.refresh_rounded,
+            label: 'Coba Lagi',
+            color: _accentMint,
+            onPressed: _loadData,
+            isMobile: false,
+          ),
+        ],
       ),
     );
   }
@@ -928,70 +600,33 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
     return Container(
       padding: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Colors.grey.shade200, width: 1),
-        ),
+        color: _surfaceWhite,
+        border: Border(top: BorderSide(color: _borderColor)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Text('${_stockData.length} items', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: _textPrimary)),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Row(
                 children: [
+                  Text('Stok Akhir: ', style: GoogleFonts.montserrat(fontSize: 11, color: _textSecondary)),
                   Text(
-                    'Total Items',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 11,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${_stockData.length} items',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 9,
-                      color: Colors.grey,
-                    ),
+                    _numberFormat.format(_stockSummary.totalAkhir),
+                    style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600, color: _getStockColor(_stockSummary.totalAkhir)),
                   ),
                 ],
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Stok Akhir: ',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      Text(
-                        _stockSummary.totalAkhir.toString(),
-                        style: GoogleFonts.montserrat(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: _getStockColor(_stockSummary.totalAkhir),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Perubahan: ${totalChange >= 0 ? '+' : ''}$totalChange',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      color: totalChange >= 0 ? Colors.green : Colors.red,
-                    ),
-                  ),
-                ],
+              Text(
+                'Perubahan: ${totalChange >= 0 ? '+' : ''}${_numberFormat.format(totalChange)}',
+                style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w500, color: totalChange >= 0 ? Colors.green : Colors.red),
               ),
             ],
           ),
@@ -1004,14 +639,15 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
 class StockDataSource extends DataGridSource {
   StockDataSource({
     required List<StockReport> stockData,
-    required NumberFormat currencyFormat,
     required NumberFormat numberFormat,
   }) {
-    _currencyFormat = currencyFormat;
     _numberFormat = numberFormat;
 
     _totalAwal = stockData.fold<int>(0, (sum, item) => sum + item.Awal);
-    _totalStokIn = stockData.fold<int>(0, (sum, item) => sum + item.Stok_in);
+    _totalSTBJ = stockData.fold<int>(0, (sum, item) => sum + item.STBJ);
+    _totalMutasiIn = stockData.fold<int>(0, (sum, item) => sum + item.Mutasi_in);
+    _totalMutasiOut = stockData.fold<int>(0, (sum, item) => sum + item.Mutasi_out);
+    _totalKoreksi = stockData.fold<int>(0, (sum, item) => sum + item.Koreksi);
     _totalRetur = stockData.fold<int>(0, (sum, item) => sum + item.Retur);
     _totalSales = stockData.fold<int>(0, (sum, item) => sum + item.Sales);
     _totalAkhir = stockData.fold<int>(0, (sum, item) => sum + item.Akhir);
@@ -1027,7 +663,10 @@ class StockDataSource extends DataGridSource {
         DataGridCell<String>(columnName: 'NAMA', value: item.NAMA),
         DataGridCell<String>(columnName: 'CATEGORY', value: item.CATEGORY),
         DataGridCell<int>(columnName: 'Awal', value: item.Awal),
-        DataGridCell<int>(columnName: 'Stok_in', value: item.Stok_in),
+        DataGridCell<int>(columnName: 'STBJ', value: item.STBJ),
+        DataGridCell<int>(columnName: 'Mutasi_in', value: item.Mutasi_in),
+        DataGridCell<int>(columnName: 'Mutasi_out', value: item.Mutasi_out),
+        DataGridCell<int>(columnName: 'Koreksi', value: item.Koreksi),
         DataGridCell<int>(columnName: 'Retur', value: item.Retur),
         DataGridCell<int>(columnName: 'Sales', value: item.Sales),
         DataGridCell<int>(columnName: 'Akhir', value: item.Akhir),
@@ -1037,38 +676,26 @@ class StockDataSource extends DataGridSource {
   }
 
   List<DataGridRow> _data = [];
-  late NumberFormat _currencyFormat;
   late NumberFormat _numberFormat;
-  late int _totalAwal;
-  late int _totalStokIn;
-  late int _totalRetur;
-  late int _totalSales;
-  late int _totalAkhir;
-  late int _totalChange;
+  late int _totalAwal, _totalSTBJ, _totalMutasiIn, _totalMutasiOut, _totalKoreksi, _totalRetur, _totalSales, _totalAkhir, _totalChange;
 
   @override
   List<DataGridRow> get rows => _data;
 
-  @override
-  Widget? buildTableSummaryCellWidget(
-      GridTableSummaryRow summaryRow,
-      GridSummaryColumn? summaryColumn,
-      RowColumnIndex rowColumnIndex,
-      String summaryValue) {
+  Color _getStockColor(int stock) {
+    if (stock <= 0) return Colors.red;
+    if (stock <= 10) return Colors.orange;
+    return Colors.green;
+  }
 
+  @override
+  Widget? buildTableSummaryCellWidget(GridTableSummaryRow summaryRow, GridSummaryColumn? summaryColumn, RowColumnIndex rowColumnIndex, String summaryValue) {
     if (summaryColumn == null) {
       if (summaryRow.title != null && summaryRow.title!.isNotEmpty) {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           alignment: Alignment.centerLeft,
-          child: Text(
-            summaryRow.title!,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 10,
-              color: Color(0xFFF6A918),
-            ),
-          ),
+          child: Text(summaryRow.title!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Color(0xFFF6A918))),
         );
       }
       return Container();
@@ -1079,70 +706,47 @@ class StockDataSource extends DataGridSource {
 
     switch (summaryColumn.name) {
       case 'TotalAwal': value = _totalAwal; break;
-      case 'TotalStokIn': value = _totalStokIn; break;
+      case 'TotalSTBJ': value = _totalSTBJ; break;
+      case 'TotalMutasiIn': value = _totalMutasiIn; break;
+      case 'TotalMutasiOut': value = _totalMutasiOut; break;
+      case 'TotalKoreksi': value = _totalKoreksi; break;
       case 'TotalRetur': value = _totalRetur; break;
       case 'TotalSales': value = _totalSales; break;
-      case 'TotalAkhir': value = _totalAkhir;
-      textColor = _getStockColor(value);
-      break;
-      case 'TotalChange':
-        value = _totalChange;
-        textColor = value >= 0 ? Colors.green : Colors.red;
-        break;
+      case 'TotalAkhir': value = _totalAkhir; textColor = _getStockColor(value); break;
+      case 'TotalChange': value = _totalChange; textColor = value >= 0 ? Colors.green : Colors.red; break;
       default: return Container();
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       alignment: Alignment.centerRight,
-      child: Text(
-        _numberFormat.format(value),
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 10,
-          color: textColor,
-        ),
-      ),
+      child: Text(_numberFormat.format(value), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: textColor)),
     );
-  }
-
-  Color _getStockColor(int stock) {
-    if (stock <= 0) return Colors.red;
-    if (stock <= 10) return Colors.orange;
-    return Colors.green;
   }
 
   @override
   DataGridRowAdapter buildRow(DataGridRow row) {
     return DataGridRowAdapter(
       cells: row.getCells().map<Widget>((cell) {
-        final isNumber = cell.columnName != 'no' &&
-            cell.columnName != 'ID' &&
-            cell.columnName != 'NAMA' &&
-            cell.columnName != 'CATEGORY';
+        final isNumber = cell.columnName != 'no' && cell.columnName != 'ID' && cell.columnName != 'NAMA' && cell.columnName != 'CATEGORY';
 
         Color? textColor;
         if (cell.columnName == 'Akhir') {
-          final value = cell.value as int;
-          textColor = _getStockColor(value);
+          textColor = _getStockColor(cell.value as int);
         } else if (cell.columnName == 'Change') {
           final value = cell.value as int;
           textColor = value >= 0 ? Colors.green : Colors.red;
+        } else if (cell.columnName == 'Koreksi') {
+          textColor = const Color(0xFF3B82F6);
         }
 
         return Container(
           alignment: _getAlignment(cell.columnName),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Text(
-            isNumber
-                ? _numberFormat.format(cell.value)
-                : cell.value.toString(),
+            isNumber ? _numberFormat.format(cell.value) : cell.value.toString(),
             textAlign: _getTextAlign(cell.columnName),
-            style: GoogleFonts.montserrat(
-              fontSize: 10,
-              fontWeight: _getFontWeight(cell.columnName),
-              color: textColor ?? (isNumber ? const Color(0xFFF6A918) : Colors.black87),
-            ),
+            style: GoogleFonts.montserrat(fontSize: 10, fontWeight: isNumber ? FontWeight.w600 : FontWeight.normal, color: textColor ?? (isNumber ? const Color(0xFFF6A918) : Colors.black87)),
           ),
         );
       }).toList(),
@@ -1150,23 +754,14 @@ class StockDataSource extends DataGridSource {
   }
 
   Alignment _getAlignment(String columnName) {
-    if (columnName == 'no' || columnName == 'ID' || columnName == 'NAMA' || columnName == 'CATEGORY') {
-      return Alignment.centerLeft;
-    }
+    if (columnName == 'no') return Alignment.center;
+    if (columnName == 'ID' || columnName == 'NAMA' || columnName == 'CATEGORY') return Alignment.centerLeft;
     return Alignment.centerRight;
   }
 
   TextAlign _getTextAlign(String columnName) {
-    if (columnName == 'no' || columnName == 'ID' || columnName == 'NAMA' || columnName == 'CATEGORY') {
-      return TextAlign.left;
-    }
+    if (columnName == 'no') return TextAlign.center;
+    if (columnName == 'ID' || columnName == 'NAMA' || columnName == 'CATEGORY') return TextAlign.left;
     return TextAlign.right;
-  }
-
-  FontWeight _getFontWeight(String columnName) {
-    if (columnName != 'no' && columnName != 'ID' && columnName != 'NAMA' && columnName != 'CATEGORY') {
-      return FontWeight.w600;
-    }
-    return FontWeight.normal;
   }
 }

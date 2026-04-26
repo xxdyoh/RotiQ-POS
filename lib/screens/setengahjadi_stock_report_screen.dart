@@ -840,7 +840,7 @@ class _SetengahJadiStockReportScreenState extends State<SetengahJadiStockReportS
           columns: [
             GridColumn(
               columnName: 'no',
-              width: 50,
+              width: 100,
               label: Container(
                 padding: const EdgeInsets.only(left: 4, top: 4),
                 alignment: Alignment.center,
@@ -849,7 +849,7 @@ class _SetengahJadiStockReportScreenState extends State<SetengahJadiStockReportS
             ),
             GridColumn(
               columnName: 'ID',
-              width: 80,
+              width: 100,
               label: Container(
                 padding: const EdgeInsets.only(left: 4, top: 4),
                 alignment: Alignment.centerLeft,
@@ -858,7 +858,7 @@ class _SetengahJadiStockReportScreenState extends State<SetengahJadiStockReportS
             ),
             GridColumn(
               columnName: 'NAMA',
-              width: 200,
+              width: 230,
               label: Container(
                 padding: const EdgeInsets.only(left: 4, top: 4),
                 alignment: Alignment.centerLeft,
@@ -867,7 +867,7 @@ class _SetengahJadiStockReportScreenState extends State<SetengahJadiStockReportS
             ),
             GridColumn(
               columnName: 'Awal',
-              width: 80,
+              width: 150,
               label: Container(
                 padding: const EdgeInsets.only(left: 4, top: 4),
                 alignment: Alignment.centerRight,
@@ -876,7 +876,7 @@ class _SetengahJadiStockReportScreenState extends State<SetengahJadiStockReportS
             ),
             GridColumn(
               columnName: 'Stok_in',
-              width: 80,
+              width: 150,
               label: Container(
                 padding: const EdgeInsets.only(left: 4, top: 4),
                 alignment: Alignment.centerRight,
@@ -885,7 +885,7 @@ class _SetengahJadiStockReportScreenState extends State<SetengahJadiStockReportS
             ),
             GridColumn(
               columnName: 'Stok_out',
-              width: 80,
+              width: 150,
               label: Container(
                 padding: const EdgeInsets.only(left: 4, top: 4),
                 alignment: Alignment.centerRight,
@@ -894,7 +894,7 @@ class _SetengahJadiStockReportScreenState extends State<SetengahJadiStockReportS
             ),
             GridColumn(
               columnName: 'Akhir',
-              width: 80,
+              width: 150,
               label: Container(
                 padding: const EdgeInsets.only(left: 4, top: 4),
                 alignment: Alignment.centerRight,
@@ -903,7 +903,7 @@ class _SetengahJadiStockReportScreenState extends State<SetengahJadiStockReportS
             ),
             GridColumn(
               columnName: 'Change',
-              width: 80,
+              width: 150,
               label: Container(
                 padding: const EdgeInsets.only(left: 4, top: 4),
                 alignment: Alignment.centerRight,

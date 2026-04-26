@@ -62,6 +62,7 @@ class KoreksiDetail {
 class KoreksiItem {
   final int itemId;
   final String itemNama;
+  final String tipe;  // <-- TAMBAHKAN
   double stokSistem;
   final double hpp;
   double stokFisik;
@@ -70,6 +71,7 @@ class KoreksiItem {
   KoreksiItem({
     required this.itemId,
     required this.itemNama,
+    this.tipe = 'BJ',  // <-- TAMBAHKAN
     this.stokSistem = 0,
     this.hpp = 0,
     this.stokFisik = 0,
@@ -80,6 +82,7 @@ class KoreksiItem {
     return KoreksiItem(
       itemId: int.tryParse(json['item_id']?.toString() ?? '0') ?? 0,
       itemNama: json['item_nama'] ?? '',
+      tipe: json['tipe'] ?? 'BJ',  // <-- TAMBAHKAN
       hpp: double.tryParse(json['item_hpp']?.toString() ?? '0') ?? 0.0,
     );
   }
@@ -88,6 +91,7 @@ class KoreksiItem {
     return {
       'item_id': itemId,
       'item_nama': itemNama,
+      'tipe': tipe,  // <-- TAMBAHKAN
       'stok_sistem': stokSistem,
       'stok_fisik': stokFisik,
       'selisih': selisih,

@@ -15,31 +15,29 @@ class UangMukaListScreen extends StatefulWidget {
   State<UangMukaListScreen> createState() => _UangMukaListScreenState();
 }
 
-class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTickerProviderStateMixin {
+class _UangMukaListScreenState extends State<UangMukaListScreen> {
   final GlobalKey<SfDataGridState> _key = GlobalKey<SfDataGridState>();
   final DataGridController _dataGridController = DataGridController();
 
-  // Warna modern dari StokinListScreen
-  final Color _primaryDark = const Color(0xFF2C3E50);
-  final Color _primaryLight = const Color(0xFF34495E);
-  final Color _accentGold = const Color(0xFFF6A918);
-  final Color _accentMint = const Color(0xFF06D6A0);
-  final Color _accentCoral = const Color(0xFFFF6B6B);
-  final Color _accentSky = const Color(0xFF4CC9F0);
-  final Color _bgSoft = const Color(0xFFF8FAFC);
-  final Color _surfaceWhite = Colors.white;
-  final Color _textDark = const Color(0xFF1A202C);
-  final Color _textMedium = const Color(0xFF718096);
-  final Color _textLight = const Color(0xFFA0AEC0);
-  final Color _borderSoft = const Color(0xFFE2E8F0);
-  final Color _shadowColor = const Color(0xFF2C3E50).withOpacity(0.1);
+  // Color Palette - Minimalis dengan aksen primary
+  static const Color _primaryDark = Color(0xFF2C3E50);
+  static const Color _primaryLight = Color(0xFF34495E);
+  static const Color _surfaceWhite = Color(0xFFFFFFFF);
+  static const Color _bgLight = Color(0xFFF7F9FC);
+  static const Color _textPrimary = Color(0xFF1A202C);
+  static const Color _textSecondary = Color(0xFF64748B);
+  static const Color _textTertiary = Color(0xFF94A3B8);
+  static const Color _borderColor = Color(0xFFE2E8F0);
+  static const Color _accentBlue = Color(0xFF3B82F6);
+  static const Color _accentRed = Color(0xFFEF4444);
+  static const Color _accentGreen = Color(0xFF10B981);
+  static const Color _accentMint = Color(0xFF06D6A0);
+  static const Color _accentGold = Color(0xFFF6A918);
 
-  // Soft versions
-  final Color _primarySoft = const Color(0xFF2C3E50).withOpacity(0.1);
-  final Color _accentGoldSoft = const Color(0xFFF6A918).withOpacity(0.1);
-  final Color _accentMintSoft = const Color(0xFF06D6A0).withOpacity(0.1);
-  final Color _accentCoralSoft = const Color(0xFFFF6B6B).withOpacity(0.1);
-  final Color _accentSkySoft = const Color(0xFF4CC9F0).withOpacity(0.1);
+  final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+  final NumberFormat _numberFormat = NumberFormat('#,##0');
+  final DateFormat _dateFormat = DateFormat('dd/MM/yyyy');
+  final DateFormat _apiDateFormat = DateFormat('yyyy-MM-dd');
 
   late Map<String, double> _columnWidths = {
     'no': 60,
@@ -49,44 +47,24 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
     'nilai': 140,
     'jenis_bayar': 100,
     'status': 100,
-    'aksi': 120,
+    'aksi': 100,
   };
 
   bool _isLoading = false;
-  bool _showDateFilter = false;
   List<Map<String, dynamic>> _uangMukaList = [];
 
-  // Filter tanggal
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now();
   final TextEditingController _startDateController = TextEditingController();
   final TextEditingController _endDateController = TextEditingController();
 
   late UangMukaDataSource _dataSource;
-
   int _totalFilteredUangMuka = 0;
   double _totalFilteredNilai = 0;
-
-  // Animation
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-
-  final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
 
   @override
   void initState() {
     super.initState();
-
-    // Animation
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-    _animationController.forward();
-
     _endDate = DateTime.now();
     _startDate = DateTime(_endDate.year, _endDate.month, 1);
     _updateDateControllers();
@@ -95,20 +73,17 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
 
   @override
   void dispose() {
-    _animationController.dispose();
     _startDateController.dispose();
     _endDateController.dispose();
     super.dispose();
   }
 
   void _updateDateControllers() {
-    _startDateController.text = DateFormat('dd/MM/yyyy').format(_startDate);
-    _endDateController.text = DateFormat('dd/MM/yyyy').format(_endDate);
+    _startDateController.text = _dateFormat.format(_startDate);
+    _endDateController.text = _dateFormat.format(_endDate);
   }
 
-  String _formatDateForApi(DateTime date) {
-    return DateFormat('yyyy-MM-dd').format(date);
-  }
+  String _formatDateForApi(DateTime date) => _apiDateFormat.format(date);
 
   String _formatDate(String dateString) {
     try {
@@ -122,40 +97,27 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
   Future<void> _loadUangMukaData() async {
     setState(() => _isLoading = true);
     try {
-      final uangMukaData = await UangMukaService.getUangMukaList(
+      final data = await UangMukaService.getUangMukaList(
         search: null,
         startDate: _formatDateForApi(_startDate),
         endDate: _formatDateForApi(_endDate),
       );
 
       setState(() {
-        _uangMukaList = uangMukaData;
-        _totalFilteredUangMuka = uangMukaData.length;
-        _totalFilteredNilai = uangMukaData.fold(0.0, (sum, item) {
-          return sum + (double.tryParse(item['um_nilai']?.toString() ?? '0') ?? 0);
-        });
+        _uangMukaList = data;
+        _totalFilteredUangMuka = data.length;
+        _totalFilteredNilai = data.fold(0.0, (sum, item) => sum + (double.tryParse(item['um_nilai']?.toString() ?? '0') ?? 0));
         _dataSource = UangMukaDataSource(
-          uangMukaList: uangMukaData,
+          uangMukaList: data,
           onEdit: _openEditUangMuka,
           onDelete: _deleteUangMuka,
           onPrint: _printUangMuka,
-          primaryDark: _primaryDark,
-          accentGold: _accentGold,
-          accentMint: _accentMint,
-          accentCoral: _accentCoral,
-          accentSky: _accentSky,
-          accentMintSoft: _accentMintSoft,
-          borderSoft: _borderSoft,
-          bgSoft: _bgSoft,
-          textDark: _textDark,
-          textMedium: _textMedium,
-          textLight: _textLight,
           formatDate: _formatDate,
           currencyFormat: _currencyFormat,
         );
       });
     } catch (e) {
-      _showToast('Gagal memuat data uang muka: ${e.toString()}', type: ToastType.error);
+      _showSnackbar('Gagal memuat data uang muka', isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -166,66 +128,30 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
       if (_dataSource.effectiveRows != null) {
         final filteredRows = _dataSource.effectiveRows!;
         List<Map<String, dynamic>> filteredData = [];
-
         for (var row in filteredRows) {
           final cells = row.getCells();
           final aksiCell = cells.firstWhere(
                 (cell) => cell.columnName == 'aksi',
             orElse: () => DataGridCell<Map<String, dynamic>>(columnName: 'aksi', value: null),
           );
-          if (aksiCell.value != null) {
-            filteredData.add(aksiCell.value as Map<String, dynamic>);
-          }
+          if (aksiCell.value != null) filteredData.add(aksiCell.value as Map<String, dynamic>);
         }
-
         setState(() {
           _totalFilteredUangMuka = filteredData.length;
-          _totalFilteredNilai = filteredData.fold(0.0, (sum, item) {
-            return sum + (double.tryParse(item['um_nilai']?.toString() ?? '0') ?? 0);
-          });
+          _totalFilteredNilai = filteredData.fold(0.0, (sum, item) => sum + (double.tryParse(item['um_nilai']?.toString() ?? '0') ?? 0));
         });
       }
     });
   }
 
-  // Modern Toast
-  void _showToast(String message, {required ToastType type}) {
+  void _showSnackbar(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Container(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              Icon(
-                type == ToastType.success ? Icons.check_circle_rounded :
-                type == ToastType.error ? Icons.error_rounded :
-                Icons.info_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: GoogleFonts.montserrat(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        backgroundColor: type == ToastType.success ? _accentMint :
-        type == ToastType.error ? _accentCoral :
-        _accentSky,
+        content: Text(message, style: GoogleFonts.montserrat(fontSize: 12, color: Colors.white)),
+        backgroundColor: isError ? _accentRed : _accentGreen,
         behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -237,189 +163,62 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
       initialDate: isStartDate ? _startDate : _endDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            colorScheme: ColorScheme.light(
-              primary: _primaryDark,
-              onPrimary: Colors.white,
-              surface: _surfaceWhite,
-              onSurface: _textDark,
-            ),
-            dialogBackgroundColor: _surfaceWhite,
-          ),
-          child: child!,
-        );
-      },
+      builder: (context, child) => Theme(
+        data: ThemeData.light().copyWith(
+          colorScheme: ColorScheme.light(primary: _primaryDark, onPrimary: Colors.white),
+          dialogBackgroundColor: _surfaceWhite,
+        ),
+        child: child!,
+      ),
     );
-
     if (picked != null) {
       setState(() {
         if (isStartDate) {
           _startDate = picked;
-          if (_startDate.isAfter(_endDate)) {
-            _endDate = _startDate;
-          }
+          if (_startDate.isAfter(_endDate)) _endDate = _startDate;
         } else {
           _endDate = picked;
-          if (_endDate.isBefore(_startDate)) {
-            _startDate = _endDate;
-          }
+          if (_endDate.isBefore(_startDate)) _startDate = _endDate;
         }
         _updateDateControllers();
       });
     }
   }
 
-  void _toggleDateFilter() {
-    setState(() {
-      _showDateFilter = !_showDateFilter;
-    });
-  }
-
   void _openAddUangMuka() {
-    Navigator.pushNamed(
-      context,
-      AppRoutes.uangMukaForm,
-      arguments: {
-        'onSaved': _loadUangMukaData,
-      },
-    );
+    Navigator.pushNamed(context, AppRoutes.uangMukaForm, arguments: {'onSaved': _loadUangMukaData});
   }
 
   void _openEditUangMuka(Map<String, dynamic> uangMuka) {
     final isRealisasi = uangMuka['um_isrealisasi'] ?? 0;
     if (isRealisasi == 1) {
-      _showToast('Uang muka sudah direalisasi, tidak dapat diubah', type: ToastType.info);
+      _showSnackbar('Uang muka sudah direalisasi, tidak dapat diubah', isError: true);
       return;
     }
-
-    Navigator.pushNamed(
-      context,
-      AppRoutes.uangMukaForm,
-      arguments: {
-        'uangMuka': uangMuka,
-        'onSaved': _loadUangMukaData,
-      },
-    );
+    Navigator.pushNamed(context, AppRoutes.uangMukaForm, arguments: {'uangMuka': uangMuka, 'onSaved': _loadUangMukaData});
   }
 
   void _deleteUangMuka(Map<String, dynamic> uangMuka) {
     final isRealisasi = uangMuka['um_isrealisasi'] ?? 0;
     if (isRealisasi == 1) {
-      _showToast('Uang muka sudah direalisasi, tidak dapat dihapus', type: ToastType.info);
+      _showSnackbar('Uang muka sudah direalisasi, tidak dapat dihapus', isError: true);
       return;
     }
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        titlePadding: EdgeInsets.zero,
-        contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-        actionsPadding: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _accentCoralSoft,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(16),
-              topRight: Radius.circular(16),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _accentCoral.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.warning_amber_rounded,
-                  color: _accentCoral,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Hapus Uang Muka',
-                style: GoogleFonts.montserrat(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: _textDark,
-                ),
-              ),
-            ],
-          ),
-        ),
-        content: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            'Apakah Anda yakin ingin menghapus "${uangMuka['um_nomor']}"?',
-            style: GoogleFonts.montserrat(
-              fontSize: 12,
-              color: _textMedium,
-            ),
-          ),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('Hapus Uang Muka', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w600)),
+        content: Text('Hapus "${uangMuka['um_nomor']}"?', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: Text(
-              'Batal',
-              style: GoogleFonts.montserrat(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: _textMedium,
-              ),
-            ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [_accentCoral, _accentCoral.withOpacity(0.8)],
-              ),
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: _accentCoral.withOpacity(0.2),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                await _performDelete(uangMuka);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                foregroundColor: Colors.white,
-                shadowColor: Colors.transparent,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: Text(
-                'Hapus',
-                style: GoogleFonts.montserrat(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary))),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _performDelete(uangMuka);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: _accentRed, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+            child: Text('Hapus', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w500)),
           ),
         ],
       ),
@@ -431,13 +230,13 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
     try {
       final result = await UangMukaService.deleteUangMuka(uangMuka['um_nomor'].toString());
       if (result['success']) {
-        _showToast(result['message'], type: ToastType.success);
+        _showSnackbar(result['message']);
         await _loadUangMukaData();
       } else {
-        _showToast(result['message'], type: ToastType.error);
+        _showSnackbar(result['message'], isError: true);
       }
     } catch (e) {
-      _showToast('Error: ${e.toString()}', type: ToastType.error);
+      _showSnackbar('Error: ${e.toString()}', isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -452,24 +251,12 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
       final keterangan = uangMuka['um_keterangan']?.toString();
       final isRealisasi = (uangMuka['um_isrealisasi'] ?? 0) == 1;
       final nomor = uangMuka['um_nomor']?.toString() ?? '';
-
       final success = await UniversalPrinterService().printUangMukaReceipt(
-        nomor: nomor,
-        tanggal: tanggal,
-        customer: customer,
-        nilai: nilai,
-        jenisBayar: jenisBayar,
-        keterangan: keterangan,
-        isRealisasi: isRealisasi,
+        nomor: nomor, tanggal: tanggal, customer: customer, nilai: nilai, jenisBayar: jenisBayar, keterangan: keterangan, isRealisasi: isRealisasi,
       );
-
-      if (success) {
-        _showToast('Berhasil mencetak uang muka', type: ToastType.success);
-      } else {
-        _showToast('Gagal mencetak. Pastikan printer terhubung.', type: ToastType.error);
-      }
+      _showSnackbar(success ? 'Berhasil mencetak uang muka' : 'Gagal mencetak. Pastikan printer terhubung.', isError: !success);
     } catch (e) {
-      _showToast('Error saat mencetak: ${e.toString()}', type: ToastType.error);
+      _showSnackbar('Error saat mencetak: ${e.toString()}', isError: true);
     }
   }
 
@@ -477,679 +264,192 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> with SingleTick
   Widget build(BuildContext context) {
     final isMobile = ResponsiveHelper.isMobile(context);
     final isTablet = MediaQuery.of(context).size.width >= 600;
-    final screenWidth = MediaQuery.of(context).size.width;
 
     return BaseLayout(
       title: 'Uang Muka',
       showBackButton: false,
       showSidebar: !isMobile,
       isFormScreen: false,
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Container(
-          color: _bgSoft,
-          child: Column(
-            children: [
-              // Header dengan filter dan tombol aksi
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _surfaceWhite,
-                  border: Border(bottom: BorderSide(color: _borderSoft)),
-                ),
-                child: Row(
-                  children: [
-                    // Filter tanggal toggle
-                    Container(
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: _showDateFilter ? _accentGoldSoft : _bgSoft,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: _showDateFilter ? _accentGold : _borderSoft,
-                        ),
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _toggleDateFilter,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.date_range,
-                                  size: 14,
-                                  color: _showDateFilter ? _accentGold : _textLight,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Filter',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: _showDateFilter ? _accentGold : _textMedium,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Icon(
-                                  _showDateFilter ? Icons.expand_less : Icons.expand_more,
-                                  size: 14,
-                                  color: _showDateFilter ? _accentGold : _textLight,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const Spacer(),
-
-                    // Tambah Button
-                    Container(
-                      height: 36,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [_primaryDark, _primaryLight],
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _primaryDark.withOpacity(0.2),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _openAddUangMuka,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Row(
-                              children: [
-                                Icon(Icons.add, size: 14, color: Colors.white),
-                                if (!isMobile) ...[
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Tambah',
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Date Filter Panel - Satu Baris dengan Tombol Load
-              if (_showDateFilter) ...[
-                Container(
-                  margin: const EdgeInsets.all(12),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: _surfaceWhite,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _borderSoft),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _shadowColor,
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      // Tanggal Mulai
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => _selectDate(context, true),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            height: 40,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            decoration: BoxDecoration(
-                              color: _bgSoft,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: _borderSoft),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.calendar_today, size: 14, color: _accentGold),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Tanggal Mulai',
-                                        style: GoogleFonts.montserrat(
-                                          fontSize: 9,
-                                          color: _textLight,
-                                        ),
-                                      ),
-                                      Text(
-                                        _startDateController.text,
-                                        style: GoogleFonts.montserrat(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
-                                          color: _textDark,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(width: 8),
-
-                      // Tanggal Selesai
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => _selectDate(context, false),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            height: 40,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            decoration: BoxDecoration(
-                              color: _bgSoft,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: _borderSoft),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.calendar_today, size: 14, color: _accentGold),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Tanggal Selesai',
-                                        style: GoogleFonts.montserrat(
-                                          fontSize: 9,
-                                          color: _textLight,
-                                        ),
-                                      ),
-                                      Text(
-                                        _endDateController.text,
-                                        style: GoogleFonts.montserrat(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
-                                          color: _textDark,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(width: 8),
-
-                      // Load Button dengan Icon
-                      Container(
-                        width: 90,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [_accentMint, _accentMint.withOpacity(0.8)],
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: _accentMint.withOpacity(0.2),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
+      child: Container(
+        color: _bgLight,
+        child: Column(
+          children: [
+            // Header Actions - 1 Row dengan Filter
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 12, vertical: 12),
+              child: Row(
+                children: [
+                  // Tanggal Mulai
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: () => _selectDate(context, true),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(color: _surfaceWhite, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderColor)),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 14, color: _primaryDark),
+                            const SizedBox(width: 6),
+                            Expanded(child: Text(_startDateController.text, style: GoogleFonts.montserrat(fontSize: 11, color: _textPrimary))),
                           ],
                         ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => _loadUangMukaData(),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.refresh_rounded,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Load',
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Tanggal Selesai
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: () => _selectDate(context, false),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(color: _surfaceWhite, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderColor)),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 14, color: _primaryDark),
+                            const SizedBox(width: 6),
+                            Expanded(child: Text(_endDateController.text, style: GoogleFonts.montserrat(fontSize: 11, color: _textPrimary))),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Load Button
+                  _buildActionButton(icon: Icons.refresh_rounded, label: 'Load', color: _accentMint, onPressed: _loadUangMukaData, isMobile: isMobile),
+                  const SizedBox(width: 8),
+                  // Tambah Button
+                  _buildActionButton(icon: Icons.add, label: isMobile ? 'Tambah' : 'Tambah', color: _primaryDark, onPressed: _openAddUangMuka, isMobile: isMobile),
+                ],
+              ),
+            ),
+
+            // Data Grid
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  : _uangMukaList.isEmpty
+                  ? _buildEmptyState()
+                  : Padding(
+                padding: EdgeInsets.only(left: isTablet ? 16 : 12, right: isTablet ? 16 : 12, bottom: isTablet ? 16 : 12),
+                child: Container(
+                  decoration: BoxDecoration(color: _surfaceWhite, borderRadius: BorderRadius.circular(12), border: Border.all(color: _borderColor)),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: SfDataGrid(
+                            key: _key,
+                            controller: _dataGridController,
+                            source: _dataSource,
+                            allowColumnsResizing: true,
+                            columnResizeMode: ColumnResizeMode.onResizeEnd,
+                            onColumnResizeUpdate: (ColumnResizeUpdateDetails details) {
+                              setState(() => _columnWidths[details.column.columnName] = details.width);
+                              return true;
+                            },
+                            columnWidthMode: ColumnWidthMode.fill,
+                            headerRowHeight: 32,
+                            rowHeight: 28,
+                            allowSorting: true,
+                            allowFiltering: true,
+                            onFilterChanged: _onFilterChanged,
+                            gridLinesVisibility: GridLinesVisibility.both,
+                            headerGridLinesVisibility: GridLinesVisibility.both,
+                            selectionMode: SelectionMode.none,
+                            columns: [
+                              _buildGridColumn('no', 'No', width: _columnWidths['no'], alignment: Alignment.center),
+                              _buildGridColumn('nomor', 'Nomor', width: _columnWidths['nomor']),
+                              _buildGridColumn('tanggal', 'Tanggal', width: _columnWidths['tanggal'], alignment: Alignment.center),
+                              _buildGridColumn('customer', 'Customer', width: _columnWidths['customer']),
+                              _buildGridColumn('nilai', 'Nilai', width: _columnWidths['nilai'], alignment: Alignment.centerRight),
+                              _buildGridColumn('jenis_bayar', 'Jenis Bayar', width: _columnWidths['jenis_bayar'], alignment: Alignment.center),
+                              _buildGridColumn('status', 'Status', width: _columnWidths['status'], alignment: Alignment.center),
+                              _buildGridColumn('aksi', 'Aksi', width: _columnWidths['aksi'], alignment: Alignment.center),
+                            ],
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ],
-
-              // DataGrid
-              Expanded(
-                child: _isLoading
-                    ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: CircularProgressIndicator(
-                          color: _accentGold,
-                          strokeWidth: 2,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Memuat data uang muka...',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          color: _textMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-                    : _uangMukaList.isEmpty
-                    ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
+                      // Footer
                       Container(
-                        width: 70,
-                        height: 70,
-                        decoration: BoxDecoration(
-                          color: _bgSoft,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.payment_outlined,
-                          size: 35,
-                          color: _textLight,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Belum ada data uang muka',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: _textDark,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Klik tombol Tambah untuk memulai',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          color: _textLight,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-                    : Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: _surfaceWhite,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _borderSoft),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _shadowColor,
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(12),
-                              topRight: Radius.circular(12),
-                            ),
-                            child: SfDataGrid(
-                              key: _key,
-                              controller: _dataGridController,
-                              source: _dataSource,
-                              allowColumnsResizing: true,
-                              columnResizeMode: ColumnResizeMode.onResizeEnd,
-                              onColumnResizeUpdate: (ColumnResizeUpdateDetails details) {
-                                setState(() {
-                                  _columnWidths[details.column.columnName] = details.width;
-                                });
-                                return true;
-                              },
-                              columnWidthMode: ColumnWidthMode.fill,
-                              columnWidthCalculationRange: ColumnWidthCalculationRange.allRows,
-                              headerRowHeight: 28,
-                              rowHeight: 30,
-                              allowSorting: true,
-                              allowFiltering: true,
-                              onFilterChanged: _onFilterChanged,
-                              gridLinesVisibility: GridLinesVisibility.both,
-                              headerGridLinesVisibility: GridLinesVisibility.both,
-                              selectionMode: SelectionMode.none,
-                              columns: [
-                                GridColumn(
-                                  columnName: 'no',
-                                  width: _columnWidths['no'] ?? 60,
-                                  minimumWidth: 50,
-                                  maximumWidth: 100,
-                                  label: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      'No',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 10,
-                                        color: _textDark,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                GridColumn(
-                                  columnName: 'nomor',
-                                  width: _columnWidths['nomor'] ?? 160,
-                                  minimumWidth: 140,
-                                  maximumWidth: 900,
-                                  label: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      'Nomor',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 10,
-                                        color: _textDark,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                GridColumn(
-                                  columnName: 'tanggal',
-                                  width: _columnWidths['tanggal'] ?? 100,
-                                  minimumWidth: 80,
-                                  maximumWidth: 140,
-                                  label: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      'Tanggal',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 10,
-                                        color: _textDark,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                GridColumn(
-                                  columnName: 'customer',
-                                  width: _columnWidths['customer'] ?? 200,
-                                  minimumWidth: 150,
-                                  maximumWidth: 900,
-                                  label: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      'Customer',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 10,
-                                        color: _textDark,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                GridColumn(
-                                  columnName: 'nilai',
-                                  width: _columnWidths['nilai'] ?? 140,
-                                  minimumWidth: 120,
-                                  maximumWidth: 200,
-                                  label: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      'Nilai',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 10,
-                                        color: _textDark,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                GridColumn(
-                                  columnName: 'jenis_bayar',
-                                  width: _columnWidths['jenis_bayar'] ?? 100,
-                                  minimumWidth: 80,
-                                  maximumWidth: 140,
-                                  label: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      'Jenis Bayar',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 10,
-                                        color: _textDark,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                GridColumn(
-                                  columnName: 'status',
-                                  width: _columnWidths['status'] ?? 100,
-                                  minimumWidth: 80,
-                                  maximumWidth: 140,
-                                  label: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      'Status',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 10,
-                                        color: _textDark,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                GridColumn(
-                                  columnName: 'aksi',
-                                  width: _columnWidths['aksi'] ?? 120,
-                                  minimumWidth: 100,
-                                  maximumWidth: 150,
-                                  label: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      'Aksi',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 10,
-                                        color: _textDark,
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(color: _bgLight, border: Border(top: BorderSide(color: _borderColor)), borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(12), bottomRight: Radius.circular(12))),
+                        child: Row(
+                          children: [
+                            Text('Total', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _textPrimary)),
+                            const SizedBox(width: 16),
+                            Row(
+                              children: [
+                                const Icon(Icons.receipt_outlined, size: 12, color: _textSecondary),
+                                const SizedBox(width: 4),
+                                Text('$_totalFilteredUangMuka Transaksi', style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary)),
                               ],
                             ),
-                          ),
+                            const Spacer(),
+                            Text('Total Nilai: ${_currencyFormat.format(_totalFilteredNilai)}', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _accentGold)),
+                            const SizedBox(width: 16),
+                            Text('${DateFormat('dd/MM').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}', style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary)),
+                          ],
                         ),
-                        // Footer Total
-                        Container(
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: _bgSoft,
-                            border: Border(
-                              top: BorderSide(color: _borderSoft),
-                            ),
-                            borderRadius: const BorderRadius.only(
-                              bottomLeft: Radius.circular(12),
-                              bottomRight: Radius.circular(12),
-                            ),
-                          ),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SizedBox(
-                              width: screenWidth - (isTablet ? 64 : 56),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: _columnWidths['no'] ?? 60,
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      'Total',
-                                      style: GoogleFonts.montserrat(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: _textDark,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    width: _columnWidths['nomor'] ?? 160,
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    alignment: Alignment.centerLeft,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.receipt, size: 11, color: _primaryDark),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          '$_totalFilteredUangMuka Transaksi',
-                                          style: GoogleFonts.montserrat(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                            color: _primaryDark,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    width: _columnWidths['tanggal'] ?? 100,
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      '${DateFormat('dd/MM').format(_startDate)} - ${DateFormat('dd/MM/yy').format(_endDate)}',
-                                      style: GoogleFonts.montserrat(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w500,
-                                        color: _textDark,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    width: _columnWidths['customer'] ?? 200,
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      'Total Nilai: ',
-                                      style: GoogleFonts.montserrat(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: _textDark,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    width: _columnWidths['nilai'] ?? 140,
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      _currencyFormat.format(_totalFilteredNilai),
-                                      style: GoogleFonts.montserrat(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: _accentGold,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    width: (_columnWidths['jenis_bayar'] ?? 100) + (_columnWidths['status'] ?? 100),
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    alignment: Alignment.center,
-                                    child: const SizedBox(),
-                                  ),
-                                  Container(
-                                    width: _columnWidths['aksi'] ?? 120,
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    alignment: Alignment.center,
-                                    child: _totalFilteredUangMuka < _uangMukaList.length
-                                        ? Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: _accentGoldSoft,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        '${_uangMukaList.length - _totalFilteredUangMuka} filter',
-                                        style: GoogleFonts.montserrat(
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.w600,
-                                          color: _accentGold,
-                                        ),
-                                      ),
-                                    )
-                                        : const SizedBox(),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({required IconData icon, required String label, required Color color, required VoidCallback onPressed, required bool isMobile}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: 8),
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: Colors.white),
+              if (!isMobile) ...[const SizedBox(width: 6), Text(label, style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white))],
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  GridColumn _buildGridColumn(String name, String label, {double? width, Alignment alignment = Alignment.centerLeft}) {
+    return GridColumn(
+      columnName: name,
+      width: width ?? double.nan,
+      label: Container(padding: const EdgeInsets.symmetric(horizontal: 12), alignment: alignment, child: Text(label, style: GoogleFonts.montserrat(fontWeight: FontWeight.w600, fontSize: 10, color: _textSecondary))),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(width: 64, height: 64, decoration: BoxDecoration(color: _bgLight, shape: BoxShape.circle), child: Icon(Icons.payment_outlined, size: 28, color: _textTertiary)),
+          const SizedBox(height: 16),
+          Text('Belum ada data uang muka', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w500, color: _textPrimary)),
+          const SizedBox(height: 4),
+          Text('Klik "Tambah" untuk memulai', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
+        ],
       ),
     );
   }
@@ -1161,63 +461,35 @@ class UangMukaDataSource extends DataGridSource {
     required Function(Map<String, dynamic>) onEdit,
     required Function(Map<String, dynamic>) onDelete,
     required Function(Map<String, dynamic>) onPrint,
-    required Color primaryDark,
-    required Color accentGold,
-    required Color accentMint,
-    required Color accentCoral,
-    required Color accentSky,
-    required Color accentMintSoft,
-    required Color borderSoft,
-    required Color bgSoft,
-    required Color textDark,
-    required Color textMedium,
-    required Color textLight,
     required String Function(String) formatDate,
     required NumberFormat currencyFormat,
   }) {
     _onEdit = onEdit;
     _onDelete = onDelete;
     _onPrint = onPrint;
-    _primaryDark = primaryDark;
-    _accentGold = accentGold;
-    _accentMint = accentMint;
-    _accentCoral = accentCoral;
-    _accentSky = accentSky;
-    _accentMintSoft = accentMintSoft;
-    _borderSoft = borderSoft;
-    _bgSoft = bgSoft;
-    _textDark = textDark;
-    _textMedium = textMedium;
-    _textLight = textLight;
     _formatDate = formatDate;
     _currencyFormat = currencyFormat;
-
     _updateDataSource(uangMukaList);
   }
 
   List<DataGridRow> _data = [];
-  late Function(Map<String, dynamic>) _onEdit;
-  late Function(Map<String, dynamic>) _onDelete;
-  late Function(Map<String, dynamic>) _onPrint;
-  late Color _primaryDark;
-  late Color _accentGold;
-  late Color _accentMint;
-  late Color _accentCoral;
-  late Color _accentSky;
-  late Color _accentMintSoft;
-  late Color _borderSoft;
-  late Color _bgSoft;
-  late Color _textDark;
-  late Color _textMedium;
-  late Color _textLight;
+  late Function(Map<String, dynamic>) _onEdit, _onDelete, _onPrint;
   late String Function(String) _formatDate;
   late NumberFormat _currencyFormat;
+
+  static const Color _textPrimary = Color(0xFF1A202C);
+  static const Color _textSecondary = Color(0xFF64748B);
+  static const Color _accentRed = Color(0xFFEF4444);
+  static const Color _accentMint = Color(0xFF06D6A0);
+  static const Color _accentGold = Color(0xFFF6A918);
+  static const Color _primaryDark = Color(0xFF2C3E50);
+  static const Color _bgLight = Color(0xFFF7F9FC);        // <-- TAMBAHKAN
+  static const Color _borderColor = Color(0xFFE2E8F0);    // <-- TAMBAHKAN
 
   void _updateDataSource(List<Map<String, dynamic>> uangMukaList) {
     _data = uangMukaList.asMap().entries.map((entry) {
       final index = entry.key + 1;
       final um = entry.value;
-
       return DataGridRow(cells: [
         DataGridCell<int>(columnName: 'no', value: index),
         DataGridCell<String>(columnName: 'nomor', value: um['um_nomor']?.toString() ?? '-'),
@@ -1241,227 +513,67 @@ class UangMukaDataSource extends DataGridSource {
         if (cell.columnName == 'aksi') {
           final um = cell.value as Map<String, dynamic>;
           final isRealisasi = um['um_isrealisasi'] ?? 0;
-
           return Container(
             alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 2),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Print Button
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: _accentMintSoft,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => _onPrint(um),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Center(
-                        child: Icon(
-                          Icons.print_rounded,
-                          size: 12,
-                          color: _accentMint,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 2),
-
-                // Edit Button (hanya jika belum realisasi)
-                if (isRealisasi == 0)
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: _primaryDark.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => _onEdit(um),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Center(
-                          child: Icon(
-                            Icons.edit_rounded,
-                            size: 12,
-                            color: _primaryDark,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  const SizedBox(width: 24),
-
-                const SizedBox(width: 2),
-
-                // Delete Button (hanya jika belum realisasi)
-                if (isRealisasi == 0)
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: _accentCoral.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => _onDelete(um),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Center(
-                          child: Icon(
-                            Icons.delete_rounded,
-                            size: 12,
-                            color: _accentCoral,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  const SizedBox(width: 24),
+                _buildIconButton(Icons.print_outlined, () => _onPrint(um), color: _accentMint),
+                const SizedBox(width: 4),
+                if (isRealisasi == 0) _buildIconButton(Icons.edit_outlined, () => _onEdit(um), color: _primaryDark),
+                const SizedBox(width: 4),
+                if (isRealisasi == 0) _buildIconButton(Icons.delete_outlined, () => _onDelete(um), color: _accentRed),
               ],
             ),
           );
         }
-
         if (cell.columnName == 'status') {
           final isRealisasi = cell.value as int;
-          final statusText = isRealisasi == 1 ? 'Realisasi' : 'Belum';
           final color = isRealisasi == 1 ? _accentMint : _accentGold;
-
           return Container(
             alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: color.withOpacity(0.3)),
-              ),
-              child: Text(
-                statusText,
-                style: GoogleFonts.montserrat(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: color.withOpacity(0.3))),
+              child: Text(isRealisasi == 1 ? 'Realisasi' : 'Belum', style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w600, color: color)),
             ),
           );
         }
-
         if (cell.columnName == 'nilai') {
-          final nilai = cell.value as double;
           return Container(
             alignment: Alignment.centerRight,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            child: Text(
-              _currencyFormat.format(nilai),
-              textAlign: TextAlign.right,
-              style: GoogleFonts.montserrat(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: _accentGold,
-              ),
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(_currencyFormat.format(cell.value), style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600, color: _accentGold)),
           );
         }
-
         if (cell.columnName == 'jenis_bayar') {
-          final jenisBayar = cell.value.toString();
           return Container(
             alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: _bgSoft,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: _borderSoft),
-              ),
-              child: Text(
-                jenisBayar,
-                style: GoogleFonts.montserrat(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: _textMedium,
-                ),
-              ),
+              decoration: BoxDecoration(color: _bgLight, borderRadius: BorderRadius.circular(4), border: Border.all(color: _borderColor)),
+              child: Text(cell.value.toString(), style: GoogleFonts.montserrat(fontSize: 9, color: _textSecondary)),
             ),
           );
         }
-
-        Color textColor = _textDark;
-        if (cell.columnName == 'no' || cell.columnName == 'tanggal') {
-          textColor = _textMedium;
-        }
-
+        Color textColor = _textPrimary;
+        if (cell.columnName == 'no' || cell.columnName == 'tanggal') textColor = _textSecondary;
         return Container(
           alignment: _getAlignment(cell.columnName),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          child: Text(
-            cell.value.toString(),
-            textAlign: _getTextAlign(cell.columnName),
-            style: GoogleFonts.montserrat(
-              fontSize: 10,
-              fontWeight: _getFontWeight(cell.columnName),
-              color: textColor,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(cell.value.toString(), style: GoogleFonts.montserrat(fontSize: 11, fontWeight: cell.columnName == 'nomor' ? FontWeight.w500 : FontWeight.normal, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
         );
       }).toList(),
     );
   }
 
+  Widget _buildIconButton(IconData icon, VoidCallback onTap, {Color? color}) {
+    return Material(color: Colors.transparent, child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(6), child: Container(padding: const EdgeInsets.all(5), child: Icon(icon, size: 15, color: color ?? _textSecondary))));
+  }
+
   Alignment _getAlignment(String columnName) {
-    switch (columnName) {
-      case 'nilai':
-        return Alignment.centerRight;
-      case 'aksi':
-        return Alignment.center;
-      case 'jenis_bayar':
-      case 'status':
-        return Alignment.center;
-      default:
-        return Alignment.centerLeft;
-    }
-  }
-
-  TextAlign _getTextAlign(String columnName) {
-    switch (columnName) {
-      case 'nilai':
-        return TextAlign.right;
-      case 'aksi':
-      case 'jenis_bayar':
-      case 'status':
-        return TextAlign.center;
-      default:
-        return TextAlign.left;
-    }
-  }
-
-  FontWeight _getFontWeight(String columnName) {
-    if (columnName == 'nilai') {
-      return FontWeight.w600;
-    }
-    if (columnName == 'nomor') {
-      return FontWeight.w600;
-    }
-    return FontWeight.normal;
+    if (columnName == 'nilai') return Alignment.centerRight;
+    if (columnName == 'aksi' || columnName == 'status' || columnName == 'jenis_bayar' || columnName == 'no' || columnName == 'tanggal') return Alignment.center;
+    return Alignment.centerLeft;
   }
 }
-
-// Toast Type enum
-enum ToastType { success, error, info }

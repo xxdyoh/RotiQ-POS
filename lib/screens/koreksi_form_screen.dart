@@ -46,6 +46,7 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
   final Color _accentMintSoft = const Color(0xFF06D6A0).withOpacity(0.1);
   final Color _accentCoralSoft = const Color(0xFFFF6B6B).withOpacity(0.1);
   final Color _accentGoldSoft = const Color(0xFFF6A918).withOpacity(0.1);
+  final Color _accentSkySoft = const Color(0xFF4CC9F0).withOpacity(0.1);
 
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
@@ -197,9 +198,11 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
         }
 
         if (itemData != null) {
+          final tipe = itemData['tipe']?.toString() ?? 'BJ';
           final newItem = KoreksiItem(
             itemId: itemId,
             itemNama: itemData['item_nama']?.toString() ?? '',
+            tipe: tipe,
             hpp: (itemData['item_hpp'] ?? 0).toDouble(),
             stokSistem: 0,
             stokFisik: 1,
@@ -213,7 +216,7 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
 
           _stokFisikControllers[itemId] = TextEditingController(text: '1');
 
-          final stokSistem = await KoreksiService.getStokSistem(itemId);
+          final stokSistem = await KoreksiService.getStokSistem(itemId, tipe: tipe);
           setState(() {
             final index = _selectedItems.indexWhere((i) => i.itemId == itemId);
             if (index >= 0) {
@@ -287,13 +290,15 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
 
       setState(() {
         _selectedItems = details.map((detail) {
+          final tipe = detail['kord_tipe']?.toString() ?? 'BJ';
           return KoreksiItem(
-            itemId: detail['kord_item_id'],
+            itemId: _parseInt(detail['kord_item_id']),
             itemNama: detail['item_nama'] ?? '',
-            stokSistem: detail['kord_stok']?.toDouble() ?? 0,
-            hpp: detail['kord_hpp']?.toDouble() ?? 0,
-            stokFisik: (detail['kord_stok']?.toDouble() ?? 0) + (detail['kord_qty']?.toDouble() ?? 0),
-            selisih: detail['kord_qty']?.toDouble() ?? 0,
+            tipe: tipe,
+            stokSistem: _parseDouble(detail['kord_stok']),
+            hpp: _parseDouble(detail['kord_hpp']),
+            stokFisik: _parseDouble(detail['kord_stok']) + _parseDouble(detail['kord_qty']),
+            selisih: _parseDouble(detail['kord_qty']),
           );
         }).toList();
 
@@ -307,7 +312,22 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
     }
   }
 
+  int _parseInt(dynamic value) {
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  double _parseDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
   void _initializeControllers() {
+    _stokFisikControllers.clear();
     for (var item in _selectedItems) {
       _stokFisikControllers[item.itemId] = TextEditingController(
           text: item.stokFisik > 0 ? item.stokFisik.toStringAsFixed(0) : '0'
@@ -318,7 +338,7 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
   void _filterItems(String query) {
     setState(() {
       if (query.isEmpty) {
-        _filteredItems = _selectedItems;
+        _filteredItems = List.from(_selectedItems);
       } else {
         final searchLower = query.toLowerCase();
         _filteredItems = _selectedItems.where((item) {
@@ -380,11 +400,11 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
     for (var item in _selectedItems) {
       if (item.stokSistem == 0) {
         try {
-          final stok = await KoreksiService.getStokSistem(item.itemId);
+          final stok = await KoreksiService.getStokSistem(item.itemId, tipe: item.tipe);
           item.stokSistem = stok;
           item.selisih = item.stokFisik - stok;
         } catch (e) {
-          print('Error load stok untuk ${item.itemNama}: $e');
+          debugPrint('Error load stok untuk ${item.itemNama}: $e');
         }
       }
     }
@@ -491,6 +511,7 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
         'items': itemsWithSelisih.map((item) => {
           'item_id': item.itemId,
           'item_nama': item.itemNama,
+          'tipe': item.tipe,
           'stok_sistem': item.stokSistem,
           'stok_fisik': item.stokFisik,
           'selisih': item.selisih,
@@ -506,6 +527,7 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
         'keterangan': _keteranganController.text.trim(),
         'items': itemsWithSelisih.map((item) => {
           'item_id': item.itemId,
+          'tipe': item.tipe,
           'selisih': item.selisih,
           'stok_sistem': item.stokSistem,
           'hpp': item.hpp,
@@ -980,6 +1002,8 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
     final hasSelisih = item.selisih != 0;
     final selisihColor = item.selisih > 0 ? _accentMint : (item.selisih < 0 ? _accentCoral : _textLight);
     final selisihIcon = item.selisih > 0 ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded;
+    final isSTJ = item.tipe == 'STJ';
+    final tipeColor = isSTJ ? _accentMint : _accentSky;
 
     return Container(
       decoration: BoxDecoration(
@@ -1003,7 +1027,7 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
               ),
               child: Center(
                 child: Icon(
-                  Icons.inventory_2_outlined,
+                  isSTJ ? Icons.precision_manufacturing_outlined : Icons.inventory_2_outlined,
                   color: hasSelisih ? Colors.white : _textLight,
                   size: 16,
                 ),
@@ -1053,6 +1077,23 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
                                 ),
                               ),
                           ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: tipeColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: tipeColor.withOpacity(0.3)),
+                        ),
+                        child: Text(
+                          isSTJ ? 'STJ' : 'BJ',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: tipeColor,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -1296,6 +1337,7 @@ class _KoreksiFormScreenState extends State<KoreksiFormScreen> with SingleTicker
   }
 }
 
+// ========== ADD ITEM MODAL ==========
 class _AddItemModal extends StatefulWidget {
   final List<KoreksiItem> existingItems;
 
@@ -1319,6 +1361,7 @@ class _AddItemModalState extends State<_AddItemModal> {
   final Color _primaryLight = const Color(0xFF34495E);
   final Color _accentGold = const Color(0xFFF6A918);
   final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _accentSky = const Color(0xFF4CC9F0);
   final Color _bgSoft = const Color(0xFFF8FAFC);
   final Color _surfaceWhite = Colors.white;
   final Color _textDark = const Color(0xFF1A202C);
@@ -1349,6 +1392,7 @@ class _AddItemModalState extends State<_AddItemModal> {
             'item_id': item['item_id'] ?? 0,
             'item_nama': item['item_nama']?.toString() ?? '',
             'item_hpp': item['item_hpp'] ?? 0.0,
+            'tipe': item['tipe']?.toString() ?? 'BJ',
           };
         }).toList();
         _filteredItems = List.from(_items);
@@ -1408,6 +1452,7 @@ class _AddItemModalState extends State<_AddItemModal> {
           selectedItems.add(KoreksiItem(
             itemId: itemId,
             itemNama: item['item_nama']?.toString() ?? '',
+            tipe: item['tipe']?.toString() ?? 'BJ',
             hpp: (item['item_hpp'] ?? 0).toDouble(),
             stokSistem: 0,
             stokFisik: stokFisik,
@@ -1533,6 +1578,9 @@ class _AddItemModalState extends State<_AddItemModal> {
                 final itemId = item['item_id'] as int;
                 final isSelected = _selectedItemIds.contains(itemId);
                 final controller = _qtyControllers[itemId];
+                final tipe = item['tipe']?.toString() ?? 'BJ';
+                final isSTJ = tipe == 'STJ';
+                final tipeColor = isSTJ ? _accentMint : _accentSky;
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 6),
@@ -1570,12 +1618,34 @@ class _AddItemModalState extends State<_AddItemModal> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              Text(
-                                'ID: ${item['item_id'] ?? 0}',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 8,
-                                  color: _textMedium,
-                                ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Text(
+                                    'ID: ${item['item_id'] ?? 0}',
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 8,
+                                      color: _textMedium,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: tipeColor.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: tipeColor.withOpacity(0.3)),
+                                    ),
+                                    child: Text(
+                                      isSTJ ? 'STJ' : 'BJ',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w600,
+                                        color: tipeColor,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),

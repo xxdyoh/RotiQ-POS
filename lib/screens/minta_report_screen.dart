@@ -233,205 +233,379 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
 
   void _showCreateSpkDialog() {
     final TextEditingController keteranganController = TextEditingController();
+    DateTime dialogDate = DateTime.now();
+    bool isChecking = false;
+    bool spkExists = false;
+    String? existingSpkNomor;
+    bool hasChecked = false; // <-- TAMBAHKAN FLAG INI
 
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Container(
-          width: 400,
-          decoration: BoxDecoration(
-            color: _surfaceWhite,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+
+            Future<void> doCheckSpk() async {
+              if (isChecking) return;
+              setDialogState(() {
+                isChecking = true;
+                hasChecked = true;
+                // HAPUS: dialogDate = picked;  <-- INI SALAH
+                // HAPUS: spkExists = false;
+                // HAPUS: existingSpkNomor = null;
+                // HAPUS: hasChecked = false;
+                // HAPUS: isChecking = false;
+              });
+              try {
+                final result = await SpkService.checkSpkByDate(
+                  DateFormat('yyyy-MM-dd').format(dialogDate),
+                );
+                setDialogState(() {
+                  spkExists = result['exists'] ?? false;
+                  existingSpkNomor = result['data']?['spk_nomor'];
+                  isChecking = false;
+                });
+              } catch (e) {
+                setDialogState(() {
+                  spkExists = false;
+                  isChecking = false;
+                });
+              }
+            }
+
+            // Hanya cek pertama kali, bukan setiap rebuild
+            if (!hasChecked && !isChecking) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!hasChecked && !isChecking) {
+                  doCheckSpk();
+                }
+              });
+            }
+
+            final canCreate = !isChecking && !spkExists && hasChecked;
+
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Container(
+                width: 420,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [_primaryDark, _primaryLight],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
+                  color: _surfaceWhite,
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(Icons.playlist_add_rounded, size: 18, color: Colors.white),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Buat SPK',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Header
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: _accentGoldSoft,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _accentGold.withOpacity(0.3)),
+                        gradient: LinearGradient(
+                          colors: [_primaryDark, _primaryLight],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(16),
+                          topRight: Radius.circular(16),
+                        ),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.calendar_today_rounded, size: 12, color: _accentGold),
-                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.playlist_add_rounded, size: 18, color: Colors.white),
+                          ),
+                          const SizedBox(width: 12),
                           Text(
-                            'Tanggal: ${_displayDateFormat.format(_selectedDate!)}',
+                            'Buat SPK',
                             style: GoogleFonts.montserrat(
-                              fontSize: 11,
+                              fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: _textDark,
+                              color: Colors.white,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Keterangan SPK',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: _textMedium,
+
+                    // Content
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Pilih Tanggal
+                          Text(
+                            'Tanggal SPK',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: _textMedium,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          InkWell(
+                            onTap: () async {
+                              final DateTime? picked = await showDatePicker(
+                                context: context,
+                                initialDate: dialogDate,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2100),
+                                builder: (context, child) => Theme(
+                                  data: ThemeData.light().copyWith(
+                                    colorScheme: ColorScheme.light(
+                                      primary: _primaryDark,
+                                      onPrimary: Colors.white,
+                                    ),
+                                  ),
+                                  child: child!,
+                                ),
+                              );
+                              if (picked != null && picked != dialogDate) {
+                                setDialogState(() {
+                                  dialogDate = picked;
+                                  spkExists = false;
+                                  existingSpkNomor = null;
+                                  hasChecked = false;
+                                  isChecking = false;
+                                });
+                              }
+                            }, // <-- PASTIKAN INI MENUTUP onTap, BUKAN DI TEMPAT LAIN
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              height: 40,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: _bgSoft,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: _borderSoft),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.calendar_today_rounded, size: 14, color: _accentGold),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    DateFormat('dd MMMM yyyy').format(dialogDate),
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: _textDark,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Icon(Icons.arrow_drop_down, color: _textLight, size: 18),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Status pengecekan
+                          if (isChecking)
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: _accentSkySoft,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: _accentSky.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: _accentSky),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Memeriksa SPK...',
+                                    style: GoogleFonts.montserrat(fontSize: 11, color: _accentSky),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          if (!isChecking && spkExists)
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: _accentCoralSoft,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: _accentCoral.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.warning_amber_rounded, size: 16, color: _accentCoral),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'SPK di tanggal yang dipilih sudah pernah dibuat',
+                                          style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _accentCoral),
+                                        ),
+                                        if (existingSpkNomor != null) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            existingSpkNomor!,
+                                            style: GoogleFonts.montserrat(fontSize: 9, color: _accentCoral),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          if (!isChecking && !spkExists) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: _accentMintSoft,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: _accentMint.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.check_circle_rounded, size: 16, color: _accentMint),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Belum ada SPK, siap dibuat',
+                                    style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _accentMint),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          if (!isChecking && !spkExists) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              'Keterangan SPK',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: _textMedium,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: _bgSoft,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: _borderSoft),
+                              ),
+                              child: TextField(
+                                controller: keteranganController,
+                                style: GoogleFonts.montserrat(fontSize: 11, color: _textDark),
+                                maxLines: 3,
+                                decoration: InputDecoration(
+                                  hintText: 'Masukkan keterangan SPK...',
+                                  hintStyle: GoogleFonts.montserrat(fontSize: 11, color: _textLight),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.all(12),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 4),
+
+                    // Footer
                     Container(
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: _bgSoft,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _borderSoft),
-                      ),
-                      child: TextField(
-                        controller: keteranganController,
-                        style: GoogleFonts.montserrat(fontSize: 11, color: _textDark),
-                        maxLines: 3,
-                        decoration: InputDecoration(
-                          hintText: 'Masukkan keterangan SPK...',
-                          hintStyle: GoogleFonts.montserrat(fontSize: 11, color: _textLight),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.all(12),
+                        border: Border(top: BorderSide(color: _borderSoft)),
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _bgSoft,
-                  border: Border(top: BorderSide(color: _borderSoft)),
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      child: Text(
-                        'Batal',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: _textMedium,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [_accentMint, _accentMint.withOpacity(0.8)],
-                        ),
-                        borderRadius: BorderRadius.circular(6),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _accentMint.withOpacity(0.2),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text(
+                              'Batal',
+                              style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: _textMedium),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: canCreate
+                                  ? LinearGradient(colors: [_accentMint, _accentMint.withOpacity(0.8)])
+                                  : null,
+                              color: canCreate ? null : _textLight,
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: canCreate
+                                  ? [BoxShadow(color: _accentMint.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))]
+                                  : null,
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: canCreate
+                                    ? () {
+                                  Navigator.pop(context);
+                                  _createSpk(
+                                    DateFormat('yyyy-MM-dd').format(dialogDate),
+                                    keteranganController.text,
+                                  );
+                                }
+                                    : null,
+                                borderRadius: BorderRadius.circular(6),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.save_rounded, size: 12, color: Colors.white),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Buat SPK',
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.pop(context);
-                            _createSpk(keteranganController.text);
-                          },
-                          borderRadius: BorderRadius.circular(6),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.save_rounded, size: 12, color: Colors.white),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Buat SPK',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Future<void> _createSpk(String keterangan) async {
+  Future<void> _createSpk(String tanggal, String keterangan) async {
     setState(() => _isLoading = true);
 
     try {
       final result = await SpkService.createSpkFromMinta(
-        tanggal: _apiDateFormat.format(_selectedDate!),
+        tanggal: tanggal,
         keterangan: keterangan,
       );
 

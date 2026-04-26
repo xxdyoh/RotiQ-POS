@@ -44,6 +44,8 @@ class StockReportService {
         headers: await _getHeadersWithCabang(),
       );
 
+      print('Stock Report Response: ${response.body}');
+
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {

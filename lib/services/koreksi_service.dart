@@ -71,10 +71,10 @@ class KoreksiService {
     }
   }
 
-  static Future<double> getStokSistem(int itemId) async {
+  static Future<double> getStokSistem(int itemId, {String tipe = 'BJ'}) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/koreksi-stok-sistem?item_id=$itemId'),
+        Uri.parse('$baseUrl/koreksi-stok-sistem?item_id=$itemId&tipe=$tipe'),
         headers: await _getHeadersWithCabang(),
       );
 
@@ -111,9 +111,10 @@ class KoreksiService {
 
       return items.map((item) {
         return {
-          'item_id': item['item_id'] ?? 0,
-          'item_nama': item['item_nama']?.toString() ?? '',
-          'item_hpp': (item['item_hpp'] ?? 0).toDouble(),
+          'item_id': item['id'] ?? 0,
+          'item_nama': item['nama']?.toString() ?? '',
+          'item_hpp': (item['hpp'] ?? 0).toDouble(),
+          'tipe': item['tipe']?.toString() ?? 'BJ',
         };
       }).toList();
     } else {

@@ -1303,7 +1303,7 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
                   contentPadding: EdgeInsets.zero,
                 ),
                 onChanged: (value) {
-                  // Update detail langsung di list TANPA setState
+                  // Update detail
                   _details[index] = JurnalDetailInput(
                     account: detail.account,
                     accountName: detail.accountName,
@@ -1312,7 +1312,7 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
                     costcenter: detail.costcenter,
                     costcenterName: detail.costcenterName,
                   );
-                  // TIDAK PANGGIL setState() di sini!
+                  setState(() {}); // <-- TAMBAHKAN INI
                 },
               ),
             ),
@@ -1353,18 +1353,13 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
                           final formatted = formatter.format(newNilai.toInt());
 
                           // Update controller tanpa kehilangan cursor position
-                          final currentSelection = nilaiController.selection;
                           nilaiController.value = nilaiController.value.copyWith(
                             text: formatted,
-                            selection: TextSelection.collapsed(
-                              offset: formatted.length,
-                            ),
+                            selection: TextSelection.collapsed(offset: formatted.length),
                           );
-                        } else if (value.isEmpty) {
-                          // Biarkan kosong
                         }
 
-                        // Update detail TANPA setState
+                        // Update detail
                         _details[index] = JurnalDetailInput(
                           account: detail.account,
                           accountName: detail.accountName,
@@ -1373,7 +1368,7 @@ class _JurnalFormScreenState extends State<JurnalFormScreen> {
                           costcenter: detail.costcenter,
                           costcenterName: detail.costcenterName,
                         );
-                        // TIDAK PANGGIL setState() di sini!
+                        setState(() {}); // <-- TAMBAHKAN INI
                       },
                     ),
                   ),

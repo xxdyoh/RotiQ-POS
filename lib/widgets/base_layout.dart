@@ -38,13 +38,16 @@ class _BaseLayoutState extends State<BaseLayout> {
   String _currentDate = '';
   late Timer _timer;
 
-  final Color _primaryDark = const Color(0xFF2C3E50);
-  final Color _accentGold = const Color(0xFFF6A918);
-  final Color _accentMint = const Color(0xFF06D6A0);
-  final Color _accentSky = const Color(0xFF4CC9F0);
-  final Color _bgLight = const Color(0xFFFAFAFA);
-  final Color _bgCard = Colors.white;
-  final Color _borderColor = const Color(0xFFE2E8F0);
+  // Color Palette
+  static const Color _primaryDark = Color(0xFF2C3E50);
+  static const Color _surfaceWhite = Color(0xFFFFFFFF);
+  static const Color _bgLight = Color(0xFFF7F9FC);
+  static const Color _textPrimary = Color(0xFF1A202C);
+  static const Color _textSecondary = Color(0xFF64748B);
+  static const Color _borderColor = Color(0xFFE2E8F0);
+  static const Color _accentGold = Color(0xFFF6A918);
+  static const Color _accentMint = Color(0xFF06D6A0);
+  static const Color _accentSky = Color(0xFF4CC9F0);
 
   static const List<String> _mainScreens = [
     AppRoutes.dashboard,
@@ -128,7 +131,7 @@ class _BaseLayoutState extends State<BaseLayout> {
                   duration: const Duration(milliseconds: 300),
                   width: isSidebarVisible ? 200 : 0,
                   decoration: BoxDecoration(
-                    color: _bgCard,
+                    color: _surfaceWhite,
                     border: Border(
                       right: BorderSide(
                         color: _borderColor,
@@ -174,7 +177,7 @@ class _BaseLayoutState extends State<BaseLayout> {
           height: 52,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: _bgCard,
+            color: _surfaceWhite,
             border: Border(
               bottom: BorderSide(
                 color: _borderColor,
@@ -239,82 +242,32 @@ class _BaseLayoutState extends State<BaseLayout> {
                       style: GoogleFonts.montserrat(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF1A202C),
+                        color: _textPrimary,
                       ),
                     ),
 
-                    // Cabang info
+                    // Dot separator
                     if (cabang != null) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 4,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade400,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: _getCabangColor(cabang.jenis).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: _getCabangColor(cabang.jenis).withOpacity(0.3),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _getCabangIcon(cabang.jenis),
-                              size: 12,
-                              color: _getCabangColor(cabang.jenis),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${cabang.kode} - ${cabang.nama}',
-                              style: GoogleFonts.montserrat(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: _getCabangColor(cabang.jenis),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      const SizedBox(width: 10),
+                      _buildDot(),
                     ],
 
-                    // User greeting
+                    // Cabang badge
+                    if (cabang != null) ...[
+                      const SizedBox(width: 10),
+                      _buildCabangBadge(cabang),
+                    ],
+
+                    // Dot separator
                     if (!widget.isFormScreen && user != null) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 4,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade400,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: _accentGold.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: _accentGold.withOpacity(0.2)),
-                        ),
-                        child: Text(
-                          // '${_getGreeting()}, ${user.nmuser}',
-                          '${user.nmuser}',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: _accentGold,
-                          ),
-                        ),
-                      ),
+                      const SizedBox(width: 10),
+                      _buildDot(),
+                    ],
+
+                    // User badge
+                    if (!widget.isFormScreen && user != null) ...[
+                      const SizedBox(width: 10),
+                      _buildUserBadge(user),
                     ],
                   ],
                 ),
@@ -330,24 +283,24 @@ class _BaseLayoutState extends State<BaseLayout> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.access_time, size: 12, color: Colors.grey.shade600),
+                    Icon(Icons.access_time, size: 12, color: _textSecondary),
                     const SizedBox(width: 6),
                     Text(
                       _currentTime,
                       style: GoogleFonts.montserrat(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF1A202C),
+                        color: _textPrimary,
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Container(width: 1, height: 12, color: Colors.grey.shade300),
+                    Container(width: 1, height: 12, color: _borderColor),
                     const SizedBox(width: 6),
                     Text(
                       _currentDate,
                       style: GoogleFonts.montserrat(
                         fontSize: 11,
-                        color: Colors.grey.shade600,
+                        color: _textSecondary,
                       ),
                     ),
                   ],
@@ -372,8 +325,9 @@ class _BaseLayoutState extends State<BaseLayout> {
     return Scaffold(
       backgroundColor: _bgLight,
       appBar: AppBar(
-        backgroundColor: _bgCard,
+        backgroundColor: _surfaceWhite,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         leading: widget.showBackButton
             ? IconButton(
           icon: const Icon(Icons.arrow_back_rounded, size: 18),
@@ -384,16 +338,14 @@ class _BaseLayoutState extends State<BaseLayout> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Page title
             Text(
               widget.title,
               style: GoogleFonts.montserrat(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF1A202C),
+                color: _textPrimary,
               ),
             ),
-            // Cabang info di bawah title
             if (cabang != null) ...[
               const SizedBox(height: 2),
               Row(
@@ -424,12 +376,83 @@ class _BaseLayoutState extends State<BaseLayout> {
     );
   }
 
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Pagi';
-    if (hour < 17) return 'Siang';
-    return 'Malam';
+  // ========== BADGE WIDGETS ==========
+
+  Widget _buildDot() {
+    return Container(
+      width: 3,
+      height: 3,
+      decoration: BoxDecoration(
+        color: _borderColor,
+        shape: BoxShape.circle,
+      ),
+    );
   }
+
+  Widget _buildCabangBadge(Cabang cabang) {
+    final color = _getCabangColor(cabang.jenis);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${cabang.kode} - ${cabang.nama}',
+            style: GoogleFonts.montserrat(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: _textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserBadge(User user) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: _accentGold.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.person_outline_rounded,
+            size: 12,
+            color: _accentGold,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            user.nmuser,
+            style: GoogleFonts.montserrat(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: _textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ========== CABANG HELPERS ==========
 
   Color _getCabangColor(String jenis) {
     switch (jenis.toLowerCase()) {

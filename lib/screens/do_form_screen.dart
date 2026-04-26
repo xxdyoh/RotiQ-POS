@@ -824,8 +824,8 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
       builder: (context) => Container(
         decoration: const BoxDecoration(color: Colors.transparent),
         child: AddItemModalMutasi(
-          existingItems: _items, // <-- GANTI _selectedItems menjadi _items
-          isPusat: isPusat,
+          existingItems: _items,
+          isPusat: false, // <-- UBAH JADI FALSE, agar tidak filter STJ only
         ),
       ),
     );
@@ -2117,9 +2117,9 @@ class _AddItemModalMutasiState extends State<AddItemModalMutasi> {
         }).toList();
 
         // JIKA PUSAT, HANYA TAMPILKAN ITEM SETENGAH JADI (STJ)
-        if (widget.isPusat) {
-          _items = _items.where((item) => item['tipe'] == 'STJ').toList();
-        }
+        // if (widget.isPusat) {
+        //   _items = _items.where((item) => item['tipe'] == 'STJ').toList();
+        // }
 
         _filteredItems = List.from(_items);
         _isLoading = false;
