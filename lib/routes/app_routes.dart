@@ -36,6 +36,7 @@ import '../screens/koreksi_list_screen.dart';
 import '../screens/mutasi_in_form_screen.dart';
 import '../screens/mutasi_in_form_screen.dart';
 import '../screens/posting_penjualan_list_screen.dart';
+import '../screens/barcode_custom_screen.dart';
 
 class AppRoutes {
   static const String dashboard = '/dashboard';
@@ -99,6 +100,8 @@ class AppRoutes {
   static const String postingPenjualanList = '/posting-penjualan';
   static const String postingPenjualanForm = '/posting-penjualan/form';
 
+  static const String barcodeCustom = '/barcode-custom';
+
   static Map<String, WidgetBuilder> get routes {
     return {
       dashboard: (context) => DashboardScreen(),
@@ -137,6 +140,8 @@ class AppRoutes {
       lapStock: (context) => StockReportScreen(),
       stockSetengahJadi: (context) => SetengahJadiStockReportScreen(),
       mintaReport: (context) => MintaReportScreen(),
+
+      barcodeCustom: (context) => BarcodeCustomScreen(),
 
       serahTerimaList: (context) => SerahTerimaListScreen(),
 

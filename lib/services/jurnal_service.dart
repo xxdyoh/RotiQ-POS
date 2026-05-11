@@ -158,6 +158,8 @@ class JurnalService {
     required List<Map<String, dynamic>> details,
   }) async {
     try {
+      final user = SessionManager.getCurrentUser();
+
       final response = await http.post(
         Uri.parse('$baseUrl/jurnal'),
         headers: await _getHeadersWithCabang(),
@@ -168,6 +170,8 @@ class JurnalService {
           'keterangan_header': keteranganHeader,
           'nilai_header': nilaiHeader,
           'details': details,
+          'user_id': user?.kduser ?? '01',      // <-- TAMBAHKAN (sama seperti PO)
+          'user_name': user?.nmuser ?? 'ADMIN',  // <-- TAMBAHKAN (sama seperti PO)
         }),
       );
 
@@ -203,6 +207,8 @@ class JurnalService {
     required List<Map<String, dynamic>> details,
   }) async {
     try {
+      final user = SessionManager.getCurrentUser();
+
       final response = await http.put(
         Uri.parse('$baseUrl/jurnal/$nomor'),
         headers: await _getHeadersWithCabang(),
@@ -213,6 +219,8 @@ class JurnalService {
           'keterangan_header': keteranganHeader,
           'nilai_header': nilaiHeader,
           'details': details,
+          'user_id': user?.kduser ?? '01',      // <-- TAMBAHKAN
+          'user_name': user?.nmuser ?? 'ADMIN',  // <-- TAMBAHKAN
         }),
       );
 

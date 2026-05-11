@@ -101,8 +101,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool _isProcessing = false;
   double _orderDiscount = 0.0;
 
-  final List<String> _edcOptions = ['QRIS', 'BCA', 'MANDIRI', 'BRI', 'BNI', 'OTHER'];
-  final List<String> _piutangOptions = ['ASA', 'BSM KANTOR', 'N3 PLESUNGAN', 'ROTIQ', 'SPI', 'OTHER'];
+  final List<String> _edcOptions = ['QRIS', 'BSI', 'OTHER'];
+  final List<String> _piutangOptions = ['BU ENI/PAK TRI', 'ASA', 'BSM KANTOR', 'N3 PLESUNGAN', 'N3 RINGROAD', 'ROTIQ', 'ROSO TRESNO', 'SPI', 'OTHER'];
 
   final Color _primaryDark = Color(0xFF2C3E50);
   final Color _primaryLight = Color(0xFF34495E);
@@ -117,6 +117,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final Color _textSecondary = Color(0xFF718096);
   final Color _borderColor = Color(0xFFE2E8F0);
   final Color _successGreen = Color(0xFF06D6A0);
+  final Color _changeHighlight = Color(0xFFFF6B35); // Orange terang untuk kembalian
 
   double get _subtotal => widget.orderItems.fold(0.0, (sum, item) => sum + (item.product.price * item.quantity));
 
@@ -925,19 +926,40 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       ],
                       if (_change > 0) ...[
                         SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Kembalian:', style: GoogleFonts.montserrat(fontSize: 13, color: _successGreen)),
-                            Text(
-                              currencyFormat.format(_change),
-                              style: GoogleFonts.montserrat(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: _successGreen,
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _changeHighlight.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: _changeHighlight.withOpacity(0.3), width: 1.5),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.savings_rounded, color: _changeHighlight, size: 18),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'KEMBALIAN',
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: _changeHighlight,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
+                              Text(
+                                currencyFormat.format(_change),
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  color: _changeHighlight,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ],
@@ -1766,13 +1788,40 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             ],
                             if (_change > 0) ...[
                               SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('Kembalian:', style: GoogleFonts.montserrat(fontSize: 13, color: _successGreen)),
-                                  Text(currencyFormat.format(_change),
-                                      style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w700, color: _successGreen)),
-                                ],
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: _changeHighlight.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: _changeHighlight.withOpacity(0.3), width: 1.5),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.savings_rounded, color: _changeHighlight, size: 16),
+                                        SizedBox(width: 6),
+                                        Text(
+                                          'KEMBALIAN',
+                                          style: GoogleFonts.montserrat(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: _changeHighlight,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Text(
+                                      currencyFormat.format(_change),
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                        color: _changeHighlight,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ],
@@ -2049,22 +2098,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
     try {
       final currentUser = SessionManager.getCurrentUser();
 
-      // Validasi user
       if (currentUser == null) {
         throw Exception('Session user tidak valid');
       }
 
-      // Prepare data for printing
-      final itemsForPrint = widget.orderItems.map((item) {
-        return {
-          'product_name': item.product.name,
-          'quantity': item.quantity,
-          'price': item.product.price,
-          'total': item.total,
-          'discount': item.discountAmount,
-        };
-      }).toList();
-
+      // Prepare data
       final paymentMethodsForPrint = _paymentItems.map((payment) {
         return {
           'type': payment.type.toString().split('.').last,
@@ -2084,21 +2122,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         globalDiscount: _orderDiscount,
       );
 
-      // Print receipt dengan timeout
-      try {
-        await _printReceipt(
-          orderId: '${DateTime.now().millisecondsSinceEpoch}',
-          items: itemsForPrint,
-          paymentMethods: paymentMethodsForPrint,
-          change: _change,
-          order: order,
-        );
-      } catch (printError) {
-        print('Print error (non-fatal): $printError');
-        // Lanjutkan meskipun print gagal
-      }
-
-      // Submit order dengan timeout
+      // ═══ STEP 1: SAVE KE API DULU ═══
       final orderPayload = {
         'customer_id': widget.customer.id,
         'items': order.items.map((item) => item.toJson()).toList(),
@@ -2113,8 +2137,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
         'paid_amount': _totalPaid,
       };
 
-      
-
       final result = await ApiService.submitOrder(orderPayload).timeout(
         Duration(seconds: 30),
         onTimeout: () => throw Exception('Koneksi timeout. Periksa jaringan Anda.'),
@@ -2125,7 +2147,30 @@ class _PaymentScreenState extends State<PaymentScreen> {
         _updateDpStatusAsync();
 
         final orderId = result['order_id']?.toString() ?? '';
+
+        // ═══ STEP 2: TAMPILKAN DIALOG SUKSES ═══
         _showSuccessDialog(order, orderId);
+
+        // ═══ STEP 3: PRINT STRUK (setelah sukses, non-blocking) ═══
+        final itemsForPrint = widget.orderItems.map((item) {
+          return {
+            'product_name': item.product.name,
+            'quantity': item.quantity,
+            'price': item.product.price,
+            'total': item.total,
+            'discount': item.discountAmount,
+          };
+        }).toList();
+
+        // Print di background, tidak blocking
+        _printReceipt(
+          orderId: orderId,
+          items: itemsForPrint,
+          paymentMethods: paymentMethodsForPrint,
+          change: _change,
+          order: order,
+        ).catchError((e) => print('Print error (non-fatal): $e'));
+
       } else {
         setState(() => _isProcessing = false);
         _showSnackbar(result['message'] ?? 'Gagal menyimpan order', _accentCoral);
@@ -2218,70 +2263,122 @@ class _PaymentScreenState extends State<PaymentScreen> {
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          padding: EdgeInsets.all(24),
+          width: 320, // Fixed width biar compact
+          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           decoration: BoxDecoration(
             color: _bgCard,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _borderColor),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Icon Sukses - lebih kecil
               Container(
-                width: 60,
-                height: 60,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   color: _successGreen.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: _successGreen.withOpacity(0.3)),
+                  borderRadius: BorderRadius.circular(26),
+                  border: Border.all(color: _successGreen.withOpacity(0.3), width: 2),
                 ),
-                child: Icon(Icons.check_rounded, color: _successGreen, size: 30),
+                child: Icon(Icons.check_rounded, color: _successGreen, size: 28),
               ),
-              SizedBox(height: 16),
+              SizedBox(height: 12),
+
+              // Judul
               Text(
                 'TRANSAKSI BERHASIL',
                 style: GoogleFonts.montserrat(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.w800,
                   color: _textPrimary,
+                  letterSpacing: 0.3,
                 ),
               ),
-              SizedBox(height: 8),
-              Text(
-                'Order: $orderId',
-                style: GoogleFonts.montserrat(fontSize: 11, color: _textSecondary),
-              ),
               SizedBox(height: 4),
+
+              // Order & Customer
               Text(
-                'Customer: ${widget.customer.name}',
-                style: GoogleFonts.montserrat(fontSize: 12, color: _textPrimary),
+                'Order: $orderId  •  ${widget.customer.name}',
+                style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary),
+                textAlign: TextAlign.center,
               ),
-              SizedBox(height: 16),
+              SizedBox(height: 14),
+
+              // Divider
+              Container(height: 1, color: _borderColor),
+              SizedBox(height: 14),
+
+              // Total (kecil)
+              Text(
+                'Total',
+                style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary, letterSpacing: 0.5),
+              ),
+              SizedBox(height: 2),
               Text(
                 currencyFormat.format(order.paidAmount),
                 style: GoogleFonts.montserrat(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: _accentGold,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: _textPrimary,
                 ),
               ),
-              SizedBox(height: 12),
-              if (_change > 0)
+
+              // Kembalian - Highlight compact
+              if (_change > 0) ...[
+                SizedBox(height: 12),
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   decoration: BoxDecoration(
-                    color: _successGreen.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: _successGreen.withOpacity(0.3)),
+                    gradient: LinearGradient(
+                      colors: [_changeHighlight, Color(0xFFFF8C5A)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _changeHighlight.withOpacity(0.3),
+                        blurRadius: 6,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
                   ),
-                  child: Text(
-                    'Kembalian: ${currencyFormat.format(_change)}',
-                    style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600, color: _successGreen),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.savings_rounded, color: Colors.white, size: 18),
+                          SizedBox(width: 6),
+                          Text(
+                            'KEMBALIAN',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white.withOpacity(0.9),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        currencyFormat.format(_change),
+                        style: GoogleFonts.montserrat(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              SizedBox(height: 20),
+              ],
+
+              SizedBox(height: 18),
+
+              // Tombol Selesai
               Container(
-                width: 150,
+                width: 160,
                 height: 40,
                 decoration: BoxDecoration(
                   color: _primaryDark,
@@ -2299,9 +2396,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       child: Text(
                         'SELESAI',
                         style: GoogleFonts.montserrat(
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),

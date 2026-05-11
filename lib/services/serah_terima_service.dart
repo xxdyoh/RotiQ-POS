@@ -66,6 +66,42 @@ class SerahTerimaService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getItemsForAdd() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/barcode-items'),
+        headers: await _getHeadersWithCabang(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['data']);
+      } else {
+        throw Exception('Gagal mengambil data item');
+      }
+    } catch (e) {
+      throw Exception('Error: ${e.toString()}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getBarcodeData(String nomor) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/serah-terima/$nomor/barcode'),
+        headers: await _getHeadersWithCabang(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['data'];
+      } else {
+        throw Exception('Gagal mengambil data barcode');
+      }
+    } catch (e) {
+      throw Exception('Error: ${e.toString()}');
+    }
+  }
+
   static Future<Map<String, dynamic>> getSerahTerimaDetail(String nomor) async {
     try {
       final response = await http.get(

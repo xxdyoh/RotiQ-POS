@@ -81,6 +81,31 @@ class ItemService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getItemsForBarcode({String? search}) async {
+    try {
+      String url = '$baseUrl/barcode-items';
+      if (search != null && search.isNotEmpty) {
+        url += '?search=${Uri.encodeComponent(search)}';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeadersWithCabang(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final items = List<Map<String, dynamic>>.from(data['data']);
+        print('First item from service: ${items.first}'); // ← DEBUG
+        return items;
+      } else {
+        throw Exception('Gagal mengambil data item');
+      }
+    } catch (e) {
+      throw Exception('Error: ${e.toString()}');
+    }
+  }
+
   static Future<Map<String, dynamic>> addItem({
     required String name,
     required String category,

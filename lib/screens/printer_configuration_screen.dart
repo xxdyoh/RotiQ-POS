@@ -29,14 +29,34 @@ class _PrinterConfigurationScreenState extends State<PrinterConfigurationScreen>
     _initialize();
   }
 
+  // Future<void> _initialize() async {
+  //   // Listen to connection status
+  //   _connectionSubscription = _printerService.connectionStream.listen((connected) {
+  //     setState(() {});
+  //   });
+  //
+  //   _statusSubscription = _printerService.statusStream.listen((status) {
+  //     setState(() {});
+  //   });
+  //
+  //   // Auto-connect jika belum terhubung
+  //   if (!_printerService.isConnected) {
+  //     await _printerService.autoConnect();
+  //   }
+  //
+  //   // Load devices
+  //   await _loadDevices();
+  //
+  //   setState(() => _isLoading = false);
+  // }
+
   Future<void> _initialize() async {
-    // Listen to connection status
     _connectionSubscription = _printerService.connectionStream.listen((connected) {
-      setState(() {});
+      if (mounted) setState(() {});
     });
 
     _statusSubscription = _printerService.statusStream.listen((status) {
-      setState(() {});
+      if (mounted) setState(() {});
     });
 
     // Auto-connect jika belum terhubung
@@ -44,10 +64,33 @@ class _PrinterConfigurationScreenState extends State<PrinterConfigurationScreen>
       await _printerService.autoConnect();
     }
 
-    // Load devices
+    // JIKA WEB DAN MASIH BELUM CONNECT, FORCE KE localhost:8765
+    if (PlatformDetector.isWeb && !_printerService.isConnected) {
+      _connectToWebSocketBridge('ws://127.0.0.1:8765');
+    }
+
     await _loadDevices();
 
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _connectToWebSocketBridge(String url) async {
+    final device = Device(
+      id: 'bridge_local',
+      name: 'Printer Bridge (Local)',
+      type: DeviceType.network,
+      address: url,
+    );
+
+    setState(() {
+      _isScanning = true;
+    });
+
+    await _printerService.connect(device);
+
+    setState(() {
+      _isScanning = false;
+    });
   }
 
   Future<void> _loadDevices() async {
@@ -352,7 +395,7 @@ class _PrinterConfigurationScreenState extends State<PrinterConfigurationScreen>
             ),
             SizedBox(height: 12),
             Text(
-              'Bridge URL: ws://localhost:8765',
+              'Bridge URL: ws://127.0.0.1:8765',
               style: GoogleFonts.montserrat(color: Colors.grey.shade600),
             ),
             SizedBox(height: 8),

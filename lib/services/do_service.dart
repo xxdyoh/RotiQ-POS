@@ -73,6 +73,9 @@ class DoService {
         headers: await _getHeadersWithCabang(),
       );
 
+      print('CETAK MUTASI');
+      print(response.body);
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['data'];

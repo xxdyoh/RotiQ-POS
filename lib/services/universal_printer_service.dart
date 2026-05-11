@@ -58,6 +58,12 @@ abstract class BasePrinterService {
     bool isRealisasi = false,
   });
 
+  Future<bool> printBarcodeLabel({
+    required List<Map<String, dynamic>> items,
+    required String dayCode,
+    required bool withPrice,
+  });
+  
   Future<bool> checkConnection();
   Future<void> autoConnect();
 
@@ -332,6 +338,33 @@ class BluetoothPrinterServiceImpl extends BasePrinterService {
       return result;
     } catch (e) {
       print('❌ Error print uang muka receipt: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> printBarcodeLabel({
+    required List<Map<String, dynamic>> items,
+    required String dayCode,
+    required bool withPrice,
+  }) async {
+    if (!_bluetoothService.isConnected) {
+      print('❌ Printer tidak terhubung!');
+      return false;
+    }
+
+    try {
+      final bytes = await ReceiptTemplate.buildBarcodeLabel(
+        items: items,
+        dayCode: dayCode,
+        withPrice: withPrice,
+      );
+
+      print('📦 Generated ${bytes.length} bytes for barcode labels');
+      final result = await _bluetoothService.sendData(bytes);
+      return result;
+    } catch (e) {
+      print('❌ Error print barcode label: $e');
       return false;
     }
   }
@@ -703,6 +736,36 @@ class WebSocketPrinterServiceImpl extends BasePrinterService {
   }
 
   @override
+  Future<bool> printBarcodeLabel({
+    required List<Map<String, dynamic>> items,
+    required String dayCode,
+    required bool withPrice,
+  }) async {
+    if (!_webSocketPrinter.isConnected) {
+      _updateStatus('Not connected to bridge');
+      return false;
+    }
+
+    try {
+      final bytes = await ReceiptTemplate.buildBarcodeLabel(
+        items: items,
+        dayCode: dayCode,
+        withPrice: withPrice,
+      );
+
+      final base64Data = base64.encode(bytes);
+      _webSocketPrinter.channel?.sink.add('PRINT_LABEL:$base64Data');
+      _updateStatus('Barcode labels sent to bridge');
+
+      return true;
+    } catch (e) {
+      print('❌ Print barcode label error: $e');
+      _updateStatus('Print error: $e');
+      return false;
+    }
+  }
+
+  @override
   Future<bool> checkConnection() async {
     return _webSocketPrinter.isConnected;
   }
@@ -908,6 +971,16 @@ class UniversalPrinterService implements BasePrinterService {
     jenisBayar: jenisBayar,
     keterangan: keterangan,
     isRealisasi: isRealisasi,
+  );
+
+  Future<bool> printBarcodeLabel({
+    required List<Map<String, dynamic>> items,
+    required String dayCode,
+    required bool withPrice,
+  }) => _delegate.printBarcodeLabel(
+    items: items,
+    dayCode: dayCode,
+    withPrice: withPrice,
   );
 
   @override

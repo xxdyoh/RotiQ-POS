@@ -410,9 +410,9 @@ class _DoFormScreenState extends State<DoFormScreen> with SingleTickerProviderSt
           return MutasiItem(
             itemId: detail['mtd_brg_kode'],
             itemNama: detail['item_nama'] ?? '',
-            tipe: detail['mtd_tipe'] ?? 'BJ', // <-- TAMBAHKAN
+            tipe: detail['mtd_tipe'] ?? 'BJ',
             qtyMinta: qtyMinta,
-            qty: 0,
+            qty: qtyMinta,  // ← qty ikut qtyMinta
             keterangan: '',
           );
         }).toList();

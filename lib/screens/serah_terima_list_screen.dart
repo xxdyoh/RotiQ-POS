@@ -13,6 +13,15 @@ import '../widgets/base_layout.dart';
 import '../routes/app_routes.dart';
 import 'serah_terima_form_screen.dart';
 import '../utils/responsive_helper.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:barcode/barcode.dart' as barcode_lib;
+import '../services/universal_printer_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import '../services/universal_printer_service.dart';
+import '../screens/printer_configuration_screen.dart';
+import '../models/device.dart';
 
 class SerahTerimaListScreen extends StatefulWidget {
   const SerahTerimaListScreen({super.key});
@@ -55,6 +64,8 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
   bool _isLoading = false;
   List<Map<String, dynamic>> _serahTerimaList = [];
 
+  bool _printerConnected = false;
+
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now();
   final TextEditingController _startDateController = TextEditingController();
@@ -70,6 +81,7 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
     _startDate = DateTime(_endDate.year, _endDate.month, 1);
     _updateDateControllers();
     _loadSerahTerimaData();
+    _checkPrinterStatus();
   }
 
   @override
@@ -140,6 +152,27 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  Future<void> _checkPrinterStatus() async {
+    try {
+      final printerService = UniversalPrinterService();
+      setState(() {
+        _printerConnected = printerService.isConnected;
+      });
+    } catch (e) {
+      debugPrint('Check printer error: $e');
+    }
+  }
+
+  void _goToPrinterSettings() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const PrinterConfigurationScreen()),
+    );
+    if (result == true) {
+      _checkPrinterStatus();
+    }
   }
 
   Future<void> _selectDate(BuildContext context, bool isStartDate) async {
@@ -447,6 +480,35 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    // Tombol Print Barcode
+                    Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: _accentGold,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.pop(context);
+                            _showBarcodeOptionDialog(serahTerima);
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.qr_code_rounded, size: 14, color: Colors.white),
+                              const SizedBox(width: 6),
+                              Text('Barcode', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Tombol Tutup
                     Container(
                       width: 90,
                       height: 36,
@@ -470,6 +532,205 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
         ),
       ),
     );
+  }
+
+  void _showBarcodeOptionDialog(Map<String, dynamic> serahTerima) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('Print Barcode', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w600)),
+        content: Text('Tampilkan harga pada barcode?', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _printBarcode(serahTerima, withPrice: false);
+            },
+            child: Text('Tanpa Harga', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _printBarcode(serahTerima, withPrice: true);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primaryDark,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text('Dengan Harga', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _printBarcode(Map<String, dynamic> serahTerima, {required bool withPrice}) async {
+    try {
+      final data = await SerahTerimaService.getBarcodeData(serahTerima['stbj_nomor']);
+      final items = List<Map<String, dynamic>>.from(data['items'] ?? []);
+
+      if (items.isEmpty) {
+        _showSnackbar('Tidak ada item untuk diprint', isError: true);
+        return;
+      }
+
+      // Dapatkan kode hari berdasarkan tanggal STBJ
+      final tanggal = DateTime.parse(serahTerima['stbj_tanggal'] ?? DateTime.now().toString());
+      final dayCode = _getDayCode(tanggal); // R8, R9, ... R14
+
+      final pdf = pw.Document();
+
+      // Paper: 7.20 x 1.75 inch = 518.4 x 126 points
+      const double pageWidth = 518.4;
+      const double pageHeight = 126.0;
+      const double labelWidth = pageWidth / 2; // 2 kolom
+
+      for (int i = 0; i < items.length; i += 2) {
+        pdf.addPage(
+          pw.Page(
+            pageFormat: PdfPageFormat(pageWidth, pageHeight),
+            margin: pw.EdgeInsets.zero,
+            build: (pw.Context context) {
+              return pw.Row(
+                children: [
+                  // Label kiri
+                  pw.Container(
+                    width: labelWidth,
+                    height: pageHeight,
+                    padding: pw.EdgeInsets.only(left: 12, right: 1, top: 10, bottom: 2),
+                    child: _buildLabel(items[i], dayCode, withPrice),
+                  ),
+
+                  // Label kanan
+                  if (i + 1 < items.length)
+                    pw.Container(
+                      width: labelWidth,
+                      height: pageHeight,
+                      padding: pw.EdgeInsets.only(left: 12, right: 1, top: 10, bottom: 2),
+                      child: _buildLabel(items[i + 1], dayCode, withPrice),
+                    )
+                  else
+                    pw.Spacer(),
+                ],
+              );
+            },
+          ),
+        );
+      }
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'Barcode_STBJ_${serahTerima['stbj_nomor']}.pdf',
+        usePrinterSettings: true,
+      );
+    } catch (e) {
+      debugPrint('Error print barcode: $e');
+      _showSnackbar('Gagal print barcode: ${e.toString()}', isError: true);
+    }
+  }
+
+  // Future<void> _printBarcode(Map<String, dynamic> serahTerima, {required bool withPrice}) async {
+  //   try {
+  //     final data = await SerahTerimaService.getBarcodeData(serahTerima['stbj_nomor']);
+  //     final items = List<Map<String, dynamic>>.from(data['items'] ?? []);
+  //
+  //     if (items.isEmpty) {
+  //       _showSnackbar('Tidak ada item untuk diprint', isError: true);
+  //       return;
+  //     }
+  //
+  //     final tanggal = DateTime.parse(serahTerima['stbj_tanggal'] ?? DateTime.now().toString());
+  //     final dayCode = _getDayCode(tanggal);
+  //
+  //     final success = await UniversalPrinterService().printBarcodeLabel(
+  //       items: items,
+  //       dayCode: dayCode,
+  //       withPrice: withPrice,
+  //     );
+  //
+  //     if (success) {
+  //       _showSnackbar('Barcode sedang diprint');
+  //     } else {
+  //       _showSnackbar('Gagal print barcode', isError: true);
+  //     }
+  //   } catch (e) {
+  //     debugPrint('Error print barcode: $e');
+  //     _showSnackbar('Error: ${e.toString()}', isError: true);
+  //   }
+  // }
+
+  pw.Widget _buildLabel(Map<String, dynamic> item, String dayCode, bool withPrice) {
+    final nama = item['nama']?.toString() ?? '-';
+    final kode = item['kode']?.toString() ?? '-';
+    final harga = (item['harga'] ?? 0).toDouble();
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      mainAxisSize: pw.MainAxisSize.min,
+      children: [
+        // Nama Barang — font dikurangi 1
+        pw.Text(
+          nama,
+          style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold), // ← 7 ke 6
+          maxLines: 1,
+          overflow: pw.TextOverflow.clip,
+        ),
+        pw.SizedBox(height: 1),
+
+        // Row: Barcode | DayCode (R8-R14)
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // Barcode
+            pw.BarcodeWidget(
+              data: kode,
+              barcode: pw.Barcode.code128(),
+              width: 70,         // dikurangi biar muat dayCode
+              height: 16,
+            ),
+            pw.SizedBox(width: 2),
+
+            // DayCode (R8-R14)
+            pw.Container(
+              width: 18,
+              alignment: pw.Alignment.topCenter,
+              padding: pw.EdgeInsets.only(top: 2),
+              child: pw.Text(
+                dayCode,
+                style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
+              ),
+            ),
+          ],
+        ),
+
+        // Row bawah: Kode | Rp. Harga (hanya jika withPrice)
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(kode, style: pw.TextStyle(fontSize: 6)),
+            pw.Text(
+              withPrice ? 'Rp.${NumberFormat('#,##0').format(harga)}' : '',
+              style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _getDayCode(DateTime date) {
+    const dayCodes = {
+      DateTime.monday: 'R8',
+      DateTime.tuesday: 'R9',
+      DateTime.wednesday: 'R10',
+      DateTime.thursday: 'R11',
+      DateTime.friday: 'R12',
+      DateTime.saturday: 'R13',
+      DateTime.sunday: 'R14',
+    };
+
+    return dayCodes[date.weekday] ?? 'R?';
   }
 
   @override
@@ -567,6 +828,46 @@ class _SerahTerimaListScreenState extends State<SerahTerimaListScreen> {
                     color: _primaryDark,
                     onPressed: _openAddSerahTerima,
                     isMobile: isMobile,
+                  ),
+                  const SizedBox(width: 8),
+                  // Printer Status Indicator
+                  GestureDetector(
+                    onTap: _goToPrinterSettings,
+                    child: Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: _printerConnected
+                            ? _accentMint.withOpacity(0.15)
+                            : _accentRed.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _printerConnected ? _accentMint : _accentRed,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _printerConnected ? Icons.print_rounded : Icons.print_disabled_rounded,
+                            size: 14,
+                            color: _printerConnected ? _accentMint : _accentRed,
+                          ),
+                          if (!isMobile) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              _printerConnected ? 'PRINT OK' : 'NO PRINT',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: _printerConnected ? _accentMint : _accentRed,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),

@@ -190,3 +190,116 @@ class DashboardResponse {
     );
   }
 }
+
+// ============ MODEL PRODUKSI ============
+
+class ProduksiChartData {
+  final String tanggal;
+  final double totalGram;
+
+  ProduksiChartData({
+    required this.tanggal,
+    required this.totalGram,
+  });
+
+  factory ProduksiChartData.fromJson(Map<String, dynamic> json) {
+    return ProduksiChartData(
+      tanggal: json['tanggal']?.toString() ?? '',
+      totalGram: _toDouble(json['total_gram']),
+    );
+  }
+
+  static double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+}
+
+class ProduksiItemData {
+  final String itemId;
+  final String itemName;
+  final double totalQty;
+  final double totalGram;
+
+  ProduksiItemData({
+    required this.itemId,
+    required this.itemName,
+    required this.totalQty,
+    required this.totalGram,
+  });
+
+  factory ProduksiItemData.fromJson(Map<String, dynamic> json) {
+    return ProduksiItemData(
+      itemId: json['item_id']?.toString() ?? '',
+      itemName: json['item_name']?.toString() ?? '',
+      totalQty: _toDouble(json['total_qty']),
+      totalGram: _toDouble(json['total_gram']),
+    );
+  }
+
+  static double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+}
+
+class ProduksiDivisiData {
+  final String divisi;
+  final double totalGram;
+
+  ProduksiDivisiData({
+    required this.divisi,
+    required this.totalGram,
+  });
+
+  factory ProduksiDivisiData.fromJson(Map<String, dynamic> json) {
+    return ProduksiDivisiData(
+      divisi: json['divisi']?.toString() ?? 'Lainnya',
+      totalGram: _toDouble(json['total_gram']),
+    );
+  }
+
+  static double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+}
+
+class ProduksiResponse {
+  final List<ProduksiChartData> chart;
+  final List<ProduksiItemData> items;
+  final List<ProduksiDivisiData> divisi;
+  final double totalGram;
+  final double averageGram;
+  final int totalDays;
+
+  ProduksiResponse({
+    required this.chart,
+    required this.items,
+    required this.divisi,
+    required this.totalGram,
+    required this.averageGram,
+    required this.totalDays,
+  });
+
+  factory ProduksiResponse.fromJson(Map<String, dynamic> json) {
+    final data = json['data'];
+    return ProduksiResponse(
+      chart: (data['chart'] as List?)?.map((e) => ProduksiChartData.fromJson(e)).toList() ?? [],
+      items: (data['items'] as List?)?.map((e) => ProduksiItemData.fromJson(e)).toList() ?? [],
+      divisi: (data['divisi'] as List?)?.map((e) => ProduksiDivisiData.fromJson(e)).toList() ?? [],
+      totalGram: (data['total_gram'] ?? 0).toDouble(),
+      averageGram: (data['average_gram'] ?? 0).toDouble(),
+      totalDays: (data['total_days'] ?? 0).toInt(),
+    );
+  }
+}

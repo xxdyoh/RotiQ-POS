@@ -15,6 +15,9 @@ import '../services/minta_report_service.dart';
 import '../models/minta_report_model.dart';
 import '../widgets/base_layout.dart';
 import '../services/spk_service.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class MintaReportScreen extends StatefulWidget {
   const MintaReportScreen({super.key});
@@ -374,7 +377,7 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
                                   isChecking = false;
                                 });
                               }
-                            }, // <-- PASTIKAN INI MENUTUP onTap, BUKAN DI TEMPAT LAIN
+                            },
                             borderRadius: BorderRadius.circular(8),
                             child: Container(
                               height: 40,
@@ -611,6 +614,9 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
 
       if (result['success']) {
         _showToast(result['message'], type: ToastType.success);
+
+        // Auto print rekap setelah SPK dibuat
+        await _printSpkRekap(tanggal, result['data']?['nomor'] ?? '', keterangan);
       } else {
         _showToast(result['message'], type: ToastType.error);
       }
@@ -619,6 +625,230 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _printSpkRekap(String tanggal, String nomorSpk, String keterangan) async {
+    try {
+      // Kelompokkan berdasarkan divisi
+      final manisItems = _reportItems.where((i) => i.itemDivisi.toUpperCase() == 'MANIS').toList();
+      final boluBolenItems = _reportItems.where((i) => i.itemDivisi.toUpperCase() != 'MANIS').toList();
+
+      // Sort manis by item_size ASC, item_nama ASC
+      manisItems.sort((a, b) {
+        int sizeCmp = a.itemSize.compareTo(b.itemSize);
+        if (sizeCmp != 0) return sizeCmp;
+        return a.itemNama.compareTo(b.itemNama);
+      });
+
+      // Sort bolu/bolen by item_size ASC, item_nama ASC
+      boluBolenItems.sort((a, b) {
+        int sizeCmp = a.itemSize.compareTo(b.itemSize);
+        if (sizeCmp != 0) return sizeCmp;
+        return a.itemNama.compareTo(b.itemNama);
+      });
+
+      final pdf = pw.Document();
+
+      // Page 1: MANIS
+      if (manisItems.isNotEmpty) {
+        _addPrintPage(pdf, manisItems, 'MANIS', nomorSpk, tanggal, keterangan);
+      }
+
+      // Page 2+: BOLU & BOLEN
+      if (boluBolenItems.isNotEmpty) {
+        _addPrintPage(pdf, boluBolenItems, 'BOLU & BOLEN', nomorSpk, tanggal, keterangan);
+      }
+
+      await Printing.layoutPdf(
+        onLayout: (format) async => pdf.save(),
+        name: 'SPK_$nomorSpk.pdf',
+      );
+    } catch (e) {
+      debugPrint('Print SPK error: $e');
+    }
+  }
+
+  void _addPrintPage(pw.Document pdf, List<MintaReportItem> items, String divisi, String nomorSpk, String tanggal, String keterangan) {
+    // Build pivot data
+    Map<String, Map<String, int>> pivotData = {};
+    Set<String> cabangs = {};
+    Map<String, double> itemGramMap = {};
+    Map<String, String> itemSizeMap = {};
+
+    for (var item in items) {
+      cabangs.add(item.cabang);
+      itemGramMap[item.itemNama] = item.itemGram;
+      itemSizeMap[item.itemNama] = item.itemSize;
+      if (!pivotData.containsKey(item.itemNama)) {
+        pivotData[item.itemNama] = {};
+      }
+      pivotData[item.itemNama]![item.cabang] = (pivotData[item.itemNama]![item.cabang] ?? 0) + item.totalQty;
+    }
+
+    Map<String, String> cabangKodeMap = {};
+    for (var item in items) {
+      cabangKodeMap[item.cabang] = item.cabangKode;
+    }
+
+    // Sort cabangs by kode
+    List<String> sortedCabangs = cabangs.toList()..sort((a, b) {
+      final kodeA = cabangKodeMap[a] ?? a;
+      final kodeB = cabangKodeMap[b] ?? b;
+      return kodeA.compareTo(kodeB);
+    });
+
+    List<String> sortedItemNames = items.map((e) => e.itemNama).toSet().toList();
+
+    // Hitung total per item
+    Map<String, int> totalPerItem = {};
+    Map<String, double> totalGramPerItem = {};
+    for (var name in sortedItemNames) {
+      totalPerItem[name] = 0;
+      for (var c in sortedCabangs) {
+        totalPerItem[name] = (totalPerItem[name] ?? 0) + (pivotData[name]?[c] ?? 0);
+      }
+      totalGramPerItem[name] = (totalPerItem[name] ?? 0) * (itemGramMap[name] ?? 0);
+    }
+
+    double grandTotalGram = totalGramPerItem.values.fold(0, (a, b) => a + b);
+    int grandTotalQty = totalPerItem.values.fold(0, (a, b) => a + b);
+
+    // Hitung items per page (Letter portrait, perkiraan 35 item per page)
+    const int maxItemsPerPage = 55;
+    final totalPages = (sortedItemNames.length / maxItemsPerPage).ceil();
+
+    for (int page = 0; page < totalPages; page++) {
+      final start = page * maxItemsPerPage;
+      final end = (start + maxItemsPerPage > sortedItemNames.length) ? sortedItemNames.length : start + maxItemsPerPage;
+      final pageItems = sortedItemNames.sublist(start, end);
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat(210 * PdfPageFormat.mm, 330 * PdfPageFormat.mm), // F4 portrait
+          margin: pw.EdgeInsets.all(4),
+          build: (context) {
+            // Kolom: Nama Item | Size | Cabang... | Total | Total Gr | Hasil
+            final colWidths = <int, pw.FixedColumnWidth>{
+              0: pw.FixedColumnWidth(100),  // Nama Item (diperlebar)
+              // 1: pw.FixedColumnWidth(25), ← HAPUS
+            };
+            for (int i = 0; i < sortedCabangs.length; i++) {
+              colWidths[i + 1] = pw.FixedColumnWidth(45); // Cabang (index geser)
+            }
+            final totalCol = sortedCabangs.length + 1;  // dari +2 jadi +1
+            final gramCol = totalCol + 1;
+            final hasilCol = gramCol + 1;
+            colWidths[totalCol] = pw.FixedColumnWidth(35);
+            colWidths[gramCol] = pw.FixedColumnWidth(40);
+            colWidths[hasilCol] = pw.FixedColumnWidth(35);
+
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // Header
+                pw.Center(child: pw.Text('SPK - $divisi', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+                pw.SizedBox(height: 2),
+                pw.Row(children: [
+                  pw.Text('No: $nomorSpk', style: pw.TextStyle(fontSize: 7)),
+                  pw.Spacer(),
+                  pw.Text(DateFormat('dd/MM/yyyy').format(DateTime.parse(tanggal)), style: pw.TextStyle(fontSize: 7)),
+                  if (totalPages > 1) pw.Text('  Hal ${page + 1}/$totalPages', style: pw.TextStyle(fontSize: 7)),
+                ]),
+                if (keterangan.isNotEmpty) pw.Text('Ket: $keterangan', style: pw.TextStyle(fontSize: 7)),
+                pw.SizedBox(height: 3),
+
+                // Table
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.black, width: 1),
+                  columnWidths: colWidths,
+                  children: [
+                    // Header
+                    pw.TableRow(children: [
+                      _hCell('Nama Item'),
+                      // _hCell('Sz'),
+                      ...sortedCabangs.map((c) => _hCell(c, align: pw.TextAlign.center)),
+                      _hCell('Total', align: pw.TextAlign.center),
+                      _hCell('Gr Prod', align: pw.TextAlign.center),
+                      _hCell('Hasil', align: pw.TextAlign.center),
+                    ]),
+
+                    // Data
+                    ...pageItems.asMap().entries.map((entry) {
+                      final rowIndex = entry.key;
+                      final name = entry.value;
+                      final total = totalPerItem[name] ?? 0;
+                      final totalGram = totalGramPerItem[name] ?? 0;
+
+                      return pw.TableRow(children: [
+                        _dCell(name, bold: true, rowIndex: rowIndex),
+                        ...sortedCabangs.map((c) => _dCell('${pivotData[name]?[c] ?? ''}', align: pw.TextAlign.center, rowIndex: rowIndex)),
+                        _dCell('$total', bold: true, align: pw.TextAlign.center, rowIndex: rowIndex),
+                        _dCell('${totalGram.toInt()}', align: pw.TextAlign.center, rowIndex: rowIndex),
+                        _dCell('', align: pw.TextAlign.center, rowIndex: rowIndex),
+                      ]);
+                    }).toList(),
+
+                    // Footer Total
+                    if (page == totalPages - 1) ...[
+                      pw.TableRow(children: [
+                        _fCell('TOTAL'),
+                        // _fCell(''),
+                        ...sortedCabangs.map((c) {
+                          int sum = 0;
+                          for (var name in sortedItemNames) sum += (pivotData[name]?[c] ?? 0);
+                          return _fCell('$sum', align: pw.TextAlign.center);
+                        }),
+                        _fCell('$grandTotalQty', align: pw.TextAlign.center),
+                        _fCell('${grandTotalGram.toInt()}', align: pw.TextAlign.center),
+                        _fCell(''),
+                      ]),
+                      // Jml Resep
+                      pw.TableRow(children: [
+                        _fCell('Jml Resep'),
+                        ...sortedCabangs.map((_) => _fCell('')),
+                        _fCell(''),
+                        pw.Container(
+                          color: PdfColor.fromHex('#E9ECEF'),
+                          padding: pw.EdgeInsets.symmetric(vertical: 5, horizontal: 3),
+                          child: pw.Text('${(grandTotalGram / 1920).toStringAsFixed(2)}', textAlign: pw.TextAlign.center,
+                              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                        ),
+                        _fCell(''),
+                      ]),
+                    ],
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+  }
+
+// Helper cells
+  pw.Widget _hCell(String text, {pw.TextAlign align = pw.TextAlign.left}) {
+    return pw.Container(
+      color: PdfColor.fromHex('#2C3E50'),
+      padding: pw.EdgeInsets.symmetric(vertical: 5, horizontal: 3),
+      child: pw.Text(text, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white), textAlign: align),
+    );
+  }
+
+  pw.Widget _dCell(String text, {bool bold = false, pw.TextAlign align = pw.TextAlign.left, int rowIndex = 0}) {
+    return pw.Container(
+      color: rowIndex % 2 == 0 ? PdfColors.white : PdfColor.fromHex('#F7F9FC'),
+      padding: pw.EdgeInsets.symmetric(vertical: 5, horizontal: 3),
+      child: pw.Text(text, style: pw.TextStyle(fontSize: 8, fontWeight: bold ? pw.FontWeight.bold : null), textAlign: align),
+    );
+  }
+
+  pw.Widget _fCell(String text, {pw.TextAlign align = pw.TextAlign.left}) {
+    return pw.Container(
+      color: PdfColor.fromHex('#E9ECEF'),
+      padding: pw.EdgeInsets.symmetric(vertical: 5, horizontal: 3),
+      child: pw.Text(text, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: align),
+    );
   }
 
   Future<void> _exportToExcel() async {

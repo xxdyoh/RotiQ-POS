@@ -103,6 +103,8 @@ class UangMukaService {
     String? keterangan,
   }) async {
     try {
+      final user = SessionManager.getCurrentUser(); // <-- TAMBAHKAN
+
       final response = await http.post(
         Uri.parse('$baseUrl/uangmuka'),
         headers: await _getHeadersWithCabang(),
@@ -112,6 +114,8 @@ class UangMukaService {
           'nilai': nilai,
           'jenisBayar': jenisBayar,
           'keterangan': keterangan,
+          'user_id': user?.kduser ?? '01',      // <-- TAMBAHKAN
+          'user_name': user?.nmuser ?? 'ADMIN',  // <-- TAMBAHKAN
         }),
       );
 
@@ -146,6 +150,8 @@ class UangMukaService {
     String? keterangan,
   }) async {
     try {
+      final user = SessionManager.getCurrentUser(); // <-- TAMBAHKAN
+
       final response = await http.put(
         Uri.parse('$baseUrl/uangmuka/$nomor'),
         headers: await _getHeadersWithCabang(),
@@ -155,6 +161,8 @@ class UangMukaService {
           'nilai': nilai,
           'jenisBayar': jenisBayar,
           'keterangan': keterangan,
+          'user_id': user?.kduser ?? '01',      // <-- TAMBAHKAN
+          'user_name': user?.nmuser ?? 'ADMIN',  // <-- TAMBAHKAN
         }),
       );
 

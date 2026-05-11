@@ -80,4 +80,32 @@ class DashboardService {
       rethrow;
     }
   }
+
+  static Future<ProduksiResponse> getProduksiData({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      String url = '$baseUrl/dashboard/produksi?'
+          'start_date=${DateFormat('yyyy-MM-dd').format(startDate)}'
+          '&end_date=${DateFormat('yyyy-MM-dd').format(endDate)}';
+
+      final response = await http.get(Uri.parse(url), headers: headers);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return ProduksiResponse.fromJson(data);
+        } else {
+          throw Exception(data['message'] ?? 'Gagal mengambil data produksi');
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error in getProduksiData: $e');
+      rethrow;
+    }
+  }
 }

@@ -11,6 +11,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/spk_service.dart';
 import '../widgets/base_layout.dart';
 import '../utils/responsive_helper.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class SpkListScreen extends StatefulWidget {
   const SpkListScreen({super.key});
@@ -555,6 +558,35 @@ class _SpkListScreenState extends State<SpkListScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    // Tombol Print Barcode
+                    Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: _accentGold,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.pop(context);
+                            _showBarcodeOptionDialog(spk);
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.qr_code_rounded, size: 14, color: Colors.white),
+                              const SizedBox(width: 6),
+                              Text('Barcode', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Tombol Tutup
                     Container(
                       width: 90,
                       height: 36,
@@ -578,6 +610,161 @@ class _SpkListScreenState extends State<SpkListScreen> {
         ),
       ),
     );
+  }
+
+  void _showBarcodeOptionDialog(Map<String, dynamic> spk) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('Print Barcode', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w600)),
+        content: Text('Tampilkan harga pada barcode?', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _printBarcode(spk, withPrice: false);
+            },
+            child: Text('Tanpa Harga', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _printBarcode(spk, withPrice: true);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primaryDark,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text('Dengan Harga', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _printBarcode(Map<String, dynamic> spk, {required bool withPrice}) async {
+    try {
+      final data = await SpkService.getBarcodeData(spk['spk_nomor']);
+      final allItems = List<Map<String, dynamic>>.from(data['items'] ?? []);
+
+      // Filter: skip kode 348
+      final items = allItems.where((item) {
+        final kode = item['kode']?.toString() ?? '';
+        return kode != '348';
+      }).toList();
+
+      if (items.isEmpty) {
+        _showSnackbar('Tidak ada item untuk diprint', isError: true);
+        return;
+      }
+
+      final tanggal = DateTime.parse(spk['spk_tanggal'] ?? DateTime.now().toString());
+      final dayCode = _getDayCode(tanggal);
+
+      final pdf = pw.Document();
+
+      // 1mm = 2.83465pt
+      // Paper: 72mm x 17mm = 204pt x 48pt (pakai ukuran Delphi persis)
+      // 2 kolom, tiap kolom 35mm = 99pt
+      const double pageWidth = 204.0;   // 72mm
+      const double pageHeight = 48.0;   // 17mm
+      const double colWidth = 95.0;     // 33mm (dari 99 ke 95)
+      const double gap = 24.0;          // gap antar label (5mm)
+
+      for (int i = 0; i < items.length; i += 2) {
+        pdf.addPage(
+          pw.Page(
+            pageFormat: PdfPageFormat(pageWidth, pageHeight),
+            margin: pw.EdgeInsets.zero,
+            build: (pw.Context context) {
+              return pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  // Label kiri
+                  pw.Container(
+                    width: colWidth,
+                    height: pageHeight,
+                    padding: pw.EdgeInsets.only(left: 10, top: 10, bottom: 1),
+                    child: _buildLabel(items[i], dayCode, withPrice),
+                  ),
+
+                  // Gap
+                  pw.SizedBox(width: gap),
+
+                  // Label kanan
+                  if (i + 1 < items.length)
+                    pw.Container(
+                      width: colWidth,
+                      height: pageHeight,
+                      padding: pw.EdgeInsets.only(right: 2, top: 10, bottom: 1),
+                      child: _buildLabel(items[i + 1], dayCode, withPrice),
+                    )
+                  else
+                    pw.Spacer(),
+                ],
+              );
+            },
+          ),
+        );
+      }
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'Barcode_SPK_${spk['spk_nomor']}.pdf',
+        usePrinterSettings: true,
+      );
+    } catch (e) {
+      debugPrint('Error print barcode: $e');
+      _showSnackbar('Gagal print barcode: ${e.toString()}', isError: true);
+    }
+  }
+
+  pw.Widget _buildLabel(Map<String, dynamic> item, String dayCode, bool withPrice) {
+    final nama = item['nama']?.toString() ?? '-';
+    final kodeRaw = item['kode']?.toString() ?? '0';
+    final kode = kodeRaw.padLeft(2, '0'); // ← tambah leading zero
+    final harga = (item['harga'] ?? 0).toDouble();
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      mainAxisSize: pw.MainAxisSize.min,
+      children: [
+        pw.Text(nama, style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold), maxLines: 1, overflow: pw.TextOverflow.clip),
+        pw.SizedBox(height: 1),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.BarcodeWidget(data: kode, barcode: pw.Barcode.code128(), width: 70, height: 16),
+            pw.SizedBox(width: 2),
+            pw.Container(
+              width: 18, alignment: pw.Alignment.topCenter, padding: pw.EdgeInsets.only(top: 2),
+              child: pw.Text(dayCode, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+            ),
+          ],
+        ),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(kode, style: pw.TextStyle(fontSize: 6)),
+            pw.Text(withPrice ? 'Rp.${NumberFormat('#,##0').format(harga)}' : '', style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _getDayCode(DateTime date) {
+    const dayCodes = {
+      DateTime.monday: 'R8',
+      DateTime.tuesday: 'R9',
+      DateTime.wednesday: 'R10',
+      DateTime.thursday: 'R11',
+      DateTime.friday: 'R12',
+      DateTime.saturday: 'R13',
+      DateTime.sunday: 'R14',
+    };
+    return dayCodes[date.weekday] ?? 'R?';
   }
 
   Future<void> _exportToExcel() async {

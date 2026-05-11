@@ -405,6 +405,14 @@ class _MintaListScreenState extends State<MintaListScreen> with SingleTickerProv
                                     GridColumn(
                                         columnName: 'keterangan',
                                         label: Container(alignment: Alignment.centerLeft, child: Text('Keterangan', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10)))),
+                                    GridColumn(
+                                      columnName: 'status',
+                                      width: 80,
+                                      label: Container(
+                                        alignment: Alignment.center,
+                                        child: Text('Status', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 10)),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -851,6 +859,7 @@ class MintaDetailDataSource extends DataGridSource {
         DataGridCell<String>(columnName: 'tipe', value: tipe),
         DataGridCell<int>(columnName: 'qty', value: item['mtd_qty'] ?? 0),
         DataGridCell<String>(columnName: 'keterangan', value: item['mtd_keterangan']?.toString() ?? '-'),
+        DataGridCell<String>(columnName: 'status', value: item['mtd_status']?.toString() ?? 'Display'),
       ]);
     }).toList();
   }
@@ -862,6 +871,7 @@ class MintaDetailDataSource extends DataGridSource {
   static const Color _textSecondary = Color(0xFF64748B);
   static const Color _accentBlue = Color(0xFF3B82F6);
   static const Color _accentMint = Color(0xFF06D6A0);
+  final Color _accentGold = const Color(0xFFF6A918);
 
   @override
   List<DataGridRow> get rows => _data;
@@ -898,6 +908,22 @@ class MintaDetailDataSource extends DataGridSource {
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(cell.value.toString(), style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary), maxLines: 2, overflow: TextOverflow.ellipsis),
+          );
+        }
+        if (cell.columnName == 'status') {
+          final status = cell.value.toString();
+          final color = status == 'Display' ? _accentMint : _accentGold;
+          return Container(
+            alignment: Alignment.center,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: color.withOpacity(0.3)),
+              ),
+              child: Text(status, style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w600, color: color)),
+            ),
           );
         }
         return Container(

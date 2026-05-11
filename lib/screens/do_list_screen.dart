@@ -553,7 +553,6 @@ class _DoListScreenState extends State<DoListScreen> {
   }
 
   Future<void> _printSuratJalan(Map<String, dynamic> mutasi) async {
-    // Ambil detail items
     List<Map<String, dynamic>> details = [];
     try {
       final detailData = await DoService.getMutasiDetail(mutasi['mutc_nomor'].toString());
@@ -562,10 +561,14 @@ class _DoListScreenState extends State<DoListScreen> {
       debugPrint('Gagal load detail: $e');
     }
 
+    if (details.isEmpty) {
+      _showSnackbar('Tidak ada detail untuk dicetak', isError: true);
+      return;
+    }
+
     final nomor = mutasi['mutc_nomor']?.toString() ?? '-';
     final tanggal = DateFormat('dd MMMM yyyy').format(DateTime.parse(mutasi['mutc_tanggal']));
-    final asal = SessionManager.getCurrentCabang()?.nama ??
-        SessionManager.getCurrentCabang()?.kode ?? '-';
+    final asal = SessionManager.getCurrentCabang()?.nama ?? SessionManager.getCurrentCabang()?.kode ?? '-';
     final tujuanNama = mutasi['cabang_nama']?.toString().isNotEmpty == true
         ? '${mutasi['mutc_cbg_tujuan']} - ${mutasi['cabang_nama']}'
         : mutasi['mutc_cbg_tujuan']?.toString() ?? '-';
@@ -575,147 +578,132 @@ class _DoListScreenState extends State<DoListScreen> {
         : mutasi['mutc_gdg_kode']?.toString() ?? '-';
 
     final pdf = pw.Document();
+    const int itemsPerPage = 40;
+    final totalPages = (details.length / itemsPerPage).ceil();
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat(210 * PdfPageFormat.mm, 148 * PdfPageFormat.mm), // A5 landscape
-        margin: pw.EdgeInsets.all(10 * PdfPageFormat.mm),
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              // Header
-              pw.Center(
-                child: pw.Text(
-                  'MUTASI OUT',
-                  style: pw.TextStyle(
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                    letterSpacing: 2,
+    print('📄 Total details: ${details.length}');
+    print('📄 Items per page: $itemsPerPage');
+    print('📄 Total pages: $totalPages');
+
+    for (int page = 0; page < totalPages; page++) {
+      final start = page * itemsPerPage;
+      final end = (start + itemsPerPage > details.length) ? details.length : start + itemsPerPage;
+      final pageDetails = details.sublist(start, end);
+
+      print('📄 Page $page: start=$start, end=$end, items=${pageDetails.length}');
+
+      if (pageDetails.isEmpty) {
+        print('❌ Page $page KOSONG!');
+        continue;
+      }
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat(210 * PdfPageFormat.mm, 330 * PdfPageFormat.mm), // F4
+          margin: pw.EdgeInsets.all(8),
+          build: (context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: [
+                pw.Center(child: pw.Text('MUTASI OUT', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, letterSpacing: 2))),
+                pw.SizedBox(height: 4),
+                pw.Divider(color: PdfColor.fromHex('#2C3E50'), thickness: 2),
+                pw.SizedBox(height: 6),
+
+                // Info
+                pw.Row(children: [
+                  pw.Text('Nomor: $nomor', style: pw.TextStyle(fontSize: 8)),
+                  pw.Spacer(),
+                  pw.Text('Tanggal: $tanggal', style: pw.TextStyle(fontSize: 8)),
+                ]),
+                pw.Row(children: [
+                  pw.Text('Asal: $asal', style: pw.TextStyle(fontSize: 8)),
+                  pw.Spacer(),
+                  pw.Text('Tujuan: $tujuanNama', style: pw.TextStyle(fontSize: 8)),
+                ]),
+                pw.Row(children: [
+                  pw.Text('Keterangan: $keterangan', style: pw.TextStyle(fontSize: 8)),
+                  pw.Spacer(),
+                  pw.Text('Gudang: $gudangNama', style: pw.TextStyle(fontSize: 8)),
+                ]),
+                if (totalPages > 1)
+                  pw.Text('Hal ${page + 1}/$totalPages', style: pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right),
+                pw.SizedBox(height: 6),
+
+                // Table
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey500, width: 1),
+                  columnWidths: {
+                    0: pw.FixedColumnWidth(25),
+                    1: pw.FixedColumnWidth(45),
+                    2: pw.FlexColumnWidth(1),
+                    3: pw.FixedColumnWidth(50),
+                  },
+                  children: [
+                    // Header
+                    pw.TableRow(children: [
+                      _hCell('No', align: pw.TextAlign.center),
+                      _hCell('Kode', align: pw.TextAlign.center),
+                      _hCell('Nama Item'),
+                      _hCell('Qty', align: pw.TextAlign.center),
+                    ]),
+                    // Data
+                    ...pageDetails.asMap().entries.map((e) {
+                      final idx = start + e.key + 1;
+                      final item = e.value;
+                      return pw.TableRow(children: [
+                        _dCell('$idx', align: pw.TextAlign.center, rowIndex: e.key),
+                        _dCell('${item['mutcd_brg_kode'] ?? '-'}', align: pw.TextAlign.center, rowIndex: e.key),
+                        _dCell('${item['item_nama'] ?? '-'}', rowIndex: e.key),
+                        _dCell('${item['mutcd_qty'] ?? 0}', align: pw.TextAlign.center, rowIndex: e.key),
+                      ]);
+                    }).toList(),
+                  ],
+                ),
+
+                pw.SizedBox(height: 16),
+
+                // Tanda Tangan (hanya halaman terakhir)
+                if (page == totalPages - 1) ...[
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildTtdColumn('Disiapkan Oleh'),
+                      _buildTtdColumn('Checker'),
+                      _buildTtdColumn('Diterima Oleh'),
+                    ],
                   ),
-                ),
-              ),
-              pw.SizedBox(height: 4),
-              pw.Divider(color: PdfColor.fromHex('#2C3E50'), thickness: 2),
-              pw.SizedBox(height: 8),
-
-              // Info Table
-              pw.Table(
-                columnWidths: {
-                  0: pw.FixedColumnWidth(60),
-                  1: pw.FixedColumnWidth(10),
-                  2: pw.FlexColumnWidth(1),
-                  3: pw.FixedColumnWidth(20),
-                  4: pw.FixedColumnWidth(60),
-                  5: pw.FixedColumnWidth(10),
-                  6: pw.FlexColumnWidth(1),
-                },
-                children: [
-                  _buildInfoRow('Nomor', nomor, 'Asal', asal),
-                  _buildInfoRow('Tanggal', tanggal, 'Tujuan', tujuanNama),
-                  _buildInfoRow('Keterangan', keterangan, 'Gudang', gudangNama),
+                  pw.SizedBox(height: 8),
+                  pw.Text('Dicetak: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
+                      style: pw.TextStyle(fontSize: 7, color: PdfColors.grey500), textAlign: pw.TextAlign.right),
                 ],
-              ),
-              pw.SizedBox(height: 10),
+              ],
+            );
+          },
+        ),
+      );
+    }
 
-              // Detail Table
-              pw.TableHelper.fromTextArray(
-                headerStyle: pw.TextStyle(
-                  fontSize: 9,
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.white,
-                ),
-                cellStyle: pw.TextStyle(fontSize: 9),
-                headerDecoration: pw.BoxDecoration(
-                  color: PdfColor.fromHex('#2C3E50'),
-                ),
-                cellAlignment: pw.Alignment.centerLeft,
-                headerAlignment: pw.Alignment.center,
-                columnWidths: {
-                  0: pw.FixedColumnWidth(25),
-                  1: pw.FixedColumnWidth(40),
-                  2: pw.FlexColumnWidth(1),
-                  3: pw.FixedColumnWidth(50),
-                },
-                headers: ['No', 'Kode', 'Nama Item', 'Jumlah'],
-                data: details.isEmpty
-                    ? [
-                  ['', '', 'Tidak ada item', '']
-                ]
-                    : details.asMap().entries.map((e) {
-                  final idx = e.key + 1;
-                  final item = e.value;
-                  return [
-                    idx.toString(),
-                    (item['mutcd_brg_kode'] ?? '-').toString(),
-                    (item['item_nama'] ?? '-').toString(),
-                    (item['mutcd_qty'] ?? 0).toString(),
-                  ];
-                }).toList(),
-              ),
-              pw.SizedBox(height: 20),
-
-              // Tanda Tangan
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildTtdColumn('Disiapkan Oleh'),
-                  _buildTtdColumn('Checker'),
-                  _buildTtdColumn('Diterima Oleh'),
-                ],
-              ),
-              pw.SizedBox(height: 10),
-
-              // Footer
-              pw.Align(
-                alignment: pw.Alignment.centerRight,
-                child: pw.Text(
-                  'Dicetak: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
-                  style: pw.TextStyle(fontSize: 8, color: PdfColors.grey500),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    // Print — otomatis tampil print dialog di web, share di mobile
     await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
+      onLayout: (format) async => pdf.save(),
       name: 'MutasiOut_$nomor.pdf',
     );
   }
 
-  pw.TableRow _buildInfoRow(String label1, String value1, String label2, String value2) {
-    return pw.TableRow(
-      children: [
-        pw.Padding(
-          padding: pw.EdgeInsets.only(bottom: 3),
-          child: pw.Text('$label1', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-        ),
-        pw.Padding(
-          padding: pw.EdgeInsets.only(bottom: 3),
-          child: pw.Text(':', style: pw.TextStyle(fontSize: 9)),
-        ),
-        pw.Padding(
-          padding: pw.EdgeInsets.only(bottom: 3),
-          child: pw.Text(value1, style: pw.TextStyle(fontSize: 9)),
-        ),
-        pw.SizedBox(width: 12),
-        pw.Padding(
-          padding: pw.EdgeInsets.only(bottom: 3),
-          child: pw.Text('$label2', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-        ),
-        pw.Padding(
-          padding: pw.EdgeInsets.only(bottom: 3),
-          child: pw.Text(':', style: pw.TextStyle(fontSize: 9)),
-        ),
-        pw.Padding(
-          padding: pw.EdgeInsets.only(bottom: 3),
-          child: pw.Text(value2, style: pw.TextStyle(fontSize: 9)),
-        ),
-      ],
+// Helper cells
+  pw.Widget _hCell(String text, {pw.TextAlign align = pw.TextAlign.left}) {
+    return pw.Container(
+      color: PdfColor.fromHex('#2C3E50'),
+      padding: pw.EdgeInsets.symmetric(vertical: 5, horizontal: 3),
+      child: pw.Text(text, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white), textAlign: align),
+    );
+  }
+
+  pw.Widget _dCell(String text, {bool bold = false, pw.TextAlign align = pw.TextAlign.left, int rowIndex = 0}) {
+    return pw.Container(
+      color: rowIndex % 2 == 0 ? PdfColors.white : PdfColor.fromHex('#F7F9FC'),
+      padding: pw.EdgeInsets.symmetric(vertical: 5, horizontal: 3),
+      child: pw.Text(text, style: pw.TextStyle(fontSize: 8, fontWeight: bold ? pw.FontWeight.bold : null), textAlign: align),
     );
   }
 

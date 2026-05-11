@@ -19,6 +19,7 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
   TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   final Map<int, TextEditingController> _qtyControllers = {};
+  final Map<int, String> _itemStatus = {}; // <-- TAMBAH di class state
 
   @override
   void initState() {
@@ -43,17 +44,14 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
         search: _searchController.text.isNotEmpty ? _searchController.text : null,
       );
 
-      // DEBUG: Print hasil
-      print('Search results length: ${results?.length}');
-      print('Search results: $results');
-
       setState(() {
         _searchResults = results ?? [];
-        _selectedItems.clear();
+        // ✅ JANGAN clear _selectedItems
+        // _selectedItems.clear(); // HAPUS INI
         _initializeQtyControllers();
       });
     } catch (e) {
-      print('Error searching items: $e'); // DEBUG
+      print('Error searching items: $e');
       _showErrorSnackbar('Error: ${e.toString()}');
     } finally {
       setState(() => _isSearching = false);
@@ -73,6 +71,7 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
     final itemId = item['id'];
     final itemName = item['nama']?.toString() ?? 'Tanpa Nama';
     final tipe = item['tipe']?.toString() ?? 'BJ';
+    final status = _itemStatus[itemId] ?? 'Display';
 
     print('Toggle Item - ID: $itemId, Nama: $itemName, Tipe: $tipe');
 
@@ -98,8 +97,9 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
         _selectedItems.add(MintaItem(
           itemId: itemId,
           itemNama: itemName,
-          tipe: item['tipe']?.toString() ?? 'BJ',  // <-- SUDAH BENAR
+          tipe: tipe,
           qty: qty,
+          status: status, // <-- TAMBAH
         ));
       });
     } else {
@@ -114,43 +114,49 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
   }
 
   void _toggleSelectAll() {
+    // Cek apakah semua item di hasil pencarian sudah dipilih
     final allSelected = _searchResults.every((item) {
-      final itemId = item['id'];  // <-- GANTI
+      final itemId = item['id'];
       return itemId != null && _selectedItems.any((i) => i.itemId == itemId);
     });
 
     if (allSelected) {
+      // UNCHECK: hapus hanya item yang ada di hasil pencarian
       setState(() {
-        _selectedItems.clear();
-        for (var item in _searchResults) {
-          final itemId = item['id'];  // <-- GANTI
-          if (itemId != null) {
-            final controller = _qtyControllers[itemId];
-            if (controller != null) {
-              controller.text = '0';
-            }
+        final idsToRemove = _searchResults
+            .map((item) => item['id'])
+            .where((id) => id != null)
+            .toSet();
+
+        _selectedItems.removeWhere((i) => idsToRemove.contains(i.itemId));
+
+        for (var id in idsToRemove) {
+          final controller = _qtyControllers[id];
+          if (controller != null) {
+            controller.text = '0';
           }
         }
       });
     } else {
+      // CHECK ALL: tambahkan semua item yang belum dipilih
       setState(() {
-        _selectedItems.clear();
         for (var item in _searchResults) {
-          final itemId = item['id'];  // <-- GANTI
+          final itemId = item['id'];
           if (itemId == null) continue;
 
-          if (widget.existingItems.any((i) => i.itemId == itemId)) {
-            continue;
-          }
+          // Jangan tambahkan kalau sudah ada
+          if (_selectedItems.any((i) => i.itemId == itemId)) continue;
 
           final qtyController = _qtyControllers[itemId];
           final qty = qtyController != null ? (int.tryParse(qtyController.text) ?? 0) : 0;
+          final status = _itemStatus[itemId] ?? 'Display';
 
           _selectedItems.add(MintaItem(
             itemId: itemId,
-            itemNama: item['nama']?.toString() ?? 'Tanpa Nama',  // <-- GANTI
-            tipe: item['tipe']?.toString() ?? 'BJ',  // <-- TAMBAHKAN TIPE
+            itemNama: item['nama']?.toString() ?? 'Tanpa Nama',
+            tipe: item['tipe']?.toString() ?? 'BJ',
             qty: qty,
+            status: status,
           ));
         }
       });
@@ -194,18 +200,13 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
           selectedItems.add(MintaItem(
             itemId: itemId,
             itemNama: item['nama']?.toString() ?? 'Unknown Item',
-            tipe: item['tipe']?.toString() ?? 'BJ', // <-- PASTIKAN INI
+            tipe: item['tipe']?.toString() ?? 'BJ',
             qty: qty,
+            status: _itemStatus[itemId] ?? 'Display', // <-- TAMBAH
           ));
         }
       }
     }
-
-    print('Selected items to return:');
-    for (var item in selectedItems) {
-      print('  - ID: ${item.itemId}, Tipe: ${item.tipe}, Qty: ${item.qty}');
-    }
-
     Navigator.pop(context, selectedItems);
   }
 
@@ -606,6 +607,50 @@ class _AddItemModalMintaState extends State<AddItemModalMinta> {
                                     ),
                                   );
                                 },
+                              ),
+
+                              // Di dalam itemBuilder, setelah qty input
+                              const SizedBox(width: 6),
+// Status Dropdown
+                              Container(
+                                width: 100,
+                                height: 30,
+                                padding: EdgeInsets.symmetric(horizontal: 6),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade300),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: _itemStatus[itemId] ?? 'Display',
+                                    isExpanded: true,
+                                    style: GoogleFonts.montserrat(fontSize: 9, color: Colors.black87),
+                                    items: ['Display', 'Pesanan Jadi'].map((status) {
+                                      return DropdownMenuItem(
+                                        value: status,
+                                        child: Text(status, style: GoogleFonts.montserrat(fontSize: 9)),
+                                      );
+                                    }).toList(),
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        setState(() {
+                                          _itemStatus[itemId] = value;
+                                          // Update di _selectedItems juga
+                                          final idx = _selectedItems.indexWhere((i) => i.itemId == itemId);
+                                          if (idx != -1) {
+                                            _selectedItems[idx] = MintaItem(
+                                              itemId: _selectedItems[idx].itemId,
+                                              itemNama: _selectedItems[idx].itemNama,
+                                              tipe: _selectedItems[idx].tipe,
+                                              qty: _selectedItems[idx].qty,
+                                              status: value,
+                                            );
+                                          }
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
                               ),
                             ],
                           ),

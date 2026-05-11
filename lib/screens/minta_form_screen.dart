@@ -377,6 +377,28 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
     return _selectedItems.fold(0, (sum, item) => sum + item.qty);
   }
 
+  void _updateItemStatus(int itemId, String newStatus) {
+    setState(() {
+      final index = _selectedItems.indexWhere((item) => item.itemId == itemId);
+      if (index != -1) {
+        final updatedItem = MintaItem(
+          itemId: _selectedItems[index].itemId,
+          itemNama: _selectedItems[index].itemNama,
+          tipe: _selectedItems[index].tipe,
+          qty: _selectedItems[index].qty,
+          keterangan: _selectedItems[index].keterangan,
+          status: newStatus,
+        );
+        _selectedItems[index] = updatedItem;
+
+        final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
+        if (filteredIndex != -1) {
+          _filteredItems[filteredIndex] = updatedItem;
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.mintaHeader != null;
@@ -850,11 +872,42 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
                               color: _bgSoft,
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: Text(
-                              'ID: ${item.itemId}',
-                              style: GoogleFonts.montserrat(
-                                fontSize: 8,
-                                color: _textMedium,
+                            child: Text('ID: ${item.itemId}', style: GoogleFonts.montserrat(fontSize: 8, color: _textMedium)),
+                          ),
+                          // Status badge
+                          Container(
+                            height: 24,
+                            padding: EdgeInsets.symmetric(horizontal: 6),
+                            decoration: BoxDecoration(
+                              color: item.status == 'Display' ? _accentMintSoft : _accentGoldSoft,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: item.status == 'Display'
+                                    ? _accentMint.withOpacity(0.3)
+                                    : _accentGold.withOpacity(0.3),
+                              ),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: item.status,
+                                isDense: true,
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w600,
+                                  color: item.status == 'Display' ? _accentMint : _accentGold,
+                                ),
+                                items: ['Display', 'Pesanan Jadi'].map((status) {
+                                  return DropdownMenuItem(
+                                    value: status,
+                                    child: Text(status, style: GoogleFonts.montserrat(fontSize: 8, fontWeight: FontWeight.w600)),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    _updateItemStatus(item.itemId, value);
+                                  }
+                                },
+                                icon: Icon(Icons.arrow_drop_down, size: 14, color: item.status == 'Display' ? _accentMint : _accentGold),
                               ),
                             ),
                           ),
@@ -868,14 +921,10 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
                             ),
                             child: Text(
                               item.tipeLabel,
-                              style: GoogleFonts.montserrat(
-                                fontSize: 8,
-                                fontWeight: FontWeight.w600,
-                                color: item.tipeColor,
-                              ),
+                              style: GoogleFonts.montserrat(fontSize: 8, fontWeight: FontWeight.w600, color: item.tipeColor),
                             ),
                           ),
-                          if (hasQty) ...[
+                          if (item.qty > 0) ...[
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                               decoration: BoxDecoration(
@@ -884,11 +933,7 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
                               ),
                               child: Text(
                                 'Qty: ${item.qty}',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w600,
-                                  color: _accentGold,
-                                ),
+                                style: GoogleFonts.montserrat(fontSize: 8, fontWeight: FontWeight.w600, color: _accentGold),
                               ),
                             ),
                           ],

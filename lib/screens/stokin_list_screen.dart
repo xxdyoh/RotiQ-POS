@@ -1004,7 +1004,7 @@ class _StokinListScreenState extends State<StokinListScreen> with SingleTickerPr
 
     return BaseLayout(
       title: 'Stock In',
-      showBackButton: false,
+      showBackButton: true,
       showSidebar: !isMobile,
       isFormScreen: false,
       child: FadeTransition(

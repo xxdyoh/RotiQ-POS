@@ -120,6 +120,24 @@ class SpkService {
     }
   }
 
+  static Future<Map<String, dynamic>> getBarcodeData(String nomor) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/spk/$nomor/barcode'),
+        headers: await _getHeadersWithCabang(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['data'];
+      } else {
+        throw Exception('Gagal mengambil data barcode');
+      }
+    } catch (e) {
+      throw Exception('Error: ${e.toString()}');
+    }
+  }
+
   static Future<Map<String, dynamic>> getSpkDetailForExport(String nomor) async {
     try {
       final response = await http.get(

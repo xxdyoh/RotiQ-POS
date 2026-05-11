@@ -140,7 +140,7 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> with Sing
   void _resetBarcodeTimer() {
     _barcodeTimer?.cancel();
     _barcodeTimer = Timer(const Duration(milliseconds: 100), () {
-      if (_barcodeBuffer.isNotEmpty && _barcodeBuffer.length >= 3) {
+      if (_barcodeBuffer.isNotEmpty && _barcodeBuffer.length >= 1) {  // ← ubah 3 ke 1
         final barcode = _barcodeBuffer;
         _barcodeBuffer = '';
         _processBarcode(barcode);
@@ -152,8 +152,13 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> with Sing
 
   void _processBarcode(String barcode) {
     final cleanBarcode = barcode.trim();
-    if (cleanBarcode.isEmpty) return;
+    print('Barcode scanned: "$cleanBarcode"');
     final itemId = int.tryParse(cleanBarcode);
+    print('Parsed itemId: $itemId');
+
+    // final cleanBarcode = barcode.trim();
+    if (cleanBarcode.isEmpty) return;
+    // final itemId = int.tryParse(cleanBarcode);
     if (itemId == null) {
       _showToast('Format barcode tidak valid', type: ToastType.error);
       return;
@@ -319,6 +324,43 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> with Sing
     if (selectedSpk != null) {
       setState(() => _selectedSpk = selectedSpk);
       await _loadSpkDetail(selectedSpk['spk_nomor']);
+    }
+  }
+
+  void _showAddItemModal() async {
+    HapticFeedback.selectionClick();
+
+    final selectedItems = await showModalBottomSheet<List<SerahTerimaItem>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(color: Colors.transparent),
+        child: _AddItemModalSerahTerima(
+          existingItems: _items,
+        ),
+      ),
+    );
+
+    if (selectedItems != null && selectedItems.isNotEmpty) {
+      setState(() {
+        for (var newItem in selectedItems) {
+          final existingIndex = _items.indexWhere((item) => item.itemId == newItem.itemId);
+          if (existingIndex >= 0) {
+            final newQty = _items[existingIndex].qtyTerima + newItem.qtyTerima;
+            _items[existingIndex] = _items[existingIndex].copyWith(qtyTerima: newQty);
+            if (_qtyControllers.containsKey(newItem.itemId)) {
+              _qtyControllers[newItem.itemId]?.text = newQty.toString();
+            }
+          } else {
+            _items.add(newItem);
+            _qtyControllers[newItem.itemId] = TextEditingController(text: newItem.qtyTerima.toString());
+            _ketControllers[newItem.itemId] = TextEditingController(text: newItem.keterangan ?? '');
+          }
+        }
+        _filteredItems = List.from(_items);
+      });
+      _showToast('${selectedItems.length} item ditambahkan', type: ToastType.success);
     }
   }
 
@@ -637,6 +679,12 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> with Sing
                 const SizedBox(height: 10),
                 Row(
                   children: [
+                    _buildActionButton(
+                      label: 'Add Item',
+                      icon: Icons.add_rounded,
+                      color: _accentSky,
+                      onPressed: _showAddItemModal,
+                    ),
                     const Spacer(),
                     _buildStatChip(Icons.inventory_rounded, '${_items.length}'),
                     const SizedBox(width: 4),
@@ -660,6 +708,38 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> with Sing
               itemBuilder: (context, index) => _buildModernItemCard(_filteredItems[index]),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      height: 28,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [color, color.withOpacity(0.8)]),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                Icon(icon, size: 11, color: Colors.white),
+                const SizedBox(width: 4),
+                Text(label, style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -934,6 +1014,248 @@ class _SerahTerimaFormScreenState extends State<SerahTerimaFormScreen> with Sing
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AddItemModalSerahTerima extends StatefulWidget {
+  final List<SerahTerimaItem> existingItems;
+
+  const _AddItemModalSerahTerima({required this.existingItems});
+
+  @override
+  State<_AddItemModalSerahTerima> createState() => _AddItemModalSerahTerimaState();
+}
+
+class _AddItemModalSerahTerimaState extends State<_AddItemModalSerahTerima> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
+  final Map<int, TextEditingController> _qtyControllers = {};
+  bool _isLoading = true;
+
+  final Color _primaryDark = const Color(0xFF2C3E50);
+  final Color _accentGold = const Color(0xFFF6A918);
+  final Color _accentMint = const Color(0xFF06D6A0);
+  final Color _bgSoft = const Color(0xFFF8FAFC);
+  final Color _surfaceWhite = Colors.white;
+  final Color _textDark = const Color(0xFF1A202C);
+  final Color _textLight = const Color(0xFFA0AEC0);
+  final Color _borderSoft = const Color(0xFFE2E8F0);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    for (var c in _qtyControllers.values) c.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadItems() async {
+    try {
+      final items = await SerahTerimaService.getItemsForAdd();
+      setState(() {
+        _items = items.map((item) => {
+          'id': item['id'] ?? 0,
+          'nama': item['nama']?.toString() ?? 'Unknown',
+          'harga': (item['harga'] ?? 0).toDouble(),
+        }).toList();
+        _filteredItems = List.from(_items);
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading items: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _filterItems(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredItems = List.from(_items);
+      } else {
+        _filteredItems = _items.where((item) =>
+            item['nama'].toString().toLowerCase().contains(query.toLowerCase())
+        ).toList();
+      }
+    });
+  }
+
+  void _addSelectedItems() {
+    final selectedItems = <SerahTerimaItem>[];
+    for (var item in _filteredItems) {
+      final id = item['id'] as int;
+      final controller = _qtyControllers[id];
+      if (controller != null && controller.text.isNotEmpty) {
+        final qty = int.tryParse(controller.text) ?? 0;
+        if (qty > 0) {
+          selectedItems.add(SerahTerimaItem(
+            itemId: id,
+            itemNama: item['nama']?.toString() ?? 'Unknown',
+            qtySpk: 0, // bukan dari SPK
+            qtyTerima: qty,
+            keterangan: '',
+          ));
+        }
+      }
+    }
+    Navigator.pop(context, selectedItems);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.7,
+      decoration: BoxDecoration(
+        color: _surfaceWhite,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [_primaryDark, const Color(0xFF34495E)]),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.add_shopping_cart, size: 18, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text('Tambah Item', style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                ),
+                IconButton(icon: const Icon(Icons.close, size: 18, color: Colors.white), onPressed: () => Navigator.pop(context)),
+              ],
+            ),
+          ),
+
+          // Search
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Container(
+              height: 40,
+              decoration: BoxDecoration(color: _bgSoft, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderSoft)),
+              child: TextField(
+                controller: _searchController,
+                onChanged: _filterItems,
+                style: GoogleFonts.montserrat(fontSize: 12),
+                decoration: InputDecoration(
+                  hintText: 'Cari item...',
+                  hintStyle: GoogleFonts.montserrat(fontSize: 12, color: _textLight),
+                  prefixIcon: Icon(Icons.search, size: 16, color: _primaryDark),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+          ),
+
+          // List
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredItems.isEmpty
+                ? Center(child: Text('Tidak ada item', style: GoogleFonts.montserrat(fontSize: 12, color: const Color(0xFF718096))))
+                : ListView.builder(
+              padding: const EdgeInsets.all(8),
+              itemCount: _filteredItems.length,
+              itemBuilder: (context, index) {
+                final item = _filteredItems[index];
+                final id = item['id'] as int;
+                final nama = item['nama']?.toString() ?? '-';
+                final isExisting = widget.existingItems.any((i) => i.itemId == id);
+                if (!_qtyControllers.containsKey(id)) {
+                  _qtyControllers[id] = TextEditingController();
+                }
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _surfaceWhite,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isExisting ? _accentGold : _borderSoft, width: isExisting ? 1.5 : 1),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(color: _accentMint.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        child: Icon(Icons.inventory_2_outlined, size: 18, color: _accentMint),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(nama, style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600)),
+                            Text('ID: $id', style: GoogleFonts.montserrat(fontSize: 8, color: _textLight)),
+                            if (isExisting) Text('Sudah ada di daftar', style: GoogleFonts.montserrat(fontSize: 8, color: _accentGold)),
+                          ],
+                        ),
+                      ),
+                      SizedBox(
+                        width: 70, height: 34,
+                        child: TextField(
+                          controller: _qtyControllers[id],
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.montserrat(fontSize: 11),
+                          decoration: InputDecoration(
+                            hintText: 'Qty',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: _borderSoft)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // Bottom
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: _bgSoft, border: const Border(top: BorderSide(color: Color(0xFFE2E8F0)))),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 12, color: const Color(0xFF718096))),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF2C3E50), Color(0xFF34495E)]), borderRadius: BorderRadius.circular(8)),
+                    child: ElevatedButton(
+                      onPressed: _addSelectedItems,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                      child: Text('Tambah', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

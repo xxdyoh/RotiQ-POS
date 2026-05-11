@@ -6,6 +6,7 @@ class MintaItem {
   final String tipe;
   final int qty;
   final String? keterangan;
+  final String status; // <-- TAMBAH
 
   MintaItem({
     required this.itemId,
@@ -13,6 +14,7 @@ class MintaItem {
     this.tipe = 'BJ',
     required this.qty,
     this.keterangan,
+    this.status = 'Display', // <-- DEFAULT
   });
 
   Map<String, dynamic> toJson() {
@@ -21,6 +23,7 @@ class MintaItem {
       'tipe': tipe,
       'qty': qty,
       'keterangan': keterangan ?? '',
+      'status': status, // <-- TAMBAH
     };
   }
 

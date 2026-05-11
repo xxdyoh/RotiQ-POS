@@ -43,6 +43,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<bool> _selectedCabangVisibility = [];
   List<String> _selectedCabangKodes = [];
 
+  bool _isProduksiLoading = true;
+  ProduksiResponse? _produksiData;
+  int _selectedTabIndex = 0; // 0 = Sales, 1 = Produksi
+
   final AppTheme _theme = AppTheme();
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'id_ID',
@@ -62,6 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _tempSelectedJenis = _selectedJenis;
     _checkUserRole();
     _loadInitialData();
+    _loadProduksiData();
   }
 
   void _checkUserRole() {
@@ -210,6 +215,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       _showErrorSnackBar('Gagal memuat data: $e');
+    }
+  }
+
+  Future<void> _loadProduksiData() async {
+    if (!_isPusat) return;
+
+    if (_tempStartDate == null || _tempEndDate == null) return;
+
+    setState(() => _isProduksiLoading = true);
+    try {
+      String? jenisParam = _tempSelectedJenis != 'all' ? _tempSelectedJenis : null;
+      final data = await DashboardService.getProduksiData(
+        startDate: _tempStartDate!,
+        endDate: _tempEndDate!,
+      );
+      setState(() {
+        _produksiData = data;
+        _isProduksiLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isProduksiLoading = false);
+      print('Error loading produksi data: $e');
     }
   }
 
@@ -412,6 +439,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _tempSelectedJenis = _selectedJenis;
     });
     await _loadDashboardData();
+    await _loadProduksiData(); // ← Tambahkan ini
   }
 
   @override
@@ -426,6 +454,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: _theme.background,
         child: Column(
           children: [
+            // Filter Bar (tetap sama)
             _FilterBar(
               startDate: _startDate,
               endDate: _endDate,
@@ -436,60 +465,171 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onStartDateTap: () => _selectStartDate(context),
               onEndDateTap: () => _selectEndDate(context),
               onGroupByChanged: (value) {
-                if (value != null) {
-                  setState(() => _groupBy = value);
-                }
+                if (value != null) setState(() => _groupBy = value);
               },
               onJenisChanged: (value) {
-                if (value != null) {
-                  setState(() => _selectedJenis = value);
-                }
+                if (value != null) setState(() => _selectedJenis = value);
               },
               onRefresh: _refreshDashboard,
               theme: _theme,
             ),
-            Expanded(
-              child: _isLoading
-                  ? _LoadingState(theme: _theme)
-                  : _dashboardData == null
-                  ? _EmptyState(theme: _theme)
-                  : _DashboardContent(
-                data: _dashboardData!,
-                isPusat: _isPusat,
-                cabangList: _cabangList,
-                selectedVisibility: _selectedCabangVisibility,
-                selectedKodes: _selectedCabangKodes,
-                groupBy: _groupBy,
-                currencyFormat: _currencyFormat,
-                numberFormat: _numberFormat,
-                theme: _theme,
-                onCabangVisibilityChanged: (index, selected) {
-                  setState(() {
-                    if (index < _selectedCabangVisibility.length) {
-                      _selectedCabangVisibility[index] = selected;
-                      if (_dashboardData?.multiSeriesSales != null &&
-                          index < _dashboardData!.multiSeriesSales!.series.length) {
-                        final kode = _cabangList.firstWhere(
-                              (c) => c['nama'] == _dashboardData!.multiSeriesSales!.series[index]['cabang_nama'],
-                          orElse: () => {'kode': ''},
-                        )['kode'] as String;
-                        if (selected) {
-                          if (!_selectedCabangKodes.contains(kode)) {
-                            _selectedCabangKodes.add(kode);
-                          }
-                        } else {
-                          _selectedCabangKodes.remove(kode);
-                        }
-                      }
-                    }
-                  });
-                  _loadSecondaryData();
-                },
-                onLoadSecondaryData: _loadSecondaryData,
+
+            // TAB BAR (hanya untuk pusat)
+            if (_isPusat)
+              Container(
+                color: _theme.surface,
+                padding: EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    _buildTab('Sales', 0),
+                    SizedBox(width: 4),
+                    _buildTab('Produksi', 1),
+                  ],
+                ),
               ),
+
+            // CONTENT
+            Expanded(
+              child: _isPusat
+                  ? (_selectedTabIndex == 0
+                  ? _buildSalesContent()
+                  : _buildProduksiContent())
+                  : _buildSalesContent(),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTab(String label, int index) {
+    final isActive = _selectedTabIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedTabIndex = index),
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: isActive ? _theme.secondary : Colors.transparent,
+              width: 3,
+            ),
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: isActive ? _theme.secondary : _theme.textTertiary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSalesContent() {
+    if (_isLoading) {
+      return _LoadingState(theme: _theme);
+    }
+    if (_dashboardData == null) {
+      return _EmptyState(theme: _theme);
+    }
+    return _DashboardContent(
+      data: _dashboardData!,
+      isPusat: _isPusat,
+      cabangList: _cabangList,
+      selectedVisibility: _selectedCabangVisibility,
+      selectedKodes: _selectedCabangKodes,
+      groupBy: _groupBy,
+      currencyFormat: _currencyFormat,
+      numberFormat: _numberFormat,
+      theme: _theme,
+      onCabangVisibilityChanged: (index, selected) {
+        setState(() {
+          if (index < _selectedCabangVisibility.length) {
+            _selectedCabangVisibility[index] = selected;
+            if (_dashboardData?.multiSeriesSales != null &&
+                index < _dashboardData!.multiSeriesSales!.series.length) {
+              final kode = _cabangList.firstWhere(
+                    (c) => c['nama'] == _dashboardData!.multiSeriesSales!.series[index]['cabang_nama'],
+                orElse: () => {'kode': ''},
+              )['kode'] as String;
+              if (selected) {
+                if (!_selectedCabangKodes.contains(kode)) {
+                  _selectedCabangKodes.add(kode);
+                }
+              } else {
+                _selectedCabangKodes.remove(kode);
+              }
+            }
+          }
+        });
+        _loadSecondaryData();
+      },
+      onLoadSecondaryData: _loadSecondaryData,
+    );
+  }
+
+  Widget _buildProduksiContent() {
+    if (_isProduksiLoading) {
+      return _LoadingState(theme: _theme);
+    }
+    if (_produksiData == null) {
+      return _EmptyState(theme: _theme);
+    }
+
+    final data = _produksiData!;
+    final isMobile = MediaQuery.of(context).size.width < 900;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Chart Batang Pemakaian Gram
+          _ProduksiGramChart(
+            chartData: data.chart,
+            totalGram: data.totalGram,
+            averageGram: data.averageGram,
+            totalDays: data.totalDays,
+            theme: _theme,
+          ),
+          SizedBox(height: 24),
+
+          // Bawah: Tabel (kiri) + Pie Chart (kanan)
+          if (isMobile) ...[
+            _ProduksiItemTable(
+              items: data.items,
+              theme: _theme,
+            ),
+            SizedBox(height: 20),
+            _ProduksiDivisiPieChart(
+              divisiData: data.divisi,
+              theme: _theme,
+            ),
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 6,
+                  child: _ProduksiItemTable(
+                    items: data.items,
+                    theme: _theme,
+                  ),
+                ),
+                SizedBox(width: 20),
+                Expanded(
+                  flex: 4,
+                  child: _ProduksiDivisiPieChart(
+                    divisiData: data.divisi,
+                    theme: _theme,
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
     );
   }
@@ -1801,6 +1941,498 @@ class _TopItemsTable extends StatelessWidget {
                     ],
                   );
                 }),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProduksiGramChart extends StatelessWidget {
+  final List<ProduksiChartData> chartData;
+  final double totalGram;
+  final double averageGram;
+  final int totalDays;
+  final AppTheme theme;
+
+  const _ProduksiGramChart({
+    required this.chartData,
+    required this.totalGram,
+    required this.averageGram,
+    required this.totalDays,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (chartData.isEmpty) {
+      return _EmptyCard(message: 'Data produksi tidak tersedia', theme: theme);
+    }
+
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final dataCount = chartData.length;
+
+    // Full tanpa scroll — PERSIS seperti Sales chart
+    int labelRotation;
+    double labelFontSize;
+
+    if (dataCount <= 7) {
+      labelRotation = 0;
+      labelFontSize = isMobile ? 11 : 12;
+    } else if (dataCount <= 15) {
+      labelRotation = 45;
+      labelFontSize = isMobile ? 9 : 10;
+    } else {
+      labelRotation = 90;
+      labelFontSize = isMobile ? 7 : 8;
+    }
+
+    final formattedData = chartData.map((d) {
+      String label;
+      try {
+        final date = DateTime.parse(d.tanggal);
+        if (dataCount > 15) {
+          label = DateFormat('d/M').format(date);
+        } else {
+          label = DateFormat('dd/MM').format(date);
+        }
+      } catch (e) {
+        label = d.tanggal;
+      }
+      return ChartData(x: label, y: d.totalGram);
+    }).toList();
+
+    return Container(
+      width: double.infinity,
+      decoration: theme.cardDecoration,
+      padding: EdgeInsets.all(isMobile ? 20 : 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: theme.secondary,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Pemakaian Gram per Hari', style: theme.titleLarge),
+            ],
+          ),
+          SizedBox(height: 16),
+
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              Container(
+                padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: theme.primaryLight,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.scale_rounded, size: 14, color: theme.primary),
+                    SizedBox(width: 6),
+                    Text(
+                      'Total: ${NumberFormat('#,##0.##').format(totalGram)} gram',
+                      style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.primary),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: theme.secondary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.trending_up_rounded, size: 14, color: theme.secondary),
+                    SizedBox(width: 6),
+                    Text(
+                      'Rata-rata: ${NumberFormat('#,##0.##').format(averageGram)} gr/hari',
+                      style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.secondary),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: theme.surfaceAlt,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: theme.border),
+                ),
+                child: Text('$totalDays hari', style: theme.caption),
+              ),
+            ],
+          ),
+
+          SizedBox(height: 20),
+
+          // ✅ FULL — TANPA SCROLL, TANPA SingleChildScrollView
+          SizedBox(
+            height: 380,
+            width: double.infinity,
+            child: _buildProduksiChart(formattedData, dataCount, labelRotation, labelFontSize),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProduksiChart(
+      List<ChartData> data,
+      int dataCount,
+      int labelRotation,
+      double labelFontSize,
+      ) {
+    return SfCartesianChart(
+      plotAreaBorderWidth: 0,
+      margin: EdgeInsets.fromLTRB(10, 20, 10, 30),
+      primaryXAxis: CategoryAxis(
+        labelRotation: labelRotation,
+        labelStyle: theme.caption.copyWith(fontSize: labelFontSize),
+        majorGridLines: MajorGridLines(width: 0),
+        axisLine: AxisLine(width: 0),
+        labelPlacement: LabelPlacement.onTicks,
+        interval: dataCount > 25 ? 2 : 1, // Auto-skip label kalau terlalu banyak
+      ),
+      primaryYAxis: NumericAxis(
+        title: AxisTitle(text: 'Gram'),
+        numberFormat: NumberFormat('#,##0'),
+        labelStyle: theme.caption,
+        axisLine: AxisLine(width: 0),
+        majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
+      ),
+      series: [
+        ColumnSeries<ChartData, String>(
+          dataSource: data,
+          xValueMapper: (d, _) => d.x,
+          yValueMapper: (d, _) => d.y,
+          color: theme.primary,
+          width: 0.7,
+          spacing: 0.15,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
+          enableTooltip: true,
+          name: 'Gram',
+        ),
+        // ❌ LineSeries rata-rata DIHAPUS
+      ],
+      tooltipBehavior: TooltipBehavior(
+        enable: true,
+        canShowMarker: false,
+        builder: (dynamic tooltipData, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
+          if (tooltipData is ChartData) {
+            return Container(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: theme.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: theme.border),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    tooltipData.x,
+                    style: theme.bodySmall.copyWith(fontWeight: FontWeight.w600, color: theme.textPrimary),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '${NumberFormat('#,##0.##').format(tooltipData.y)} gram',
+                    style: theme.bodySmall.copyWith(fontWeight: FontWeight.w500, color: theme.primary),
+                  ),
+                ],
+              ),
+            );
+          }
+          return Container();
+        },
+      ),
+    );
+  }
+}
+
+class _ProduksiItemTable extends StatelessWidget {
+  final List<ProduksiItemData> items;
+  final AppTheme theme;
+
+  const _ProduksiItemTable({
+    required this.items,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return _EmptyCard(message: 'Data item tidak tersedia', theme: theme);
+    }
+
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final totalQty = items.fold<double>(0, (sum, i) => sum + i.totalQty);
+    final totalGram = items.fold<double>(0, (sum, i) => sum + i.totalGram);
+
+    return Container(
+      width: double.infinity,
+      decoration: theme.cardDecoration,
+      padding: EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header + Total di atas sejajar
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: theme.secondary,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              SizedBox(width: 10),
+              Text('Pemakaian per Item', style: theme.titleMedium),
+              Spacer(),
+              // Total Qty
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.primaryLight,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  'Qty: ${NumberFormat('#,##0.##').format(totalQty)}',
+                  style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.primary),
+                ),
+              ),
+              SizedBox(width: 8),
+              // Total Gram
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.secondary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
+                ),
+                child: Text(
+                  'Gram: ${NumberFormat('#,##0.##').format(totalGram)}',
+                  style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.secondary),
+                ),
+              ),
+              SizedBox(width: 8),
+              // Jumlah item
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.surfaceAlt,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: theme.border),
+                ),
+                child: Text(
+                  '${items.length} item',
+                  style: theme.caption,
+                ),
+              ),
+            ],
+          ),
+
+          SizedBox(height: 16),
+
+          // Table — scroll vertical & horizontal, SEMUA ITEM langsung
+          SizedBox(
+            height: 420,
+            width: double.infinity,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.vertical,
+                child: DataTable(
+                  border: TableBorder.all(
+                    color: theme.border,
+                    borderRadius: BorderRadius.circular(16),
+                    width: 1,
+                  ),
+                  columnSpacing: isMobile ? 16 : 24,
+                  headingRowColor: WidgetStateProperty.all(theme.surfaceAlt),
+                  headingTextStyle: theme.titleSmall.copyWith(fontSize: 12),
+                  dataTextStyle: theme.bodySmall.copyWith(fontSize: 11),
+                  columns: [
+                    DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
+                    DataColumn(label: Text('Nama Item', style: TextStyle(fontWeight: FontWeight.w600))),
+                    DataColumn(label: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600))),
+                    DataColumn(label: Text('Gram', style: TextStyle(fontWeight: FontWeight.w600))),
+                  ],
+                  rows: items.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final item = entry.value;
+                    return DataRow(
+                      cells: [
+                        DataCell(Text('${index + 1}', style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: index < 3 ? theme.secondary : theme.textSecondary,
+                        ))),
+                        DataCell(SizedBox(
+                          width: isMobile ? 120 : 160,
+                          child: Text(
+                            item.itemName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        )),
+                        DataCell(Text(NumberFormat('#,##0.##').format(item.totalQty))),
+                        DataCell(Text(NumberFormat('#,##0.##').format(item.totalGram))),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProduksiDivisiPieChart extends StatelessWidget {
+  final List<ProduksiDivisiData> divisiData;
+  final AppTheme theme;
+
+  const _ProduksiDivisiPieChart({
+    required this.divisiData,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (divisiData.isEmpty || divisiData.every((d) => d.totalGram == 0)) {
+      return _EmptyCard(message: 'Data divisi tidak tersedia', theme: theme);
+    }
+
+    final totalGram = divisiData.fold<double>(0, (sum, d) => sum + d.totalGram);
+
+    final colors = [
+      Color(0xFF0F3B5C), Color(0xFFE67E22), Color(0xFF3498DB),
+      Color(0xFF27AE60), Color(0xFF9B59B6), Color(0xFFE74C3C),
+      Color(0xFF1ABC9C), Color(0xFFF39C12), Color(0xFF34495E),
+      Color(0xFFE91E63), Color(0xFF00BCD4), Color(0xFF795548),
+    ];
+
+    return Container(
+      width: double.infinity,
+      decoration: theme.cardDecoration,
+      padding: EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: theme.secondary,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              SizedBox(width: 10),
+              Text('Pemakaian by Divisi', style: theme.titleMedium),
+            ],
+          ),
+          SizedBox(height: 4),
+
+          // Total
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.secondary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: theme.secondary.withOpacity(0.3)),
+            ),
+            child: Text(
+              'Total: ${NumberFormat('#,##0.##').format(totalGram)} gram',
+              style: theme.caption.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.secondary,
+              ),
+            ),
+          ),
+
+          SizedBox(height: 16),
+
+          // Pie Chart
+          SizedBox(
+            height: 320,
+            width: double.infinity,
+            child: SfCircularChart(
+              legend: Legend(
+                isVisible: true,
+                position: LegendPosition.bottom,
+                overflowMode: LegendItemOverflowMode.wrap,
+                textStyle: theme.caption.copyWith(fontSize: 10),
+              ),
+              series: [
+                PieSeries<ProduksiDivisiData, String>(
+                  dataSource: divisiData,
+                  xValueMapper: (d, _) => d.divisi,
+                  yValueMapper: (d, _) => d.totalGram,
+                  enableTooltip: true,
+                  dataLabelSettings: DataLabelSettings(
+                    isVisible: true,
+                    labelPosition: ChartDataLabelPosition.outside,
+                    textStyle: theme.caption.copyWith(fontSize: 9),
+                    builder: (dynamic data, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
+                      final percentage = totalGram > 0
+                          ? (data.totalGram / totalGram * 100).toStringAsFixed(1)
+                          : '0';
+                      return Text(
+                        '$percentage%',
+                        style: theme.caption.copyWith(fontSize: 9, fontWeight: FontWeight.w600),
+                      );
+                    },
+                  ),
+                  explode: true,
+                  explodeIndex: 0,
+                  explodeOffset: '6%',
+                  pointColorMapper: (d, _) => colors[divisiData.indexOf(d) % colors.length],
+                ),
+              ],
+              tooltipBehavior: TooltipBehavior(
+                enable: true,
+                builder: (dynamic data, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
+                  final percentage = totalGram > 0
+                      ? (data.totalGram / totalGram * 100).toStringAsFixed(1)
+                      : '0';
+                  return Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: theme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: Offset(0, 2)),
+                      ],
+                      border: Border.all(color: theme.border),
+                    ),
+                    child: Text(
+                      '${data.divisi}\n${NumberFormat('#,##0.##').format(data.totalGram)} gram ($percentage%)',
+                      style: theme.bodySmall.copyWith(fontWeight: FontWeight.w500, color: theme.textPrimary),
+                    ),
+                  );
+                },
               ),
             ),
           ),

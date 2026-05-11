@@ -40,14 +40,14 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> {
   final DateFormat _apiDateFormat = DateFormat('yyyy-MM-dd');
 
   late Map<String, double> _columnWidths = {
-    'no': 60,
+    'no': 100,
     'nomor': 160,
-    'tanggal': 100,
+    'tanggal': 140,
     'customer': 200,
     'nilai': 140,
-    'jenis_bayar': 100,
-    'status': 100,
-    'aksi': 100,
+    'jenis_bayar': 150,
+    'status': 140,
+    'aksi': 125,
   };
 
   bool _isLoading = false;
@@ -267,7 +267,7 @@ class _UangMukaListScreenState extends State<UangMukaListScreen> {
 
     return BaseLayout(
       title: 'Uang Muka',
-      showBackButton: false,
+      showBackButton: true,
       showSidebar: !isMobile,
       isFormScreen: false,
       child: Container(

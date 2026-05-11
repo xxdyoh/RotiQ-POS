@@ -27,7 +27,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   };
 
   final Map<String, String> _menuNameMap = {
-    // AppRoutes.dashboard: 'frmsalestype',
+    AppRoutes.dashboard: 'frmDashboard',
     AppRoutes.categoryList: 'frmCategory',
     AppRoutes.itemList: 'frmItem',
     AppRoutes.pos: 'frmPos',
@@ -48,8 +48,6 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     AppRoutes.spkList: 'frmSPK',
     AppRoutes.doList: 'frmMutasiOut',
     AppRoutes.stockSetengahJadi: 'frmStockSetengahJadi',
-    AppRoutes.connectPrinter: 'frmConnectPrinter',
-    AppRoutes.settingPrinter: 'frmSettingPrinter',
     '/user-permissions': 'frmUserPermissions',
     AppRoutes.tutupKasir: 'frmTutupKasir',
     AppRoutes.mintaReport: 'frmLapPermintaan',
@@ -321,6 +319,12 @@ class _SidebarWidgetState extends State<SidebarWidget> {
 
   Widget _buildTransactionGroup() {
     final items = [
+      _buildMenuItem(
+        icon: Icons.qr_code_2,
+        label: 'Cetak Barcode',
+        routeName: AppRoutes.barcodeCustom,
+        indent: true,
+      ),
       _buildMenuItem(
         icon: Icons.shopping_basket_outlined,
         label: 'POS',

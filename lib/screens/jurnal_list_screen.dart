@@ -459,7 +459,7 @@ class _JurnalListScreenState extends State<JurnalListScreen> {
 
     return BaseLayout(
       title: 'Biaya Lain',
-      showBackButton: false,
+      showBackButton: true,
       showSidebar: !isMobile,
       isFormScreen: false,
       child: Container(

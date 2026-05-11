@@ -191,7 +191,7 @@ class _POSScreenState extends State<POSScreen> {
   void _resetBarcodeTimer() {
     _barcodeTimer?.cancel();
     _barcodeTimer = Timer(Duration(milliseconds: 100), () {
-      if (_barcodeBuffer.isNotEmpty && _barcodeBuffer.length >= 3) {
+      if (_barcodeBuffer.isNotEmpty && _barcodeBuffer.length >= 1) {
         _processBarcode();
       } else {
         _barcodeBuffer = '';
@@ -207,9 +207,20 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   void _handleScannedBarcode(String barcode) {
+    final cleanBarcode = barcode.trim();
+
+    // Parse ke integer (otomatis hilangkan leading zero)
+    final itemId = int.tryParse(cleanBarcode);
+    if (itemId == null) {
+      // _showScannerError('Format barcode tidak valid: $cleanBarcode');
+      return;
+    }
+
+    // Cari produk berdasarkan ID integer
     Product? foundProduct;
     for (var product in _products) {
-      if (product.id == barcode) {
+      final productId = int.tryParse(product.id);
+      if (productId == itemId) {
         foundProduct = product;
         break;
       }
@@ -220,7 +231,7 @@ class _POSScreenState extends State<POSScreen> {
       _showScannerFeedback(foundProduct.name);
       SystemSound.play(SystemSoundType.click);
     } else {
-      _showScannerError('Produk tidak ditemukan: $barcode');
+      _showScannerError('Produk tidak ditemukan: $itemId');
       SystemSound.play(SystemSoundType.alert);
     }
   }
@@ -363,7 +374,20 @@ class _POSScreenState extends State<POSScreen> {
           color: _bgCard,
           child: Column(
             children: [
-              _buildSearchBar(),
+              // Row: Search Bar + Input Kode
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: _buildSearchBar(),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    flex: 1,
+                    child: _buildKodeInput(),  // <-- INPUT KODE BARCODE
+                  ),
+                ],
+              ),
               SizedBox(height: 8),
               _buildCategoryChips(),
             ],
@@ -409,7 +433,20 @@ class _POSScreenState extends State<POSScreen> {
                 color: _bgCard,
                 child: Column(
                   children: [
-                    _buildSearchBar(),
+                    // Row: Search Bar + Input Kode
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: _buildSearchBar(),
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          flex: 1,
+                          child: _buildKodeInput(),  // <-- INPUT KODE BARCODE
+                        ),
+                      ],
+                    ),
                     SizedBox(height: 8),
                     _buildCategoryChips(),
                   ],
@@ -435,6 +472,93 @@ class _POSScreenState extends State<POSScreen> {
           child: _buildCartPanel(),
         ),
       ],
+    );
+  }
+
+  Widget _buildKodeInput() {
+    return Container(
+      height: 36,
+      decoration: BoxDecoration(
+        color: _bgCard,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _accentGold, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: _accentGold.withOpacity(0.1),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: _accentGold.withOpacity(0.1),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(7),
+                bottomLeft: Radius.circular(7),
+              ),
+            ),
+            child: Icon(Icons.qr_code_rounded, size: 16, color: _accentGold),
+          ),
+          Expanded(
+            child: Focus(
+              onFocusChange: (hasFocus) {
+                // Scanner OFF saat input kode aktif, ON saat tidak fokus
+                setState(() {
+                  _scannerActive = !hasFocus;
+                  if (!hasFocus) {
+                    _barcodeBuffer = ''; // Bersihkan buffer
+                  }
+                });
+              },
+              child: TextField(
+                controller: _manualBarcodeController,
+                focusNode: _barcodeFocusNode,
+                style: GoogleFonts.montserrat(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: _textPrimary,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Kode',
+                  hintStyle: GoogleFonts.montserrat(
+                    fontSize: 11,
+                    color: _textSecondary.withOpacity(0.6),
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                  isDense: true,
+                ),
+                keyboardType: TextInputType.number,
+                onSubmitted: (value) {
+                  if (value.trim().isNotEmpty) {
+                    _handleManualBarcode(value.trim());
+                    _manualBarcodeController.clear();
+                  }
+                  // Pindah fokus supaya scanner aktif lagi
+                  FocusScope.of(context).unfocus();
+                },
+              ),
+            ),
+          ),
+          if (_manualBarcodeController.text.isNotEmpty)
+            GestureDetector(
+              onTap: () {
+                _manualBarcodeController.clear();
+                FocusScope.of(context).unfocus(); // Scanner aktif lagi
+              },
+              child: Container(
+                width: 28,
+                height: 28,
+                child: Icon(Icons.clear_rounded, size: 14, color: _textSecondary),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -493,29 +617,190 @@ class _POSScreenState extends State<POSScreen> {
                 child: GestureDetector(
                   onTap: _openUangMukaList,
                   child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: Colors.white.withOpacity(0.3)),
                     ),
-                    child: Icon(Icons.account_balance_wallet, size: 14, color: Colors.white),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.account_balance_wallet, size: 14, color: Colors.white),
+                        SizedBox(width: 5),
+                        Text(
+                          'UANG MUKA',
+                          style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.white, letterSpacing: 0.5),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
               SizedBox(width: 6),
+              // Tutup Kasir
               Tooltip(
                 message: 'Tutup Kasir',
                 child: GestureDetector(
                   onTap: _openTutupKasirForm,
                   child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: Colors.white.withOpacity(0.3)),
                     ),
-                    child: Icon(Icons.lock_clock, size: 14, color: Colors.white),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.lock_clock, size: 14, color: Colors.white),
+                        SizedBox(width: 5),
+                        Text(
+                          'TUTUP',
+                          style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.white, letterSpacing: 0.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 6),
+              // Permintaan
+              Tooltip(
+                message: 'Permintaan Barang',
+                child: GestureDetector(
+                  onTap: _openPermintaan,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.inbox_rounded, size: 14, color: Colors.white),
+                        SizedBox(width: 5),
+                        Text(
+                          'PERMINTAAN',
+                          style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.white, letterSpacing: 0.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 6),
+              // Mutasi IN
+              Tooltip(
+                message: 'Mutasi IN',
+                child: GestureDetector(
+                  onTap: _openMutasiIn,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.inventory_rounded, size: 14, color: Colors.white),
+                        SizedBox(width: 5),
+                        Text(
+                          'MUTASI IN',
+                          style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.white, letterSpacing: 0.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 6),
+              // Retur Produksi
+              Tooltip(
+                message: 'Retur Production',
+                child: GestureDetector(
+                  onTap: _openReturProd,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.assignment_return_outlined, size: 14, color: Colors.white),
+                        SizedBox(width: 5),
+                        Text(
+                          'RETUR',
+                          style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.white, letterSpacing: 0.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 6),
+              // Biaya
+              Tooltip(
+                message: 'Biaya Lain',
+                child: GestureDetector(
+                  onTap: _openBiaya,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.receipt_long_rounded, size: 14, color: Colors.white),
+                        SizedBox(width: 5),
+                        Text(
+                          'BIAYA',
+                          style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.white, letterSpacing: 0.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 6),
+// Reprint
+              Tooltip(
+                message: 'Reprint Struk',
+                child: GestureDetector(
+                  onTap: _showReprintModal,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.receipt_long_rounded, size: 14, color: Colors.white),
+                        SizedBox(width: 5),
+                        Text(
+                          'REPRINT',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1726,6 +2011,36 @@ class _POSScreenState extends State<POSScreen> {
     );
   }
 
+  void _handleManualBarcode(String barcode) {
+    final cleanBarcode = barcode.trim();
+
+    // Parse ke integer (otomatis hilangkan leading zero)
+    final itemId = int.tryParse(cleanBarcode);
+    if (itemId == null) {
+      _showScannerError('Format kode tidak valid: $cleanBarcode');
+      return;
+    }
+
+    // Cari produk berdasarkan ID integer
+    Product? foundProduct;
+    for (var product in _products) {
+      final productId = int.tryParse(product.id);
+      if (productId == itemId) {
+        foundProduct = product;
+        break;
+      }
+    }
+
+    if (foundProduct != null) {
+      _addToCart(foundProduct);
+      _showScannerFeedback(foundProduct.name);
+      SystemSound.play(SystemSoundType.click);
+    } else {
+      _showScannerError('Produk tidak ditemukan: $itemId');
+      SystemSound.play(SystemSoundType.alert);
+    }
+  }
+
 // Fungsi helper untuk tombol quick quantity
   Widget _buildQuickQtyButton(String qty, StateSetter setDialogState, TextEditingController controller) {
     return GestureDetector(
@@ -1810,7 +2125,7 @@ class _POSScreenState extends State<POSScreen> {
       });
     }
 
-    _showSnackbar('${product.name} ditambahkan', _accentMint);
+    // _showSnackbar('${product.name} ditambahkan', _accentMint);
   }
 
   void _updateCartDiscounts() {
@@ -2198,9 +2513,13 @@ class _POSScreenState extends State<POSScreen> {
     final cleanBarcode = barcode.trim();
     if (cleanBarcode.isEmpty) return;
 
+    final itemId = int.tryParse(cleanBarcode);
+    if (itemId == null) return;
+
     Product? foundProduct;
     for (var product in _products) {
-      if (product.id == cleanBarcode) {
+      final productId = int.tryParse(product.id);
+      if (productId == itemId) {
         foundProduct = product;
         break;
       }
@@ -2296,6 +2615,38 @@ class _POSScreenState extends State<POSScreen> {
       await Navigator.pushNamed(context, AppRoutes.uangMukaList);
     } catch (e) {
       _showSnackbar('Gagal membuka menu Uang Muka', _accentCoral);
+    }
+  }
+
+  void _openMutasiIn() async {
+    try {
+      await Navigator.pushNamed(context, AppRoutes.stockInList);
+    } catch (e) {
+      _showSnackbar('Gagal membuka menu Mutasi IN', _accentCoral);
+    }
+  }
+
+  void _openReturProd() async {
+    try {
+      await Navigator.pushNamed(context, AppRoutes.returnProduction);
+    } catch (e) {
+      _showSnackbar('Gagal membuka menu Retur Production', _accentCoral);
+    }
+  }
+
+  void _openBiaya() async {
+    try {
+      await Navigator.pushNamed(context, AppRoutes.biayaLain);
+    } catch (e) {
+      _showSnackbar('Gagal membuka menu Biaya', _accentCoral);
+    }
+  }
+
+  void _openPermintaan() async {
+    try {
+      await Navigator.pushNamed(context, AppRoutes.mintaList);
+    } catch (e) {
+      _showSnackbar('Gagal membuka menu Biaya', _accentCoral);
     }
   }
 
