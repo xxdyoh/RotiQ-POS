@@ -16,15 +16,17 @@ class BarcodeCustomScreen extends StatefulWidget {
 
 class _BarcodeCustomScreenState extends State<BarcodeCustomScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _qtyController = TextEditingController();
 
   List<Map<String, dynamic>> _allItems = [];
   List<Map<String, dynamic>> _filteredItems = [];
   final List<_BarcodeItem> _selectedItems = [];
   bool _isLoading = false;
+  bool _isLoadingPermintaan = false;
 
   String _dayCode = '';
   final TextEditingController _dayCodeController = TextEditingController();
+
+  DateTime _selectedDate = DateTime.now();
 
   static const Color _primaryDark = Color(0xFF2C3E50);
   static const Color _surfaceWhite = Color(0xFFFFFFFF);
@@ -47,7 +49,6 @@ class _BarcodeCustomScreenState extends State<BarcodeCustomScreen> {
   @override
   void dispose() {
     _searchController.dispose();
-    _qtyController.dispose();
     _dayCodeController.dispose();
     super.dispose();
   }
@@ -94,33 +95,28 @@ class _BarcodeCustomScreenState extends State<BarcodeCustomScreen> {
   }
 
   void _addItem(Map<String, dynamic> item) {
-    final qty = int.tryParse(_qtyController.text) ?? 1;
-    if (qty <= 0) {
-      _showSnackbar('Jumlah minimal 1', isError: true);
-      return;
-    }
-
     final id = item['id']?.toString() ?? '';
     final nama = item['nama']?.toString() ?? '-';
     final harga = double.tryParse(item['harga']?.toString() ?? '0') ?? 0;
 
-    // Cek apakah item sudah ada
     final existingIndex = _selectedItems.indexWhere((s) => s.kode == id);
     if (existingIndex >= 0) {
-      _selectedItems[existingIndex].qty += qty;
+      _selectedItems[existingIndex].qty += 1;
     } else {
-      _selectedItems.add(_BarcodeItem(kode: id, nama: nama, harga: harga, qty: qty));
+      _selectedItems.add(_BarcodeItem(kode: id, nama: nama, harga: harga, qty: 1));
     }
     setState(() {});
   }
 
-  void _updateQty(int index, int newQty) {
-    if (newQty <= 0) {
+  void _updateQty(int index, String value) {
+    final qty = int.tryParse(value);
+    if (qty == null) return;
+    if (qty <= 0) {
       _removeItem(index);
       return;
     }
     setState(() {
-      _selectedItems[index].qty = newQty;
+      _selectedItems[index].qty = qty;
     });
   }
 
@@ -134,6 +130,142 @@ class _BarcodeCustomScreenState extends State<BarcodeCustomScreen> {
     return _selectedItems.fold(0, (sum, item) => sum + item.qty);
   }
 
+  // ============ LOAD PERMINTAAN ============
+  void _showLoadPermintaanDialog() {
+    DateTime dialogDate = _selectedDate;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: _accentMint.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(Icons.download_rounded, size: 18, color: _accentMint),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('Load Permintaan', style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w600)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Tanggal', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600, color: _textSecondary)),
+                  const SizedBox(height: 4),
+                  InkWell(
+                    onTap: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: dialogDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                        builder: (context, child) => Theme(
+                          data: ThemeData.light().copyWith(
+                            colorScheme: ColorScheme.light(primary: _primaryDark, onPrimary: Colors.white),
+                          ),
+                          child: child!,
+                        ),
+                      );
+                      if (picked != null && picked != dialogDate) {
+                        setDialogState(() => dialogDate = picked);
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: _bgLight,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _borderColor),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_today, size: 16, color: _accentGold),
+                          const SizedBox(width: 10),
+                          Text(
+                            DateFormat('dd MMMM yyyy').format(dialogDate),
+                            style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600, color: _textPrimary),
+                          ),
+                          const Spacer(),
+                          Icon(Icons.arrow_drop_down, color: _textSecondary),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Batal', style: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary)),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _selectedDate = dialogDate;
+                    _loadPermintaan(dialogDate);
+                  },
+                  icon: const Icon(Icons.download_rounded, size: 16),
+                  label: Text('Load', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _accentMint,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _loadPermintaan(DateTime date) async {
+    setState(() => _isLoadingPermintaan = true);
+    try {
+      final tanggalStr = DateFormat('yyyy-MM-dd').format(date);
+      final items = await ItemService.loadPermintaanDisplay(tanggalStr);
+
+      if (items.isEmpty) {
+        _showSnackbar('Tidak ada data permintaan Display', isError: true);
+        return;
+      }
+
+      // Ganti selected items langsung dengan data dari permintaan
+      setState(() {
+        _selectedItems.clear();
+        for (var item in items) {
+          final id = item['id']?.toString() ?? '';
+          final nama = item['nama']?.toString() ?? '-';
+          final harga = double.tryParse(item['harga']?.toString() ?? '0') ?? 0;
+          final qty = int.tryParse(item['qty']?.toString() ?? '0') ?? 0;
+
+          if (qty <= 0) continue;
+
+          _selectedItems.add(_BarcodeItem(kode: id, nama: nama, harga: harga, qty: qty));
+        }
+      });
+
+      _showSnackbar('${_selectedItems.length} item Display dimuat • $_totalBarcode barcode');
+    } catch (e) {
+      _showSnackbar('Gagal load permintaan: ${e.toString()}', isError: true);
+    } finally {
+      setState(() => _isLoadingPermintaan = false);
+    }
+  }
+
+  // ============ PRINT ============
   void _showPrintDialog() {
     if (_selectedItems.isEmpty) {
       _showSnackbar('Belum ada item', isError: true);
@@ -200,18 +332,20 @@ class _BarcodeCustomScreenState extends State<BarcodeCustomScreen> {
             return pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.center,
               children: [
+                // Label kiri
                 pw.Container(
                   width: colWidth,
                   height: pageHeight,
-                  padding: pw.EdgeInsets.only(left: 10, top: 1, bottom: 1),
+                  padding: pw.EdgeInsets.only(left: 10, top: 10, bottom: 1), // ← samakan padding top 10
                   child: _buildLabel(items[i], dayCode, withPrice),
                 ),
                 pw.SizedBox(width: gap),
+                // Label kanan
                 if (i + 1 < items.length)
                   pw.Container(
                     width: colWidth,
                     height: pageHeight,
-                    padding: pw.EdgeInsets.only(right: 2, top: 1, bottom: 1),
+                    padding: pw.EdgeInsets.only(right: 2, top: 10, bottom: 1), // ← samakan padding top 10
                     child: _buildLabel(items[i + 1], dayCode, withPrice),
                   )
                 else
@@ -232,7 +366,8 @@ class _BarcodeCustomScreenState extends State<BarcodeCustomScreen> {
 
   pw.Widget _buildLabel(Map<String, dynamic> item, String dayCode, bool withPrice) {
     final nama = item['nama']?.toString() ?? '-';
-    final kode = item['kode']?.toString() ?? '-';
+    final kodeRaw = item['kode']?.toString() ?? '0';
+    final kode = kodeRaw.padLeft(2, '0'); // ← tambah leading zero (sama kayak SPK)
     final harga = (item['harga'] ?? 0).toDouble();
 
     return pw.Column(
@@ -293,67 +428,116 @@ class _BarcodeCustomScreenState extends State<BarcodeCustomScreen> {
         color: _bgLight,
         child: Column(
           children: [
-            // Search + DayCode
+            // Header bar
             Container(
               padding: const EdgeInsets.all(12),
               color: _surfaceWhite,
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: Container(
-                      height: 38,
-                      decoration: BoxDecoration(color: _bgLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderColor)),
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: _filterItems,
-                        style: GoogleFonts.montserrat(fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'Cari item...',
-                          hintStyle: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary),
-                          prefixIcon: Icon(Icons.search, size: 16, color: _textSecondary),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
+                  // Row 1: Search + Day Code + Load Permintaan
+                  Row(
+                    children: [
+                      // Search
+                      Expanded(
+                        child: Container(
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: _bgLight,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: _borderColor),
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: _filterItems,
+                            style: GoogleFonts.montserrat(fontSize: 12),
+                            decoration: InputDecoration(
+                              hintText: 'Cari item...',
+                              hintStyle: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary),
+                              prefixIcon: Icon(Icons.search, size: 16, color: _textSecondary),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 55,
-                    child: Container(
-                      height: 38,
-                      decoration: BoxDecoration(color: _bgLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: _accentGold)),
-                      child: TextField(
-                        controller: _dayCodeController,
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w700, color: _accentGold),
-                        decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.zero),
+                      const SizedBox(width: 8),
+                      // Day Code
+                      SizedBox(
+                        width: 55,
+                        child: Container(
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: _bgLight,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: _accentGold),
+                          ),
+                          child: TextField(
+                            controller: _dayCodeController,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w700, color: _accentGold),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      // Load Permintaan button
+                      SizedBox(
+                        height: 38,
+                        child: ElevatedButton.icon(
+                          onPressed: _showLoadPermintaanDialog,
+                          icon: _isLoadingPermintaan
+                              ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                              : const Icon(Icons.download_rounded, size: 16),
+                          label: Text(
+                            isMobile ? '' : 'Permintaan',
+                            style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _accentMint,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
 
-            // Bottom bar (Print button)
+            // Bottom bar (info + print)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               color: _surfaceWhite,
               child: Row(
                 children: [
-                  Text('${_selectedItems.length} item • $_totalBarcode barcode', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w500, color: _textPrimary)),
+                  // Info
+                  Text(
+                    '${_selectedItems.length} item • $_totalBarcode barcode',
+                    style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w500, color: _textPrimary),
+                  ),
                   const Spacer(),
+                  // Print button
                   SizedBox(
-                    height: 38,
+                    height: 36,
                     child: ElevatedButton.icon(
                       onPressed: _selectedItems.isEmpty ? null : _showPrintDialog,
-                      icon: const Icon(Icons.print, size: 18),
-                      label: Text('Print', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600)),
+                      icon: const Icon(Icons.print, size: 16),
+                      label: Text('Print', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _primaryDark,
                         foregroundColor: Colors.white,
+                        disabledBackgroundColor: _borderColor,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                       ),
                     ),
                   ),
@@ -362,7 +546,7 @@ class _BarcodeCustomScreenState extends State<BarcodeCustomScreen> {
             ),
             const Divider(height: 1),
 
-            // Main content: kiri = selected items, kanan = list item
+            // Main content
             Expanded(
               child: isWide
                   ? Row(
@@ -370,7 +554,7 @@ class _BarcodeCustomScreenState extends State<BarcodeCustomScreen> {
                 children: [
                   // Panel kiri - Selected Items
                   SizedBox(
-                    width: 320,
+                    width: 340,
                     child: _buildSelectedItemsPanel(),
                   ),
                   Container(width: 1, color: _borderColor),
@@ -400,113 +584,149 @@ class _BarcodeCustomScreenState extends State<BarcodeCustomScreen> {
         padding: const EdgeInsets.all(24),
         child: Center(
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.qr_code_2, size: 40, color: _textSecondary.withOpacity(0.5)),
               const SizedBox(height: 8),
               Text('Belum ada item dipilih', style: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary)),
               const SizedBox(height: 4),
-              Text('Klik item di daftar untuk menambah', style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary.withOpacity(0.7))),
+              Text('Klik item di daftar atau Load Permintaan', style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary.withOpacity(0.7))),
             ],
           ),
         ),
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Item Terpilih', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600, color: _textPrimary)),
-          const SizedBox(height: 8),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _selectedItems.length,
-              itemBuilder: (context, index) {
-                final item = _selectedItems[index];
-                final qtyCtrl = TextEditingController(text: '${item.qty}');
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: _surfaceWhite,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _borderColor),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: _primaryDark.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Icon(Icons.checklist, size: 14, color: _primaryDark),
+              ),
+              const SizedBox(width: 8),
+              Text('Item Terpilih', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w600, color: _textPrimary)),
+              const Spacer(),
+              Text('${_selectedItems.length} item', style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary)),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            itemCount: _selectedItems.length,
+            itemBuilder: (context, index) {
+              final item = _selectedItems[index];
+              final qtyCtrl = TextEditingController(text: '${item.qty}');
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _surfaceWhite,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _borderColor),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: _primaryDark.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${index + 1}',
+                          style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w700, color: _primaryDark),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.nama, style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          const SizedBox(height: 2),
+                          Text(
+                            'ID: ${item.kode} • Rp.${NumberFormat('#,##0').format(item.harga)}',
+                            style: GoogleFonts.montserrat(fontSize: 9, color: _textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Qty input
+                    SizedBox(
+                      width: 60,
+                      height: 32,
+                      child: Container(
                         decoration: BoxDecoration(
-                          color: _primaryDark.withOpacity(0.1),
+                          color: _bgLight,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: _borderColor),
+                        ),
+                        child: TextField(
+                          controller: qtyCtrl,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w700, color: _primaryDark),
+                          decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
+                          onChanged: (value) => _updateQty(index, value),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => _removeItem(index),
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: _accentRed.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Center(child: Text('${index + 1}', style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w700, color: _primaryDark))),
+                        child: Icon(Icons.delete_outline, color: _accentRed, size: 16),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(item.nama, style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 2),
-                            Text('ID: ${item.kode} • Rp.${NumberFormat('#,##0').format(item.harga)}', style: GoogleFonts.montserrat(fontSize: 9, color: _textSecondary)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Qty input - diperlebar
-                      SizedBox(
-                        width: 65,
-                        height: 34,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: _bgLight,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: _borderColor),
-                          ),
-                          child: TextField(
-                            controller: qtyCtrl,
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w700, color: _primaryDark),
-                            decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
-                            onChanged: (value) {
-                              final qty = int.tryParse(value);
-                              if (qty != null) _updateQty(index, qty);
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      GestureDetector(
-                        onTap: () => _removeItem(index),
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(color: _accentRed.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                          child: Icon(Icons.delete_outline, color: _accentRed, size: 16),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _buildItemList() {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
     if (_filteredItems.isEmpty) {
-      return Center(child: Text('Item tidak ditemukan', style: GoogleFonts.montserrat(color: _textSecondary)));
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inventory_2_outlined, size: 40, color: _textSecondary.withOpacity(0.4)),
+            const SizedBox(height: 8),
+            Text('Item tidak ditemukan', style: GoogleFonts.montserrat(fontSize: 12, color: _textSecondary)),
+          ],
+        ),
+      );
     }
 
     return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: _filteredItems.length,
       itemBuilder: (context, index) {
         final item = _filteredItems[index];
@@ -515,25 +735,41 @@ class _BarcodeCustomScreenState extends State<BarcodeCustomScreen> {
         final harga = double.tryParse(item['harga']?.toString() ?? '0') ?? 0;
         final alreadyAdded = _selectedItems.any((s) => s.kode == id);
 
-        return ListTile(
-          dense: true,
-          leading: CircleAvatar(
-            radius: 16,
-            backgroundColor: alreadyAdded ? _accentMint : _borderColor,
-            child: Icon(alreadyAdded ? Icons.check : Icons.add, size: 16, color: Colors.white),
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: alreadyAdded ? Border.all(color: _accentMint.withOpacity(0.3)) : null,
           ),
-          title: Text(nama, style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w500)),
-          subtitle: Text('ID: $id • Rp.${NumberFormat('#,##0').format(harga)}', style: GoogleFonts.montserrat(fontSize: 10, color: _textSecondary)),
-          trailing: alreadyAdded
-              ? IconButton(
-            icon: Icon(Icons.remove_circle_outline, color: _accentRed, size: 20),
-            onPressed: () {
-              final idx = _selectedItems.indexWhere((s) => s.kode == id);
-              if (idx >= 0) _removeItem(idx);
-            },
-          )
-              : null,
-          onTap: alreadyAdded ? null : () => _addItem(item),
+          child: ListTile(
+            dense: true,
+            leading: CircleAvatar(
+              radius: 14,
+              backgroundColor: alreadyAdded ? _accentMint : _borderColor,
+              child: Icon(
+                alreadyAdded ? Icons.check : Icons.add,
+                size: 14,
+                color: Colors.white,
+              ),
+            ),
+            title: Text(nama, style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500)),
+            subtitle: Text(
+              'ID: $id • Rp.${NumberFormat('#,##0').format(harga)}',
+              style: GoogleFonts.montserrat(fontSize: 9, color: _textSecondary),
+            ),
+            trailing: alreadyAdded
+                ? IconButton(
+              icon: Icon(Icons.remove_circle_outline, color: _accentRed, size: 18),
+              onPressed: () {
+                final idx = _selectedItems.indexWhere((s) => s.kode == id);
+                if (idx >= 0) _removeItem(idx);
+              },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            )
+                : null,
+            onTap: () => _addItem(item),
+          ),
         );
       },
     );

@@ -14,7 +14,7 @@ class MintaItem {
     this.tipe = 'BJ',
     required this.qty,
     this.keterangan,
-    this.status = 'Display', // <-- DEFAULT
+    this.status = 'DISPLAY', // <-- DEFAULT
   });
 
   Map<String, dynamic> toJson() {

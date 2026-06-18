@@ -37,6 +37,8 @@ import '../screens/mutasi_in_form_screen.dart';
 import '../screens/mutasi_in_form_screen.dart';
 import '../screens/posting_penjualan_list_screen.dart';
 import '../screens/barcode_custom_screen.dart';
+import '../screens/return_by_item_screen.dart';
+import '../screens/omset_screen.dart';
 
 class AppRoutes {
   static const String dashboard = '/dashboard';
@@ -63,6 +65,7 @@ class AppRoutes {
   static const String setoran = '/reports/setoran';
   static const String lapStock = '/reports/lap-stock';
   static const String stockSetengahJadi = '/reports/stock-setengah-jadi';
+  static const String returnByItem = '/reports/return-by-item';
 
   static const String mintaList = '/minta-list';
   static const String mintaForm = '/minta-form';
@@ -102,6 +105,8 @@ class AppRoutes {
 
   static const String barcodeCustom = '/barcode-custom';
 
+  static const String omset = '/reports/omset';
+
   static Map<String, WidgetBuilder> get routes {
     return {
       dashboard: (context) => DashboardScreen(),
@@ -140,6 +145,7 @@ class AppRoutes {
       lapStock: (context) => StockReportScreen(),
       stockSetengahJadi: (context) => SetengahJadiStockReportScreen(),
       mintaReport: (context) => MintaReportScreen(),
+      returnByItem: (context) => const ReturnByItemScreen(),
 
       barcodeCustom: (context) => BarcodeCustomScreen(),
 
@@ -150,6 +156,8 @@ class AppRoutes {
       userPermissions: (context) => UserPermissionScreen(),
 
       koreksiList: (context) => KoreksiListScreen(),
+
+      omset: (context) => const OmsetScreen(),
 
       // stockInForm: (context) => MutasiInFormScreen(
       //   onMutasiInSaved: () {},

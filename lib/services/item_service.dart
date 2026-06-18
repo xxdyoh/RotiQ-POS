@@ -267,4 +267,25 @@ class ItemService {
       };
     }
   }
+
+  static Future<List<Map<String, dynamic>>> loadPermintaanDisplay(String tanggal) async {
+    try {
+      final url = '$baseUrl/barcode/load-permintaan?tanggal=$tanggal';
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeadersWithCabang(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return List<Map<String, dynamic>>.from(data['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      throw Exception('Error: ${e.toString()}');
+    }
+  }
 }

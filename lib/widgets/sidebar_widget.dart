@@ -53,7 +53,9 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     AppRoutes.mintaReport: 'frmLapPermintaan',
     AppRoutes.serahTerimaList: 'frmSTBJ',
     AppRoutes.mintaList: 'frmPermintaanBarang',
-    AppRoutes.postingPenjualanList: 'frmPostingPenjualan'
+    AppRoutes.postingPenjualanList: 'frmPostingPenjualan',
+    AppRoutes.returnByItem: 'frmReturItem',
+    AppRoutes.omset: 'frmLapOmset'
   };
 
   final Color _primaryDark = const Color(0xFF2C3E50);
@@ -430,6 +432,12 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         indent: true,
       ),
       _buildMenuItem(
+        icon: Icons.trending_up_rounded,
+        label: 'Laporan Omset',
+        routeName: AppRoutes.omset,
+        indent: true,
+      ),
+      _buildMenuItem(
         icon: Icons.list_alt_rounded,
         label: 'List SO',
         routeName: AppRoutes.salesOrderList,
@@ -439,6 +447,12 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         icon: Icons.assignment_return_rounded,
         label: 'Return Production',
         routeName: AppRoutes.returnProductionList,
+        indent: true,
+      ),
+      _buildMenuItem(
+        icon: Icons.assignment_return_rounded,
+        label: 'Return by Item',
+        routeName: AppRoutes.returnByItem,
         indent: true,
       ),
       _buildMenuItem(

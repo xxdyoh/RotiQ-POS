@@ -1,16 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
 import '../services/api_service.dart';
 import '../services/session_manager.dart';
 import '../models/user.dart';
 import '../routes/app_routes.dart';
 import '../models/cabang_model.dart';
 import '../services/pengumuman_service.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -38,7 +38,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   List<Map<String, dynamic>> _pengumuman = [];
   bool _loadingPengumuman = true;
 
-  // Colors - Clean Modern
+  // ✅ CERTIFICATE MODE
+  bool _isCertMode = false;
+  bool _isSuperAdmin = false;
+  String? _certCabangKode;
+  String? _certDeviceName;
+  bool _isCheckingCert = true;
+
   static const Color _primary = Color(0xFF1E293B);
   static const Color _primaryLight = Color(0xFF334155);
   static const Color _accent = Color(0xFFF59E0B);
@@ -74,6 +80,42 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Future<void> _loadInitialData() async {
     await Future.wait([_loadCabangList(), _loadPengumuman()]);
+    await _checkCertificateMode();
+  }
+
+  // ========== CERTIFICATE CHECK ==========
+  Future<void> _checkCertificateMode() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiService.baseUrl}/auth/cert-info'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && mounted) {
+          final certData = data['data'];
+          setState(() {
+            _isCertMode = true;
+            _certCabangKode = certData['cabang_kode'];
+            _isSuperAdmin = certData['is_super'] == true;
+            _certDeviceName = certData['device_name'];
+
+            // Auto-select cabang dari certificate
+            if (!_isSuperAdmin && _cabangList.isNotEmpty) {
+              _selectedCabang = _cabangList.firstWhere(
+                    (c) => c.kode == _certCabangKode,
+                orElse: () => _cabangList.first,
+              );
+            }
+          });
+        }
+      }
+    } catch (e) {
+      // No certificate → normal login
+      if (mounted) setState(() => _isCertMode = false);
+    } finally {
+      if (mounted) setState(() => _isCheckingCert = false);
+    }
   }
 
   Future<void> _loadCabangList() async {
@@ -83,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       if (mounted) {
         setState(() {
           _cabangList = cabangList;
-          if (cabangList.isNotEmpty) {
+          if (cabangList.isNotEmpty && !_isCertMode) {
             _selectedCabang = cabangList.first;
             _resetForm();
           }
@@ -142,7 +184,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Future<void> _login() async {
     if (_selectedCabang == null) { _toast('Pilih cabang', true); return; }
-    if (_isPusat) {
+
+    if (_isCertMode) {
+      // Certificate mode: hanya perlu PIN
+      if (_pin.isEmpty) { _toast('PIN harus diisi', true); return; }
+    } else if (_isPusat) {
       if (_usernameController.text.isEmpty) { _toast('Username harus diisi', true); return; }
       if (_passwordController.text.isEmpty) { _toast('Password harus diisi', true); return; }
     } else {
@@ -152,10 +198,20 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     setState(() => _isLoading = true);
     try {
       final data = <String, dynamic>{'cbg_kode': _selectedCabang!.kode};
-      if (_isPusat) { data['username'] = _usernameController.text; data['password'] = _passwordController.text; }
-      else { data['pin'] = _pin; }
 
+      if (_isCertMode) {
+        data['pin'] = _pin;
+      } else if (_isPusat) {
+        data['username'] = _usernameController.text;
+        data['password'] = _passwordController.text;
+      } else {
+        data['pin'] = _pin;
+      }
+
+      // ✅ Gunakan endpoint berbeda untuk cert mode
+      final url = _isCertMode ? '/auth/login' : '/login';
       final result = await ApiService.loginWithData(data);
+
       if (result['success']) {
         final user = result['user'] as User;
         SessionManager.saveSession(result['token'], user, _selectedCabang!, permissions: result['permissions']);
@@ -202,6 +258,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     final size = MediaQuery.of(context).size;
     final isWide = size.width > 900;
 
+    if (_isCheckingCert) {
+      return Scaffold(
+        body: Center(
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 2, color: _accent)),
+            const SizedBox(height: 16),
+            Text('Memeriksa koneksi...', style: GoogleFonts.inter(fontSize: 12, color: _textSecondary)),
+          ]),
+        ),
+      );
+    }
+
     return Scaffold(
       body: FadeTransition(
         opacity: _fadeAnim,
@@ -214,7 +282,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   Widget _buildWideLayout(Size size) {
     return Row(
       children: [
-        // LEFT PANEL - Branding + Pengumuman
         Container(
           width: size.width * 0.35,
           decoration: const BoxDecoration(
@@ -227,68 +294,41 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Spacer(flex: 2),
-
-                  // Logo kecil
                   Row(
                     children: [
-                      Container(
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
-                        child: const Icon(Icons.point_of_sale_rounded, size: 22, color: Colors.white),
-                      ),
+                      Container(width: 40, height: 40, decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.point_of_sale_rounded, size: 22, color: Colors.white)),
                       const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('ROTI-Q', style: GoogleFonts.montserrat(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1)),
-                          Text('POS System', style: GoogleFonts.inter(fontSize: 10, color: Colors.white.withOpacity(0.7))),
-                        ],
-                      ),
+                      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('ROTI-Q', style: GoogleFonts.montserrat(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1)),
+                        Text('POS System', style: GoogleFonts.inter(fontSize: 10, color: Colors.white.withOpacity(0.7))),
+                      ]),
                     ],
                   ),
                   const SizedBox(height: 36),
-
-                  // Pengumuman
                   if (!_loadingPengumuman && _pengumuman.isNotEmpty) ...[
-                    Row(
-                      children: [
-                        Container(width: 3, height: 16, decoration: BoxDecoration(color: _accent, borderRadius: BorderRadius.circular(2))),
-                        const SizedBox(width: 8),
-                        Text('Pengumuman', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.9))),
-                      ],
-                    ),
+                    Row(children: [
+                      Container(width: 3, height: 16, decoration: BoxDecoration(color: _accent, borderRadius: BorderRadius.circular(2))),
+                      const SizedBox(width: 8),
+                      Text('Pengumuman', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.9))),
+                    ]),
                     const SizedBox(height: 12),
                     ...List.generate(_pengumuman.length > 3 ? 3 : _pengumuman.length, (i) {
                       final p = _pengumuman[i];
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white.withOpacity(0.1)),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(_pengumumanIcon(p['tipe']), size: 14, color: _pengumumanColor(p['tipe'])),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(p['judul'] ?? '', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                  if (p['isi'] != null && p['isi'].toString().isNotEmpty)
-                                    Text(p['isi'], style: GoogleFonts.inter(fontSize: 10, color: Colors.white.withOpacity(0.7)), maxLines: 2, overflow: TextOverflow.ellipsis),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white.withOpacity(0.1))),
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Icon(_pengumumanIcon(p['tipe']), size: 14, color: _pengumumanColor(p['tipe'])),
+                          const SizedBox(width: 8),
+                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(p['judul'] ?? '', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            if (p['isi'] != null && p['isi'].toString().isNotEmpty) Text(p['isi'], style: GoogleFonts.inter(fontSize: 10, color: Colors.white.withOpacity(0.7)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                          ])),
+                        ]),
                       );
                     }),
                   ],
-
                   const Spacer(flex: 3),
                   Text('© 2024 ROTI-Q', style: GoogleFonts.inter(fontSize: 10, color: Colors.white.withOpacity(0.4))),
                 ],
@@ -296,8 +336,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             ),
           ),
         ),
-
-        // RIGHT PANEL - Form
         Expanded(
           child: Container(
             color: _bg,
@@ -312,23 +350,34 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     children: [
                       Text('Selamat Datang', style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w700, color: _textPrimary)),
                       const SizedBox(height: 4),
-                      Text('Silakan pilih cabang untuk masuk', style: GoogleFonts.inter(fontSize: 13, color: _textSecondary)),
+                      Text(_isCertMode ? 'Login dengan certificate' : 'Silakan pilih cabang untuk masuk', style: GoogleFonts.inter(fontSize: 13, color: _textSecondary)),
                       const SizedBox(height: 28),
+
+                      // ✅ CERTIFICATE INFO BADGE
+                      if (_isCertMode) ...[
+                        _buildCertBadge(),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Cabang Selector
                       _buildCabangSelector(),
                       const SizedBox(height: 20),
-    if (_isPusat) ...[
-    _buildInput('Username', _usernameController, Icons.person_rounded, onSuffix: _showUserModal, suffix: Icons.arrow_drop_down_rounded),
-    const SizedBox(height: 14),
-    _buildInput('Password', _passwordController, Icons.lock_rounded, obscure: !_showPassword, onSuffix: () => setState(() => _showPassword = !_showPassword), suffix: _showPassword ? Icons.visibility_off_rounded : Icons.visibility_rounded),
-    const SizedBox(height: 24),
-    _buildLoginButton(), // ← TAMBAHKAN INI
-    ] else ...[
+
+                      // Form
+                      if (_isPusat && !_isCertMode) ...[
+                        _buildInput('Username', _usernameController, Icons.person_rounded, onSuffix: _showUserModal, suffix: Icons.arrow_drop_down_rounded),
+                        const SizedBox(height: 14),
+                        _buildInput('Password', _passwordController, Icons.lock_rounded, obscure: !_showPassword, onSuffix: () => setState(() => _showPassword = !_showPassword), suffix: _showPassword ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                        const SizedBox(height: 24),
+                        _buildLoginButton(),
+                      ] else ...[
                         _buildPinDisplay(),
                         const SizedBox(height: 24),
                         _buildNumpad(),
                         const SizedBox(height: 16),
                       ],
-                      if (_isLoading) const Padding(padding: EdgeInsets.only(top: 12), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: _accent)))),                    ],
+                      if (_isLoading) const Padding(padding: EdgeInsets.only(top: 12), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: _accent)))),
+                    ],
                   ),
                 ),
               ),
@@ -353,77 +402,51 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Logo kecil + pengumuman
-                  Row(
-                    children: [
-                      Container(
-                        width: 36, height: 36,
-                        decoration: BoxDecoration(color: _primary, borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.point_of_sale_rounded, size: 20, color: Colors.white),
-                      ),
-                      const SizedBox(width: 10),
-                      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('ROTI-Q', style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w800, color: _textPrimary)),
-                        Text('POS System', style: GoogleFonts.inter(fontSize: 9, color: _textMuted)),
-                      ]),
-                      const Spacer(),
-                      if (!_loadingPengumuman && _pengumuman.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(color: _accent.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                          child: Text('${_pengumuman.length} info', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: _accent)),
-                        ),
-                    ],
-                  ),
-
-                  // Pengumuman horizontal
+                  Row(children: [
+                    Container(width: 36, height: 36, decoration: BoxDecoration(color: _primary, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.point_of_sale_rounded, size: 20, color: Colors.white)),
+                    const SizedBox(width: 10),
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('ROTI-Q', style: GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w800, color: _textPrimary)),
+                      Text('POS System', style: GoogleFonts.inter(fontSize: 9, color: _textMuted)),
+                    ]),
+                    const Spacer(),
+                    if (!_loadingPengumuman && _pengumuman.isNotEmpty)
+                      Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: _accent.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Text('${_pengumuman.length} info', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: _accent))),
+                  ]),
                   if (!_loadingPengumuman && _pengumuman.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    SizedBox(
-                      height: 80,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _pengumuman.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
-                        itemBuilder: (_, i) {
-                          final p = _pengumuman[i];
-                          return Container(
-                            width: 240,
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: _border)),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(_pengumumanIcon(p['tipe']), size: 14, color: _pengumumanColor(p['tipe'])),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                    Text(p['judul'] ?? '', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: _textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                    if (p['isi'] != null && p['isi'].toString().isNotEmpty)
-                                      Text(p['isi'], style: GoogleFonts.inter(fontSize: 9, color: _textSecondary), maxLines: 2, overflow: TextOverflow.ellipsis),
-                                  ]),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
+                    SizedBox(height: 80, child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: _pengumuman.length, separatorBuilder: (_, __) => const SizedBox(width: 8), itemBuilder: (_, i) {
+                      final p = _pengumuman[i];
+                      return Container(width: 240, padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: _border)), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Icon(_pengumumanIcon(p['tipe']), size: 14, color: _pengumumanColor(p['tipe'])),
+                        const SizedBox(width: 6),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(p['judul'] ?? '', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: _textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          if (p['isi'] != null && p['isi'].toString().isNotEmpty) Text(p['isi'], style: GoogleFonts.inter(fontSize: 9, color: _textSecondary), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        ])),
+                      ]));
+                    })),
                   ],
-
                   const SizedBox(height: 24),
                   Text('Selamat Datang', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: _textPrimary)),
                   const SizedBox(height: 2),
-                  Text('Silakan pilih cabang untuk masuk', style: GoogleFonts.inter(fontSize: 12, color: _textSecondary)),
+                  Text(_isCertMode ? 'Login dengan certificate' : 'Silakan pilih cabang untuk masuk', style: GoogleFonts.inter(fontSize: 12, color: _textSecondary)),
                   const SizedBox(height: 20),
+
+                  // ✅ CERTIFICATE INFO BADGE
+                  if (_isCertMode) ...[
+                    _buildCertBadge(),
+                    const SizedBox(height: 16),
+                  ],
+
                   _buildCabangSelector(),
                   const SizedBox(height: 18),
-                  if (_isPusat) ...[
+                  if (_isPusat && !_isCertMode) ...[
                     _buildInput('Username', _usernameController, Icons.person_rounded, onSuffix: _showUserModal, suffix: Icons.arrow_drop_down_rounded),
                     const SizedBox(height: 12),
                     _buildInput('Password', _passwordController, Icons.lock_rounded, obscure: !_showPassword, onSuffix: () => setState(() => _showPassword = !_showPassword), suffix: _showPassword ? Icons.visibility_off_rounded : Icons.visibility_rounded),
                     const SizedBox(height: 20),
-                    _buildLoginButton(), // ← TAMBAHKAN INI
+                    _buildLoginButton(),
                   ] else ...[
                     _buildPinDisplay(),
                     const SizedBox(height: 20),
@@ -441,14 +464,63 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     );
   }
 
+  // ========== CERTIFICATE BADGE ==========
+  Widget _buildCertBadge() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _accentMint.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _accentMint.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38, height: 38,
+            decoration: BoxDecoration(
+              color: _accentMint.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.verified_user_rounded, size: 20, color: _accentMint),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _certDeviceName ?? 'Device Terverifikasi',
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: _textPrimary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _isSuperAdmin ? 'Super Admin — Bisa memilih semua cabang' : 'Cabang: ${_selectedCabang?.nama ?? _certCabangKode}',
+                  style: GoogleFonts.inter(fontSize: 11, color: _accentMint),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.check_circle_rounded, size: 20, color: _accentMint),
+        ],
+      ),
+    );
+  }
+
   // ========== CABANG SELECTOR ==========
   Widget _buildCabangSelector() {
+    final isLocked = _isCertMode && !_isSuperAdmin; // ✅ LOCKED jika cert mode & bukan super admin
+
     return InkWell(
-      onTap: _showCabangModal,
+      onTap: isLocked ? null : _showCabangModal,
       borderRadius: BorderRadius.circular(10),
       child: Container(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: _border), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4)]),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isLocked ? _accentMint : _border, width: isLocked ? 1.5 : 1),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4)],
+        ),
         child: Row(children: [
           Container(
             width: 42, height: 42,
@@ -465,7 +537,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               if (_selectedCabang != null) Text('${_selectedCabang!.kode} • ${_selectedCabang!.jenis.toUpperCase()}', style: GoogleFonts.inter(fontSize: 11, color: _textSecondary)),
             ]),
           ),
-          Icon(Icons.keyboard_arrow_down_rounded, color: _accent, size: 22),
+          if (isLocked)
+            Icon(Icons.lock_rounded, color: _accentMint, size: 18)
+          else
+            Icon(Icons.keyboard_arrow_down_rounded, color: _accent, size: 22),
         ]),
       ),
     );
@@ -504,20 +579,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     borderRadius: BorderRadius.circular(10),
                     child: InkWell(
                       onTap: () {
-                        final prev = _selectedCabang;
                         setState(() => _selectedCabang = c);
-                        if (prev == null || prev.kode != c.kode) _resetForm();
+                        _resetForm();
                         Navigator.pop(context);
                       },
                       borderRadius: BorderRadius.circular(10),
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Row(children: [
-                          Container(
-                            width: 38, height: 38,
-                            decoration: BoxDecoration(color: _cabangColor(c.jenis).withOpacity(sel ? 1 : 0.1), borderRadius: BorderRadius.circular(8)),
-                            child: Icon(_cabangIcon(c.jenis), size: 16, color: sel ? Colors.white : _cabangColor(c.jenis)),
-                          ),
+                          Container(width: 38, height: 38, decoration: BoxDecoration(color: _cabangColor(c.jenis).withOpacity(sel ? 1 : 0.1), borderRadius: BorderRadius.circular(8)), child: Icon(_cabangIcon(c.jenis), size: 16, color: sel ? Colors.white : _cabangColor(c.jenis))),
                           const SizedBox(width: 12),
                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text(c.nama, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: _textPrimary)),
@@ -548,25 +618,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         decoration: const BoxDecoration(color: _surface, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _border))),
-              child: Row(children: [
-                const Icon(Icons.people_rounded, size: 20, color: _primary),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Pilih User', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600, color: _textPrimary))),
-                IconButton(icon: const Icon(Icons.close, size: 18, color: _textSecondary), onPressed: () => Navigator.pop(context)),
-              ]),
-            ),
+            Container(padding: const EdgeInsets.all(16), decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _border))), child: Row(children: [
+              const Icon(Icons.people_rounded, size: 20, color: _primary), const SizedBox(width: 8),
+              Expanded(child: Text('Pilih User', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600, color: _textPrimary))),
+              IconButton(icon: const Icon(Icons.close, size: 18, color: _textSecondary), onPressed: () => Navigator.pop(context)),
+            ])),
             Expanded(
-              child: _isLoadingUsers
-                  ? const Center(child: CircularProgressIndicator())
-                  : _usersList.isEmpty
+              child: _isLoadingUsers ? const Center(child: CircularProgressIndicator()) : _usersList.isEmpty
                   ? Center(child: Text('Tidak ada user', style: GoogleFonts.inter(color: _textSecondary)))
                   : ListView.separated(
-                padding: const EdgeInsets.all(12),
-                itemCount: _usersList.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 4),
+                padding: const EdgeInsets.all(12), itemCount: _usersList.length, separatorBuilder: (_, __) => const SizedBox(height: 4),
                 itemBuilder: (_, i) {
                   final u = _usersList[i];
                   return ListTile(
@@ -584,40 +645,24 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     );
   }
 
-  // ========== HELPERS ==========
   Color _pengumumanColor(String? tipe) {
-    switch (tipe) {
-      case 'success': return _accentMint;
-      case 'warning': return _accent;
-      case 'danger': return _accentRed;
-      default: return _accentBlue;
-    }
+    switch (tipe) { case 'success': return _accentMint; case 'warning': return _accent; case 'danger': return _accentRed; default: return _accentBlue; }
   }
 
   IconData _pengumumanIcon(String? tipe) {
-    switch (tipe) {
-      case 'success': return Icons.check_circle_rounded;
-      case 'warning': return Icons.warning_rounded;
-      case 'danger': return Icons.error_rounded;
-      default: return Icons.info_rounded;
-    }
+    switch (tipe) { case 'success': return Icons.check_circle_rounded; case 'warning': return Icons.warning_rounded; case 'danger': return Icons.error_rounded; default: return Icons.info_rounded; }
   }
 
-  // ========== FORM WIDGETS ==========
   Widget _buildInput(String label, TextEditingController ctrl, IconData icon, {bool obscure = false, VoidCallback? onTap, VoidCallback? onSuffix, IconData? suffix}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: _textSecondary)),
-      const SizedBox(height: 4),
-      TextField(
-        controller: ctrl, obscureText: obscure, readOnly: false, onTap: onTap,
-        style: GoogleFonts.inter(fontSize: 13, color: _textPrimary),
+      Text(label, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: _textSecondary)), const SizedBox(height: 4),
+      TextField(controller: ctrl, obscureText: obscure, readOnly: false, onTap: onTap, style: GoogleFonts.inter(fontSize: 13, color: _textPrimary),
         decoration: InputDecoration(
           prefixIcon: Icon(icon, size: 18, color: _accent),
           suffixIcon: suffix != null ? InkWell(onTap: onSuffix, child: Icon(suffix, size: 18, color: _textSecondary)) : null,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _border)),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _accent, width: 1.5)),
-          filled: true, fillColor: _surface,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          filled: true, fillColor: _surface, contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         ),
       ),
     ]);
@@ -628,45 +673,28 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
       decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: _isError ? _accentRed : _border, width: _isError ? 2 : 1)),
       child: Row(children: [
-        Expanded(
-          child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
-            ...List.generate(_pin.length, (i) => Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              width: 26, height: 36,
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Text(_showPin ? _pin[i] : '•', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: _textPrimary)),
-                const SizedBox(height: 2),
-                Container(height: 2, decoration: BoxDecoration(color: _accent, borderRadius: BorderRadius.circular(1))),
-              ]),
-            )),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              width: 26, height: 36,
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Text('_', style: GoogleFonts.inter(fontSize: 18, color: _border)),
-                const SizedBox(height: 2),
-                Container(height: 2, decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(1))),
-              ]),
-            ),
+        Expanded(child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
+          ...List.generate(_pin.length, (i) => Container(margin: const EdgeInsets.symmetric(horizontal: 4), width: 26, height: 36, child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(_showPin ? _pin[i] : '•', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: _textPrimary)),
+            const SizedBox(height: 2), Container(height: 2, decoration: BoxDecoration(color: _accent, borderRadius: BorderRadius.circular(1))),
+          ]))),
+          Container(margin: const EdgeInsets.symmetric(horizontal: 4), width: 26, height: 36, child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text('_', style: GoogleFonts.inter(fontSize: 18, color: _border)),
+            const SizedBox(height: 2), Container(height: 2, decoration: BoxDecoration(color: _border, borderRadius: BorderRadius.circular(1))),
           ])),
-        ),
+        ]))),
         InkWell(onTap: _togglePin, child: Container(width: 30, height: 30, decoration: BoxDecoration(color: _bg, borderRadius: BorderRadius.circular(15)), child: Icon(_showPin ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 14, color: _textSecondary))),
       ]),
     );
   }
 
   Widget _buildNumpad() {
-    return Column(
-      children: [
-        _numpadRow(['1', '2', '3']),
-        const SizedBox(height: 8),
-        _numpadRow(['4', '5', '6']),
-        const SizedBox(height: 8),
-        _numpadRow(['7', '8', '9']),
-        const SizedBox(height: 8),
-        _numpadRow(['del', '0', 'go']),
-      ],
-    );
+    return Column(children: [
+      _numpadRow(['1', '2', '3']), const SizedBox(height: 8),
+      _numpadRow(['4', '5', '6']), const SizedBox(height: 8),
+      _numpadRow(['7', '8', '9']), const SizedBox(height: 8),
+      _numpadRow(['del', '0', 'go']),
+    ]);
   }
 
   Widget _numpadRow(List<String> keys) {
@@ -678,53 +706,17 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   Widget _numpadDigit(String d) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _addDigit(d),
-          borderRadius: BorderRadius.circular(30),
-          child: Container(
-            width: 52, height: 52,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: _surface, border: Border.all(color: _border, width: 1.5), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))]),
-            child: Center(child: Text(d, style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: _textPrimary))),
-          ),
-        ),
-      ),
-    );
+    return Container(margin: const EdgeInsets.symmetric(horizontal: 10), child: Material(color: Colors.transparent, child: InkWell(onTap: () => _addDigit(d), borderRadius: BorderRadius.circular(30), child: Container(width: 52, height: 52, decoration: BoxDecoration(shape: BoxShape.circle, color: _surface, border: Border.all(color: _border, width: 1.5), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))]), child: Center(child: Text(d, style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: _textPrimary)))))));
   }
 
   Widget _numpadBtn(IconData icon, VoidCallback onTap, {Color? bg, Color? fg}) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(30),
-          child: Container(
-            width: 52, height: 52,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: bg ?? Colors.transparent, border: Border.all(color: bg ?? _border, width: 1.5)),
-            child: Center(child: Icon(icon, size: 20, color: fg ?? _textSecondary)),
-          ),
-        ),
-      ),
-    );
+    return Container(margin: const EdgeInsets.symmetric(horizontal: 10), child: Material(color: Colors.transparent, child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(30), child: Container(width: 52, height: 52, decoration: BoxDecoration(shape: BoxShape.circle, color: bg ?? Colors.transparent, border: Border.all(color: bg ?? _border, width: 1.5)), child: Center(child: Icon(icon, size: 20, color: fg ?? _textSecondary))))));
   }
 
   Widget _buildLoginButton() {
-    return SizedBox(
-      height: 44,
-      child: ElevatedButton(
-        onPressed: _login,
-        style: ElevatedButton.styleFrom(backgroundColor: _primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 2),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.lock_open_rounded, size: 15),
-          const SizedBox(width: 8),
-          Text('LOGIN', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-        ]),
-      ),
-    );
+    return SizedBox(height: 44, child: ElevatedButton(onPressed: _login, style: ElevatedButton.styleFrom(backgroundColor: _primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 2), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      const Icon(Icons.lock_open_rounded, size: 15), const SizedBox(width: 8),
+      Text('LOGIN', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+    ])));
   }
 }

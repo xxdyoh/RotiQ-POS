@@ -9,6 +9,9 @@ import '../models/user.dart';
 import '../services/receipt_service.dart';
 import '../widgets/base_layout.dart';
 import '../services/universal_printer_service.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class TutupKasirFormScreen extends StatefulWidget {
   final VoidCallback onTutupKasirSuccess;
@@ -383,31 +386,190 @@ class _TutupKasirFormScreenState extends State<TutupKasirFormScreen> with Single
 
   Future<void> _printStrukTutupKasir() async {
     try {
+      // Coba thermal printer dulu
       final result = await TutupKasirService.getStrukTutupKasir(
-          _selectedDate,
-          _currentUser!.kduser,
-          _currentUser!.nmuser
+        _selectedDate,
+        _currentUser!.kduser,
+        _currentUser!.nmuser,
       );
 
       if (result['success']) {
         final data = result['data'];
-        final success = await UniversalPrinterService().printStrukTutupKasir(
-          mainData: data['main'] as Map<String, dynamic>,
-          payments: data['payments'] as List<dynamic>,
-          biaya: data['biaya'] as List<dynamic>,
-          pendapatan: data['pendapatan'] as List<dynamic>,
-          uangMuka: data['uangMuka'] as List<dynamic>,
-        );
 
-        if (!success) {
-          _showToast('Gagal print struk, tetapi tutup kasir berhasil', type: ToastType.info);
+        // Cek apakah printer thermal tersedia
+        final printerService = UniversalPrinterService();
+        if (printerService.isConnected) {
+          // Print ke thermal
+          final success = await printerService.printStrukTutupKasir(
+            mainData: data['main'] as Map<String, dynamic>,
+            payments: data['payments'] as List<dynamic>,
+            biaya: data['biaya'] as List<dynamic>,
+            pendapatan: data['pendapatan'] as List<dynamic>,
+            uangMuka: data['uangMuka'] as List<dynamic>,
+          );
+          if (success) return; // Berhasil print thermal
         }
-      } else {
-        _showToast('Gagal mengambil data struk: ${result['message']}', type: ToastType.info);
+
+        // Fallback: print via web PDF
+        await _printStrukTutupKasirPdf();
       }
     } catch (e) {
       _showToast('Error print struk: ${e.toString()}', type: ToastType.info);
     }
+  }
+
+  Future<void> _printStrukTutupKasirPdf() async {
+    try {
+      final result = await TutupKasirService.getStrukTutupKasir(
+        _selectedDate,
+        _currentUser!.kduser,
+        _currentUser!.nmuser,
+      );
+
+      if (result['success'] != true) {
+        _showToast('Gagal mengambil data struk', type: ToastType.error);
+        return;
+      }
+
+      final data = result['data'];
+      final mainData = data['main'] as Map<String, dynamic>;
+      final payments = data['payments'] as List<dynamic>;
+      final biaya = data['biaya'] as List<dynamic>;
+      final pendapatan = data['pendapatan'] as List<dynamic>;
+      final uangMuka = data['uangMuka'] as List<dynamic>;
+
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.roll80,
+          margin: const pw.EdgeInsets.all(8),
+          build: (context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // Header
+                pw.Center(child: pw.Text('ROTI-Q', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
+                pw.Center(child: pw.Text('Setoran Kasir', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+                pw.SizedBox(height: 8),
+
+                // Info
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Text('Tanggal', style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text(_formatDate(DateTime.tryParse(mainData['tanggal']?.toString() ?? '') ?? DateTime.now()), style: const pw.TextStyle(fontSize: 9)),
+                ]),
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Text('Kasir', style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text(mainData['nmkasir']?.toString() ?? '-', style: const pw.TextStyle(fontSize: 9)),
+                ]),
+                pw.Divider(thickness: 1),
+
+                // Penjualan
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Text('Cash', style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text(_formatCurrencyInt(_safeToInt(mainData['cash'])), style: const pw.TextStyle(fontSize: 9)),
+                ]),
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Text('Card', style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text(_formatCurrencyInt(_safeToInt(mainData['card'])), style: const pw.TextStyle(fontSize: 9)),
+                ]),
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Text('Piutang', style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text(_formatCurrencyInt(_safeToInt(mainData['other'])), style: const pw.TextStyle(fontSize: 9)),
+                ]),
+                pw.Divider(thickness: 1),
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Text('Total Penjualan', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(_formatCurrencyInt(_safeToInt(mainData['cash']) + _safeToInt(mainData['card']) + _safeToInt(mainData['other'])),
+                      style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                ]),
+                pw.SizedBox(height: 8),
+
+                // Payment Details
+                if (payments.isNotEmpty) ...[
+                  pw.Text('Pembayaran', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                  ...payments.map((p) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                    pw.Text(p['keterangan']?.toString() ?? '-', style: const pw.TextStyle(fontSize: 8)),
+                    pw.Text(_formatCurrencyInt(_safeToInt(p['jumlah'])), style: const pw.TextStyle(fontSize: 8)),
+                  ])),
+                  pw.SizedBox(height: 4),
+                ],
+
+                // Uang Muka
+                if (uangMuka.isNotEmpty) ...[
+                  pw.Text('Uang Muka', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                  ...uangMuka.map((um) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                    pw.Expanded(child: pw.Text('${um['rek_nama'] ?? ''} ${um['jurd_keterangan'] ?? ''}', style: const pw.TextStyle(fontSize: 8))),
+                    pw.Text(_formatCurrencyInt(_safeToInt(um['jurd_debet'])), style: const pw.TextStyle(fontSize: 8)),
+                  ])),
+                  pw.SizedBox(height: 4),
+                ],
+
+                // Biaya
+                if (biaya.isNotEmpty) ...[
+                  pw.Text('Biaya', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                  ...biaya.map((b) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                    pw.Expanded(child: pw.Text('${b['rek_nama'] ?? ''} ${b['jurd_keterangan'] ?? ''}', style: const pw.TextStyle(fontSize: 8))),
+                    pw.Text(_formatCurrencyInt(_safeToInt(b['jurd_debet'])), style: const pw.TextStyle(fontSize: 8)),
+                  ])),
+                  pw.SizedBox(height: 4),
+                ],
+
+                // Pendapatan
+                if (pendapatan.isNotEmpty) ...[
+                  pw.Text('Pendapatan Lain', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                  ...pendapatan.map((p) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                    pw.Expanded(child: pw.Text('${p['rek_nama'] ?? ''} ${p['jurd_keterangan'] ?? ''}', style: const pw.TextStyle(fontSize: 8))),
+                    pw.Text(_formatCurrencyInt(_safeToInt(p['jurd_kredit'])), style: const pw.TextStyle(fontSize: 8)),
+                  ])),
+                  pw.SizedBox(height: 4),
+                ],
+
+                pw.Divider(thickness: 1),
+
+                // Setoran & Selisih
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Text('Setoran', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(_formatCurrencyInt(_safeToInt(mainData['setoran'])), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                ]),
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Text('Selisih', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(_formatCurrencyInt(_safeToInt(mainData['selisih'])), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                ]),
+                pw.SizedBox(height: 12),
+                pw.Center(child: pw.Text('Terima kasih', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
+              ],
+            );
+          },
+        ),
+      );
+
+      // Print via web
+      await Printing.layoutPdf(
+        onLayout: (format) async => pdf.save(),
+        name: 'Tutup_Kasir_${DateFormat('yyyyMMdd').format(_selectedDate)}.pdf',
+        usePrinterSettings: true,
+      );
+    } catch (e) {
+      debugPrint('Print PDF error: $e');
+      _showToast('Gagal print PDF: ${e.toString()}', type: ToastType.info);
+    }
+  }
+
+  String _formatCurrencyInt(int amount) {
+    return 'Rp ${amount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}';
+  }
+
+  int _safeToInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.round();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
   @override

@@ -159,9 +159,13 @@ class DashboardResponse {
   List<DashboardCategoryData> categories;
   List<DashboardKasirData> kasir;
   List<DashboardTopItem> topItems;
+  List<DashboardReturData> retur;
+  MultiSeriesReturData? multiSeriesRetur;
   final bool isAllCabang;
   final String groupBy;
   final List<Map<String, dynamic>> cabangList;
+  List<ReturItemData> returItems;
+  List<ReturItemSummaryData> returItemsSummary;
 
   DashboardResponse({
     required this.sales,
@@ -169,9 +173,13 @@ class DashboardResponse {
     required this.categories,
     required this.kasir,
     required this.topItems,
+    required this.retur,
+    this.multiSeriesRetur,
     required this.isAllCabang,
     required this.groupBy,
     required this.cabangList,
+    required this.returItems,
+    required this.returItemsSummary,
   });
 
   factory DashboardResponse.fromJson(Map<String, dynamic> json) {
@@ -184,9 +192,19 @@ class DashboardResponse {
       categories: (data['categories'] as List?)?.map((e) => DashboardCategoryData.fromJson(e)).toList() ?? [],
       kasir: (data['kasir'] as List?)?.map((e) => DashboardKasirData.fromJson(e)).toList() ?? [],
       topItems: (data['top_items'] as List?)?.map((e) => DashboardTopItem.fromJson(e)).toList() ?? [],
+      retur: (data['retur'] as List?)?.map((e) => DashboardReturData.fromJson(e)).toList() ?? [],
+      multiSeriesRetur: data['multi_series_retur'] != null
+          ? MultiSeriesReturData.fromJson(data['multi_series_retur'])
+          : null,
       isAllCabang: data['is_all_cabang'] ?? false,
       groupBy: data['group_by'] ?? 'day',
       cabangList: (data['cabang_list'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? [],
+      returItems: (data['retur_items'] as List?)
+          ?.map((e) => ReturItemData.fromJson(e))
+          .toList() ?? [],
+      returItemsSummary: (data['retur_items_summary'] as List?)
+          ?.map((e) => ReturItemSummaryData.fromJson(e))
+          .toList() ?? [],
     );
   }
 }
@@ -300,6 +318,74 @@ class ProduksiResponse {
       totalGram: (data['total_gram'] ?? 0).toDouble(),
       averageGram: (data['average_gram'] ?? 0).toDouble(),
       totalDays: (data['total_days'] ?? 0).toInt(),
+    );
+  }
+}
+
+class DashboardReturData {
+  final String label;
+  final double totalRetur;
+
+  DashboardReturData({required this.label, required this.totalRetur});
+
+  factory DashboardReturData.fromJson(Map<String, dynamic> json) {
+    return DashboardReturData(
+      label: json['label']?.toString() ?? '',
+      totalRetur: (json['total_retur'] ?? 0).toDouble(),
+    );
+  }
+}
+
+class MultiSeriesReturData {
+  final List<String> dates;
+  final List<Map<String, dynamic>> series;
+
+  MultiSeriesReturData({required this.dates, required this.series});
+
+  factory MultiSeriesReturData.fromJson(Map<String, dynamic> json) {
+    return MultiSeriesReturData(
+      dates: List<String>.from((json['dates'] ?? []).map((d) => d.toString())),
+      series: List<Map<String, dynamic>>.from(json['series'] ?? []),
+    );
+  }
+}
+
+class ReturItemData {
+  final String cabang;
+  final String itemName;
+  final int totalQty;
+
+  ReturItemData({
+    required this.cabang,
+    required this.itemName,
+    required this.totalQty,
+  });
+
+  factory ReturItemData.fromJson(Map<String, dynamic> json) {
+    return ReturItemData(
+      cabang: json['cabang_nama']?.toString() ?? '-',
+      itemName: json['item_name']?.toString() ?? '-',
+      totalQty: (json['total_qty'] ?? 0).toInt(),
+    );
+  }
+}
+
+class ReturItemSummaryData {
+  final String itemName;
+  final int totalQty;
+  final double totalNilai;
+
+  ReturItemSummaryData({
+    required this.itemName,
+    required this.totalQty,
+    required this.totalNilai,
+  });
+
+  factory ReturItemSummaryData.fromJson(Map<String, dynamic> json) {
+    return ReturItemSummaryData(
+      itemName: json['item_name']?.toString() ?? '-',
+      totalQty: (json['total_qty'] ?? 0).toInt(),
+      totalNilai: (json['total_nilai'] ?? 0).toDouble(),
     );
   }
 }

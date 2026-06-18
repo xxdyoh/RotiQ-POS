@@ -5,6 +5,11 @@ import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import '../services/sales_invoice_service.dart';
 import '../models/sales_invoice.dart';
 import '../widgets/base_layout.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:syncfusion_flutter_xlsio/xlsio.dart' hide Row, Border, Column;
+import 'package:universal_html/html.dart' as html;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class SalesByInvoiceScreen extends StatefulWidget {
   const SalesByInvoiceScreen({super.key});
@@ -104,6 +109,185 @@ class _SalesByInvoiceScreenState extends State<SalesByInvoiceScreen> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _exportToExcel() async {
+    try {
+      if (_invoices.isEmpty) {
+        _showSnackbar('Tidak ada data untuk di-export', Colors.red);
+        return;
+      }
+
+      final Workbook workbook = Workbook();
+      final Worksheet sheet = workbook.worksheets[0];
+      sheet.name = 'Sales by Invoice';
+
+      // ===== LEBAR KOLOM =====
+      sheet.getRangeByIndex(1, 1).columnWidth = 6;   // No
+      sheet.getRangeByIndex(1, 2).columnWidth = 18;  // Nomor
+      sheet.getRangeByIndex(1, 3).columnWidth = 14;  // Tanggal
+      sheet.getRangeByIndex(1, 4).columnWidth = 8;   // Meja
+      sheet.getRangeByIndex(1, 5).columnWidth = 15;  // Customer
+      sheet.getRangeByIndex(1, 6).columnWidth = 10;  // Durasi
+      sheet.getRangeByIndex(1, 7).columnWidth = 14;  // Amount
+      sheet.getRangeByIndex(1, 8).columnWidth = 12;  // Service
+      sheet.getRangeByIndex(1, 9).columnWidth = 10;  // Tax
+      sheet.getRangeByIndex(1, 10).columnWidth = 10; // Disc
+      sheet.getRangeByIndex(1, 11).columnWidth = 12; // Cash
+      sheet.getRangeByIndex(1, 12).columnWidth = 10; // Card
+      sheet.getRangeByIndex(1, 13).columnWidth = 10; // DP
+      sheet.getRangeByIndex(1, 14).columnWidth = 10; // EDC
+      sheet.getRangeByIndex(1, 15).columnWidth = 12; // Other Value
+      sheet.getRangeByIndex(1, 16).columnWidth = 12; // Other
+      sheet.getRangeByIndex(1, 17).columnWidth = 10; // Status
+      sheet.getRangeByIndex(1, 18).columnWidth = 12; // Promo
+      sheet.getRangeByIndex(1, 19).columnWidth = 12; // Kasir
+
+      // ===== PERIODE =====
+      final periodeRange = sheet.getRangeByIndex(1, 1, 1, 19);
+      periodeRange.merge();
+      periodeRange.setText(
+          'Periode: ${DateFormat('dd/MM/yyyy').format(_startDate!)} - ${DateFormat('dd/MM/yyyy').format(_endDate!)}');
+      periodeRange.cellStyle.fontSize = 11;
+      periodeRange.cellStyle.bold = true;
+      periodeRange.cellStyle.hAlign = HAlignType.left;
+      periodeRange.cellStyle.backColor = '#F1F5F9';
+
+      // ===== HEADER =====
+      int row = 3;
+      final headerRange = sheet.getRangeByIndex(row, 1, row, 19);
+      headerRange.cellStyle.backColor = '#2C3E50';
+      headerRange.cellStyle.fontColor = '#FFFFFF';
+      headerRange.cellStyle.bold = true;
+      headerRange.cellStyle.fontSize = 10;
+      headerRange.cellStyle.hAlign = HAlignType.center;
+      headerRange.cellStyle.vAlign = VAlignType.center;
+
+      final headers = [
+        'No', 'Nomor', 'Tanggal', 'Meja', 'Customer', 'Durasi',
+        'Amount', 'Service', 'Tax', 'Disc', 'Cash', 'Card', 'DP', 'EDC',
+        'Other Value', 'Other', 'Status', 'Promo', 'Kasir'
+      ];
+      for (int i = 0; i < headers.length; i++) {
+        sheet.getRangeByIndex(row, i + 1).setText(headers[i]);
+      }
+      row++;
+
+      // ===== DATA =====
+      final formatDate = DateFormat('dd/MM/yy HH:mm');
+      for (var invoice in _invoices) {
+        final values = [
+          (row - 3).toString(),
+          invoice.nomor,
+          _formatDateTime(invoice.tanggal),
+          invoice.meja,
+          invoice.customer.isNotEmpty ? invoice.customer : 'Umum',
+          invoice.duration,
+          invoice.amount,
+          invoice.serviceCharge,
+          invoice.tax,
+          invoice.discount,
+          invoice.cash,
+          invoice.card,
+          invoice.dp,
+          invoice.edc,
+          invoice.otherValue,
+          invoice.other,
+          invoice.statusOrder,
+          invoice.promo.isNotEmpty ? invoice.promo : '-',
+          invoice.kasir,
+        ];
+
+        for (int i = 0; i < values.length; i++) {
+          final cell = sheet.getRangeByIndex(row, i + 1);
+          if (values[i] is double || values[i] is int) {
+            cell.setNumber((values[i] as num).toDouble());
+          } else {
+            cell.setText(values[i].toString());
+          }
+        }
+
+        // Style
+        final dataRange = sheet.getRangeByIndex(row, 1, row, 19);
+        dataRange.cellStyle.fontSize = 9;
+        dataRange.cellStyle.vAlign = VAlignType.center;
+
+        // Alignment
+        sheet.getRangeByIndex(row, 1).cellStyle.hAlign = HAlignType.center;
+        sheet.getRangeByIndex(row, 4).cellStyle.hAlign = HAlignType.center;
+        sheet.getRangeByIndex(row, 6).cellStyle.hAlign = HAlignType.center;
+        sheet.getRangeByIndex(row, 17).cellStyle.hAlign = HAlignType.center;
+        for (int i = 7; i <= 15; i++) {
+          sheet.getRangeByIndex(row, i).cellStyle.hAlign = HAlignType.right;
+        }
+
+        // Warna discount
+        sheet.getRangeByIndex(row, 10).cellStyle.fontColor = '#EF4444';
+
+        if (row % 2 == 0) {
+          dataRange.cellStyle.backColor = '#F8FAFC';
+        }
+
+        row++;
+      }
+
+      // ===== TOTAL ROW =====
+      final totalRow = row;
+      final totalRange = sheet.getRangeByIndex(totalRow, 1, totalRow, 19);
+      totalRange.cellStyle.backColor = '#E9ECEF';
+      totalRange.cellStyle.bold = true;
+      totalRange.cellStyle.fontSize = 9;
+
+      sheet.getRangeByIndex(totalRow, 1).setText('');
+      sheet.getRangeByIndex(totalRow, 2).setText('TOTAL');
+      sheet.getRangeByIndex(totalRow, 2).cellStyle.hAlign = HAlignType.left;
+      sheet.getRangeByIndex(totalRow, 3).setText('$_totalFilteredInvoices Invoice');
+
+      final totals = <double>[
+        0, 0, 0, _totalAmount, _totalServiceCharge, _totalTax,
+        _totalDiscount, _totalCash, _totalCard, _totalDp,
+        _totalEdc, _totalOtherValue
+      ];
+      final totalCols = [7, 8, 9, 10, 11, 12, 13, 14, 15];
+      for (int i = 0; i < totalCols.length; i++) {
+        sheet.getRangeByIndex(totalRow, totalCols[i]).setNumber(totals[i + 3]);
+        sheet.getRangeByIndex(totalRow, totalCols[i]).cellStyle.hAlign = HAlignType.right;
+      }
+
+      // ===== SIMPAN =====
+      final List<int> bytes = workbook.saveAsStream();
+      workbook.dispose();
+
+      final fileName = 'Sales_Invoice_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx';
+
+      if (kIsWeb) {
+        final blob = html.Blob([bytes], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        html.AnchorElement(href: url)
+          ..target = 'blank'
+          ..download = fileName
+          ..click();
+        html.Url.revokeObjectUrl(url);
+        _showSnackbar('File Excel berhasil di-download', Colors.green);
+      } else {
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/$fileName');
+        await file.writeAsBytes(bytes);
+        _showSnackbar('File Excel berhasil disimpan', Colors.green);
+      }
+    } catch (e) {
+      debugPrint('Export Excel error: $e');
+      _showSnackbar('Gagal export Excel: ${e.toString()}', Colors.red);
+    }
+  }
+
+  String _formatDateTime(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      return DateFormat('dd/MM/yy HH:mm').format(date);
+    } catch (e) {
+      return dateString;
     }
   }
 
@@ -605,6 +789,44 @@ class _SalesByInvoiceScreenState extends State<SalesByInvoiceScreen> {
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(6)
                               ),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 5),
+                        Container(
+                          height: 36,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [_accentMint, _accentMint.withOpacity(0.8)],
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: _invoices.isEmpty ? null : _exportToExcel,
+                            icon: Icon(Icons.download, size: 14, color: Colors.white),
+                            label: Text(
+                              'Export Excel',
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.white,
+                              shadowColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
                             ),
                           ),

@@ -65,6 +65,7 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
     'no': 60,
     'item_nama': 200,
     'cabang': 120,
+    'jml_po': 80,
     'keterangan': 250,
     'total_qty': 100,
   };
@@ -669,51 +670,67 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
   }
 
   void _addPrintPage(pw.Document pdf, List<MintaReportItem> items, String divisi, String nomorSpk, String tanggal, String keterangan) {
-    // Build pivot data
-    Map<String, Map<String, int>> pivotData = {};
-    Set<String> cabangs = {};
+    // Pisahkan data: Display vs Pesanan
+    Map<String, Map<String, int>> displayPivot = {};  // item -> cabang -> qty display
+    Map<String, int> poMap = {};                       // item -> qty PO (Busukan)
+    Map<String, String> ketMap = {};                   // item -> keterangan PO
     Map<String, double> itemGramMap = {};
-    Map<String, String> itemSizeMap = {};
+
+    Set<String> cabangs = {};
+    List<String> sortedItemNames = [];  // urutan items sesuai input (sudah disort)
 
     for (var item in items) {
       cabangs.add(item.cabang);
       itemGramMap[item.itemNama] = item.itemGram;
-      itemSizeMap[item.itemNama] = item.itemSize;
-      if (!pivotData.containsKey(item.itemNama)) {
-        pivotData[item.itemNama] = {};
+
+      if (!sortedItemNames.contains(item.itemNama)) {
+        sortedItemNames.add(item.itemNama);
       }
-      pivotData[item.itemNama]![item.cabang] = (pivotData[item.itemNama]![item.cabang] ?? 0) + item.totalQty;
+
+      if (!displayPivot.containsKey(item.itemNama)) {
+        displayPivot[item.itemNama] = {};
+      }
+
+      if (item.status == 'DISPLAY') {
+        // Display: akumulasi per cabang
+        displayPivot[item.itemNama]![item.cabang] =
+            (displayPivot[item.itemNama]![item.cabang] ?? 0) + item.jumlah;
+      } else if (item.status == 'PESANAN') {
+        // Pesanan: hanya dari Busukan
+        poMap[item.itemNama] = (poMap[item.itemNama] ?? 0) + item.jumlah;
+        if ((item.keterangan ?? '').isNotEmpty && item.keterangan != '-') {
+          ketMap[item.itemNama] = item.keterangan;
+        }
+      }
     }
 
+    // Sort cabangs by kode
     Map<String, String> cabangKodeMap = {};
     for (var item in items) {
       cabangKodeMap[item.cabang] = item.cabangKode;
     }
-
-    // Sort cabangs by kode
     List<String> sortedCabangs = cabangs.toList()..sort((a, b) {
       final kodeA = cabangKodeMap[a] ?? a;
       final kodeB = cabangKodeMap[b] ?? b;
       return kodeA.compareTo(kodeB);
     });
 
-    List<String> sortedItemNames = items.map((e) => e.itemNama).toSet().toList();
-
-    // Hitung total per item
+    // Hitung total per item (Display + PO)
     Map<String, int> totalPerItem = {};
     Map<String, double> totalGramPerItem = {};
     for (var name in sortedItemNames) {
-      totalPerItem[name] = 0;
+      int displayTotal = 0;
       for (var c in sortedCabangs) {
-        totalPerItem[name] = (totalPerItem[name] ?? 0) + (pivotData[name]?[c] ?? 0);
+        displayTotal += displayPivot[name]?[c] ?? 0;
       }
-      totalGramPerItem[name] = (totalPerItem[name] ?? 0) * (itemGramMap[name] ?? 0);
+      totalPerItem[name] = displayTotal + (poMap[name] ?? 0);
+      totalGramPerItem[name] = totalPerItem[name]! * (itemGramMap[name] ?? 0);
     }
 
     double grandTotalGram = totalGramPerItem.values.fold(0, (a, b) => a + b);
     int grandTotalQty = totalPerItem.values.fold(0, (a, b) => a + b);
 
-    // Hitung items per page (Letter portrait, perkiraan 35 item per page)
+    // Hitung items per page (F4 portrait, perkiraan 55 item per page)
     const int maxItemsPerPage = 55;
     final totalPages = (sortedItemNames.length / maxItemsPerPage).ceil();
 
@@ -727,20 +744,24 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
           pageFormat: PdfPageFormat(210 * PdfPageFormat.mm, 330 * PdfPageFormat.mm), // F4 portrait
           margin: pw.EdgeInsets.all(4),
           build: (context) {
-            // Kolom: Nama Item | Size | Cabang... | Total | Total Gr | Hasil
+            // Kolom: Nama Item | Cabang... | Jml PO | Ket | Total | Gr Prod | Hasil
             final colWidths = <int, pw.FixedColumnWidth>{
-              0: pw.FixedColumnWidth(100),  // Nama Item (diperlebar)
-              // 1: pw.FixedColumnWidth(25), ← HAPUS
+              0: pw.FixedColumnWidth(70),   // Nama Item (dari 80)
             };
             for (int i = 0; i < sortedCabangs.length; i++) {
-              colWidths[i + 1] = pw.FixedColumnWidth(45); // Cabang (index geser)
+              colWidths[i + 1] = pw.FixedColumnWidth(30); // Cabang (dari 38)
             }
-            final totalCol = sortedCabangs.length + 1;  // dari +2 jadi +1
+            final poCol = sortedCabangs.length + 1;
+            final ketCol = poCol + 1;
+            final totalCol = ketCol + 1;
             final gramCol = totalCol + 1;
             final hasilCol = gramCol + 1;
-            colWidths[totalCol] = pw.FixedColumnWidth(35);
-            colWidths[gramCol] = pw.FixedColumnWidth(40);
-            colWidths[hasilCol] = pw.FixedColumnWidth(35);
+
+            colWidths[poCol] = pw.FixedColumnWidth(25);     // Jml PO (dari 28)
+            colWidths[ketCol] = pw.FixedColumnWidth(55);    // Ket (dari 38) ← DIPERPANJANG
+            colWidths[totalCol] = pw.FixedColumnWidth(30);  // Total (dari 32)
+            colWidths[gramCol] = pw.FixedColumnWidth(38);   // Gr Prod
+            colWidths[hasilCol] = pw.FixedColumnWidth(30);  // Hasil (dari 32)
 
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -762,42 +783,53 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
                   border: pw.TableBorder.all(color: PdfColors.black, width: 1),
                   columnWidths: colWidths,
                   children: [
-                    // Header
+                    // Header row
                     pw.TableRow(children: [
                       _hCell('Nama Item'),
-                      // _hCell('Sz'),
                       ...sortedCabangs.map((c) => _hCell(c, align: pw.TextAlign.center)),
+                      _hCell('PO', align: pw.TextAlign.center),
+                      _hCell('Ket'),
                       _hCell('Total', align: pw.TextAlign.center),
                       _hCell('Gr Prod', align: pw.TextAlign.center),
                       _hCell('Hasil', align: pw.TextAlign.center),
                     ]),
 
-                    // Data
+                    // Data rows
                     ...pageItems.asMap().entries.map((entry) {
                       final rowIndex = entry.key;
                       final name = entry.value;
                       final total = totalPerItem[name] ?? 0;
                       final totalGram = totalGramPerItem[name] ?? 0;
+                      final po = poMap[name] ?? 0;
+                      final ket = ketMap[name] ?? '';
 
                       return pw.TableRow(children: [
                         _dCell(name, bold: true, rowIndex: rowIndex),
-                        ...sortedCabangs.map((c) => _dCell('${pivotData[name]?[c] ?? ''}', align: pw.TextAlign.center, rowIndex: rowIndex)),
+                        ...sortedCabangs.map((c) {
+                          final val = displayPivot[name]?[c] ?? 0;
+                          return _dCell(val > 0 ? '$val' : '', align: pw.TextAlign.center, rowIndex: rowIndex);
+                        }),
+                        _dCell(po > 0 ? '$po' : '', align: pw.TextAlign.center, rowIndex: rowIndex),
+                        _dCell(ket, rowIndex: rowIndex),
                         _dCell('$total', bold: true, align: pw.TextAlign.center, rowIndex: rowIndex),
                         _dCell('${totalGram.toInt()}', align: pw.TextAlign.center, rowIndex: rowIndex),
                         _dCell('', align: pw.TextAlign.center, rowIndex: rowIndex),
                       ]);
                     }).toList(),
 
-                    // Footer Total
+                    // Footer Total (hanya di halaman terakhir)
                     if (page == totalPages - 1) ...[
                       pw.TableRow(children: [
                         _fCell('TOTAL'),
-                        // _fCell(''),
                         ...sortedCabangs.map((c) {
                           int sum = 0;
-                          for (var name in sortedItemNames) sum += (pivotData[name]?[c] ?? 0);
-                          return _fCell('$sum', align: pw.TextAlign.center);
+                          for (var name in sortedItemNames) {
+                            sum += displayPivot[name]?[c] ?? 0;
+                          }
+                          return _fCell(sum > 0 ? '$sum' : '', align: pw.TextAlign.center);
                         }),
+                        _fCell(''),
+                        _fCell(''),
                         _fCell('$grandTotalQty', align: pw.TextAlign.center),
                         _fCell('${grandTotalGram.toInt()}', align: pw.TextAlign.center),
                         _fCell(''),
@@ -807,11 +839,16 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
                         _fCell('Jml Resep'),
                         ...sortedCabangs.map((_) => _fCell('')),
                         _fCell(''),
+                        _fCell(''),
+                        _fCell(''),
                         pw.Container(
                           color: PdfColor.fromHex('#E9ECEF'),
                           padding: pw.EdgeInsets.symmetric(vertical: 5, horizontal: 3),
-                          child: pw.Text('${(grandTotalGram / 1920).toStringAsFixed(2)}', textAlign: pw.TextAlign.center,
-                              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                          child: pw.Text(
+                            '${(grandTotalGram / 1920).toStringAsFixed(2)}',
+                            textAlign: pw.TextAlign.center,
+                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+                          ),
                         ),
                         _fCell(''),
                       ]),
@@ -826,7 +863,7 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
     }
   }
 
-// Helper cells
+  // Helper cells
   pw.Widget _hCell(String text, {pw.TextAlign align = pw.TextAlign.left}) {
     return pw.Container(
       color: PdfColor.fromHex('#2C3E50'),
@@ -1430,7 +1467,7 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
                     StackedHeaderRow(
                       cells: [
                         StackedHeaderCell(
-                          columnNames: const ['no', 'item_nama', 'cabang', 'keterangan', 'total_qty'],
+                          columnNames: const ['no', 'item_nama', 'cabang', 'jml_po', 'keterangan', 'total_qty'],  // ✅ TAMBAH jml_po
                           child: Container(
                             height: 12,
                             alignment: Alignment.centerRight,
@@ -1519,6 +1556,32 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
                       ),
                     ),
                     GridColumn(
+                      columnName: 'status',       // ✅ KOLOM STATUS
+                      width: _columnWidths['status'] ?? 80,
+                      label: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        alignment: Alignment.center,
+                        child: Text('Status', style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10,
+                          color: _textDark,
+                        ),),
+                      ),
+                    ),
+                    GridColumn(
+                      columnName: 'jumlah',       // ✅ KOLOM JUMLAH
+                      width: _columnWidths['jumlah'] ?? 80,
+                      label: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        alignment: Alignment.centerRight,
+                        child: Text('Jumlah', style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10,
+                          color: _textDark,
+                        ),),
+                      ),
+                    ),
+                    GridColumn(
                       columnName: 'keterangan',
                       width: _columnWidths['keterangan'] ?? 250,
                       minimumWidth: 200,
@@ -1562,13 +1625,8 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
               height: 36,
               decoration: BoxDecoration(
                 color: _bgSoft,
-                border: Border(
-                  top: BorderSide(color: _borderSoft),
-                ),
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(12),
-                  bottomRight: Radius.circular(12),
-                ),
+                border: Border(top: BorderSide(color: _borderSoft)),
+                borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(12), bottomRight: Radius.circular(12)),
               ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -1580,42 +1638,22 @@ class _MintaReportScreenState extends State<MintaReportScreen> with TickerProvid
                         width: _columnWidths['no'] ?? 60,
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         alignment: Alignment.center,
-                        child: Text(
-                          'Total',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: _textDark,
-                          ),
-                        ),
+                        child: Text('Total', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w700, color: _textDark)),
                       ),
                       Container(
-                        width: (_columnWidths['item_nama'] ?? 200) +
-                            (_columnWidths['cabang'] ?? 120) +
-                            (_columnWidths['keterangan'] ?? 250),
+                        width: (_columnWidths['item_nama'] ?? 200) + (_columnWidths['cabang'] ?? 120) + (_columnWidths['jml_po'] ?? 80) + (_columnWidths['keterangan'] ?? 250),
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         alignment: Alignment.centerLeft,
                         child: Text(
                           'Periode: ${_displayDateFormat.format(_selectedDate!)}',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w500,
-                            color: _textDark,
-                          ),
+                          style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w500, color: _textDark),
                         ),
                       ),
                       Container(
                         width: _columnWidths['total_qty'] ?? 100,
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         alignment: Alignment.centerRight,
-                        child: Text(
-                          _numberFormat.format(_totalQty),
-                          style: GoogleFonts.montserrat(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: _accentGold,
-                          ),
-                        ),
+                        child: Text(_numberFormat.format(_totalQty), style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w700, color: _accentGold)),
                       ),
                     ],
                   ),
@@ -1934,6 +1972,8 @@ class MintaReportDataSource extends DataGridSource {
         DataGridCell<int>(columnName: 'no', value: index),
         DataGridCell<String>(columnName: 'item_nama', value: item.itemNama),
         DataGridCell<String>(columnName: 'cabang', value: item.cabang),
+        DataGridCell<String>(columnName: 'status', value: item.status),
+        DataGridCell<int>(columnName: 'jumlah', value: item.jumlah),    // ✅ TAMBAH
         DataGridCell<String>(columnName: 'keterangan', value: item.keterangan),
         DataGridCell<int>(columnName: 'total_qty', value: item.totalQty),
       ]);
@@ -1994,17 +2034,18 @@ class MintaReportDataSource extends DataGridSource {
     return DataGridRowAdapter(
       cells: row.getCells().map<Widget>((cell) {
         final isTotalQty = cell.columnName == 'total_qty';
-        final Color textColor = isTotalQty ? const Color(0xFFF6A918) : const Color(0xFF1A202C);
+        final isJmlPo = cell.columnName == 'jml_po';
+        final Color textColor = (isTotalQty || isJmlPo) ? const Color(0xFFF6A918) : const Color(0xFF1A202C);
 
         return Container(
-          alignment: isTotalQty ? Alignment.centerRight : Alignment.centerLeft,
+          alignment: (isTotalQty || isJmlPo) ? Alignment.centerRight : Alignment.centerLeft,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Text(
-            isTotalQty ? _numberFormat.format(cell.value) : cell.value.toString(),
-            textAlign: isTotalQty ? TextAlign.right : TextAlign.left,
+            (isTotalQty || isJmlPo) ? _numberFormat.format(cell.value) : cell.value.toString(),
+            textAlign: (isTotalQty || isJmlPo) ? TextAlign.right : TextAlign.left,
             style: GoogleFonts.montserrat(
               fontSize: 10,
-              fontWeight: isTotalQty ? FontWeight.w600 : FontWeight.normal,
+              fontWeight: (isTotalQty || isJmlPo) ? FontWeight.w600 : FontWeight.normal,
               color: textColor,
             ),
           ),

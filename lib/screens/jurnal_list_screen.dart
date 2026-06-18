@@ -7,6 +7,11 @@ import '../routes/app_routes.dart';
 import '../widgets/base_layout.dart';
 import '../models/jurnal_model.dart';
 import '../utils/responsive_helper.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:syncfusion_flutter_xlsio/xlsio.dart' hide Row, Border, Column;
+import 'package:universal_html/html.dart' as html;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class JurnalListScreen extends StatefulWidget {
   const JurnalListScreen({super.key});
@@ -452,6 +457,221 @@ class _JurnalListScreenState extends State<JurnalListScreen> {
     );
   }
 
+  Future<void> _exportToExcel() async {
+    try {
+      if (_jurnalList.isEmpty) {
+        _showSnackbar('Tidak ada data untuk di-export', isError: true);
+        return;
+      }
+
+      setState(() => _isLoading = true);
+
+      final Workbook workbook = Workbook();
+      final Worksheet sheet = workbook.worksheets[0];
+      sheet.name = 'Biaya Lain';
+
+      // ===== LEBAR KOLOM =====
+      sheet.getRangeByIndex(1, 1).columnWidth = 22;
+      sheet.getRangeByIndex(1, 2).columnWidth = 12;
+      sheet.getRangeByIndex(1, 3).columnWidth = 25;
+      sheet.getRangeByIndex(1, 4).columnWidth = 10;
+      sheet.getRangeByIndex(1, 5).columnWidth = 15;
+      sheet.getRangeByIndex(1, 6).columnWidth = 22;
+      sheet.getRangeByIndex(1, 7).columnWidth = 12;
+      sheet.getRangeByIndex(1, 8).columnWidth = 20;
+      sheet.getRangeByIndex(1, 9).columnWidth = 15;
+      sheet.getRangeByIndex(1, 10).columnWidth = 15;
+      sheet.getRangeByIndex(1, 11).columnWidth = 25;
+      sheet.getRangeByIndex(1, 12).columnWidth = 15;
+
+      // ===== JUDUL =====
+      final titleRange = sheet.getRangeByIndex(1, 1, 1, 12);
+      titleRange.merge();
+      titleRange.setText('Browse Pembayaran Lain Lain');
+      titleRange.cellStyle.fontSize = 14;
+      titleRange.cellStyle.bold = true;
+      titleRange.cellStyle.hAlign = HAlignType.center;
+
+      // ===== PERIODE =====
+      final periodeRange = sheet.getRangeByIndex(2, 1, 2, 12);
+      periodeRange.merge();
+      periodeRange.setText(
+          'Tanggal: ${_dateFormat.format(_startDate)} s.d ${_dateFormat.format(_endDate)}');
+      periodeRange.cellStyle.fontSize = 11;
+      periodeRange.cellStyle.hAlign = HAlignType.center;
+
+      // ===== HEADER KOLOM =====
+      int row = 4;
+      final headerRange = sheet.getRangeByIndex(row, 1, row, 12);
+      headerRange.cellStyle.backColor = '#2C3E50';
+      headerRange.cellStyle.fontColor = '#FFFFFF';
+      headerRange.cellStyle.bold = true;
+      headerRange.cellStyle.fontSize = 10;
+      headerRange.cellStyle.hAlign = HAlignType.center;
+      headerRange.cellStyle.vAlign = VAlignType.center;
+
+      final headers = [
+        'Nomor', 'Tanggal', 'Keterangan', 'IsClosed', 'Nilai',
+        'Nomor', 'Account', 'AccountName', 'Debet', 'Kredit',
+        'Keterangan', 'CostCenter'
+      ];
+      for (int i = 0; i < headers.length; i++) {
+        sheet.getRangeByIndex(row, i + 1).setText(headers[i]);
+      }
+      row++;
+
+      // ===== DATA =====
+      int dataStartRow = row;
+
+      for (var jurnal in _jurnalList) {
+        final status = jurnal.jurIsclosed == 1 ? 'Closed' : 'Belum';
+
+        // Ambil detail per jurnal
+        List<Map<String, dynamic>> details = [];
+        try {
+          final detailData = await JurnalService.getJurnalDetail(jurnal.jurNo);
+          details = List<Map<String, dynamic>>.from(detailData['details'] ?? []);
+        } catch (e) {
+          details = [];
+        }
+
+        if (details.isEmpty) {
+          final values = [
+            jurnal.jurNo,
+            _dateFormat.format(jurnal.jurTanggal),
+            jurnal.jurKeterangan,
+            status,
+            jurnal.totalDebet ?? 0,
+            '', '', '', '', '', '', ''
+          ];
+          _writeRow(sheet, row, values);
+          _styleHeaderRow(sheet, row);
+          row++;
+        } else {
+          bool firstDetail = true;
+          for (var detail in details) {
+            final values = [
+              firstDetail ? jurnal.jurNo : '',
+              firstDetail ? _dateFormat.format(jurnal.jurTanggal) : '',
+              firstDetail ? jurnal.jurKeterangan : '',
+              firstDetail ? status : '',
+              firstDetail ? (jurnal.totalDebet ?? 0) : '',
+              jurnal.jurNo,
+              detail['jurd_rek_kode']?.toString() ?? '',
+              detail['rek_nama']?.toString() ?? '',
+              (detail['jurd_debet'] ?? 0),
+              (detail['jurd_kredit'] ?? 0),
+              detail['jurd_keterangan']?.toString() ?? '',
+              detail['cc_nama']?.toString() ?? '',
+            ];
+            _writeRow(sheet, row, values);
+
+            if (firstDetail) {
+              _styleHeaderRow(sheet, row);
+              firstDetail = false;
+            } else {
+              _styleDetailRow(sheet, row);
+            }
+            row++;
+          }
+        }
+      }
+
+      int dataEndRow = row - 1;
+
+      // ===== BORDER =====
+      if (dataEndRow >= dataStartRow) {
+        final dataRange = sheet.getRangeByIndex(dataStartRow, 1, dataEndRow, 12);
+
+        // Border kiri
+        dataRange.cellStyle.borders.left.lineStyle = LineStyle.thin;
+        dataRange.cellStyle.borders.left.color = '#000000';
+
+        // Border kanan
+        dataRange.cellStyle.borders.right.lineStyle = LineStyle.thin;
+        dataRange.cellStyle.borders.right.color = '#000000';
+
+        // Border atas
+        dataRange.cellStyle.borders.top.lineStyle = LineStyle.thin;
+        dataRange.cellStyle.borders.top.color = '#000000';
+
+        // Border bawah
+        dataRange.cellStyle.borders.bottom.lineStyle = LineStyle.thin;
+        dataRange.cellStyle.borders.bottom.color = '#000000';
+
+        dataRange.cellStyle.fontColor = '#000000';
+        dataRange.cellStyle.fontSize = 11;
+      }
+
+
+
+      // ===== SIMPAN =====
+      final List<int> bytes = workbook.saveAsStream();
+      workbook.dispose();
+
+      final fileName = 'Biaya_Lain_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx';
+
+      if (kIsWeb) {
+        final blob = html.Blob([bytes], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        html.AnchorElement(href: url)
+          ..target = 'blank'
+          ..download = fileName
+          ..click();
+        html.Url.revokeObjectUrl(url);
+        _showSnackbar('File Excel berhasil di-download');
+      } else {
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/$fileName');
+        await file.writeAsBytes(bytes);
+        _showSnackbar('File Excel berhasil disimpan');
+      }
+    } catch (e) {
+      debugPrint('Export Excel error: $e');
+      _showSnackbar('Gagal export Excel: ${e.toString()}', isError: true);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _writeRow(Worksheet sheet, int row, List<dynamic> values) {
+    for (int i = 0; i < values.length; i++) {
+      final cell = sheet.getRangeByIndex(row, i + 1);
+      if (values[i] is double || values[i] is int) {
+        cell.setNumber((values[i] as num).toDouble());
+      } else {
+        cell.setText(values[i]?.toString() ?? '');
+      }
+    }
+  }
+
+  void _styleHeaderRow(Worksheet sheet, int row) {
+    final range = sheet.getRangeByIndex(row, 1, row, 12);
+    range.cellStyle.fontSize = 9;
+    range.cellStyle.vAlign = VAlignType.center;
+    range.cellStyle.backColor = '#F8FAFC';
+
+    for (int i = 1; i <= 5; i++) {
+      sheet.getRangeByIndex(row, i).cellStyle.bold = true;
+    }
+
+    sheet.getRangeByIndex(row, 2).cellStyle.hAlign = HAlignType.center;
+    sheet.getRangeByIndex(row, 4).cellStyle.hAlign = HAlignType.center;
+    sheet.getRangeByIndex(row, 5).cellStyle.hAlign = HAlignType.right;
+  }
+
+  void _styleDetailRow(Worksheet sheet, int row) {
+    final range = sheet.getRangeByIndex(row, 1, row, 12);
+    range.cellStyle.fontSize = 9;
+    range.cellStyle.vAlign = VAlignType.center;
+
+    sheet.getRangeByIndex(row, 9).cellStyle.hAlign = HAlignType.right;
+    sheet.getRangeByIndex(row, 10).cellStyle.hAlign = HAlignType.right;
+
+    sheet.getRangeByIndex(row, 9).cellStyle.fontColor = '#06D6A0';
+    sheet.getRangeByIndex(row, 10).cellStyle.fontColor = '#F6A918';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveHelper.isMobile(context);
@@ -518,6 +738,15 @@ class _JurnalListScreenState extends State<JurnalListScreen> {
                   const SizedBox(width: 8),
                   // Tambah Button
                   _buildActionButton(icon: Icons.add, label: isMobile ? 'Tambah' : 'Tambah', color: _primaryDark, onPressed: _openAddJurnal, isMobile: isMobile),
+                  const SizedBox(width: 8),
+// Export Button
+                  _buildActionButton(
+                    icon: Icons.download_outlined,
+                    label: 'Export',
+                    color: _accentBlue,
+                    onPressed: _exportToExcel,
+                    isMobile: isMobile,
+                  ),
                 ],
               ),
             ),

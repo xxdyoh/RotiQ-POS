@@ -154,16 +154,33 @@ class _POSScreenState extends State<POSScreen> {
 
   void _setupAutoScanner() {
     RawKeyboard.instance.addListener(_handleRawKeyEvent);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      FocusScope.of(context).requestFocus(FocusNode());
-    });
     _scannerActive = true;
+    // Unfocus semua supaya scanner siap dari awal
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FocusScope.of(context).unfocus();
+    });
   }
 
   void _handleRawKeyEvent(RawKeyEvent event) {
     if (!_scannerActive) return;
     if (event is! RawKeyDownEvent) return;
 
+    // ✅ Hanya matikan scanner kalau user sedang fokus di TextField LAIN
+    // (misal: input nominal tutup kasir, input permintaan, dll.)
+    // Tapi JANGAN matikan kalau fokus di input kode manual
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus != null && focus.hasPrimaryFocus) {
+      // Cek apakah yang fokus itu input kode kita
+      if (focus != _barcodeFocusNode) {
+        // Fokus di widget lain → abaikan scan
+        return;
+      }
+      // Kalau fokus di input kode → jangan tangkap sebagai barcode,
+      // biarkan TextField yang handle (onSubmitted)
+      return;
+    }
+
+    // Tidak ada yang fokus → scanner mode
     final logicalKey = event.logicalKey;
     final keyLabel = logicalKey.keyLabel;
 
@@ -507,13 +524,8 @@ class _POSScreenState extends State<POSScreen> {
           Expanded(
             child: Focus(
               onFocusChange: (hasFocus) {
-                // Scanner OFF saat input kode aktif, ON saat tidak fokus
-                setState(() {
-                  _scannerActive = !hasFocus;
-                  if (!hasFocus) {
-                    _barcodeBuffer = ''; // Bersihkan buffer
-                  }
-                });
+                // ✅ Scanner TETAP AKTIF meskipun input kode fokus
+                // Tidak perlu matiin scanner lagi
               },
               child: TextField(
                 controller: _manualBarcodeController,
@@ -538,9 +550,13 @@ class _POSScreenState extends State<POSScreen> {
                   if (value.trim().isNotEmpty) {
                     _handleManualBarcode(value.trim());
                     _manualBarcodeController.clear();
+
+                    // ✅ Kembalikan fokus ke input kode setelah submit
+                    // Biar siap input manual lagi
+                    Future.delayed(Duration(milliseconds: 100), () {
+                      FocusScope.of(context).requestFocus(_barcodeFocusNode);
+                    });
                   }
-                  // Pindah fokus supaya scanner aktif lagi
-                  FocusScope.of(context).unfocus();
                 },
               ),
             ),
@@ -549,7 +565,8 @@ class _POSScreenState extends State<POSScreen> {
             GestureDetector(
               onTap: () {
                 _manualBarcodeController.clear();
-                FocusScope.of(context).unfocus(); // Scanner aktif lagi
+                // Fokus kembali
+                FocusScope.of(context).requestFocus(_barcodeFocusNode);
               },
               child: Container(
                 width: 28,
@@ -2014,14 +2031,12 @@ class _POSScreenState extends State<POSScreen> {
   void _handleManualBarcode(String barcode) {
     final cleanBarcode = barcode.trim();
 
-    // Parse ke integer (otomatis hilangkan leading zero)
     final itemId = int.tryParse(cleanBarcode);
     if (itemId == null) {
       _showScannerError('Format kode tidak valid: $cleanBarcode');
       return;
     }
 
-    // Cari produk berdasarkan ID integer
     Product? foundProduct;
     for (var product in _products) {
       final productId = int.tryParse(product.id);

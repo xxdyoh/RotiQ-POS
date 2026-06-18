@@ -24,8 +24,10 @@ class MintaFormScreen extends StatefulWidget {
 class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _keteranganController = TextEditingController();
-  final Map<int, TextEditingController> _qtyControllers = {};
-  final Map<int, TextEditingController> _ketControllers = {};
+  final Map<String, TextEditingController> _qtyControllers = {};
+  final Map<String, TextEditingController> _ketControllers = {};
+
+  String _itemKey(MintaItem item) => '${item.itemId}_${item.status}';
 
   final Color _primaryDark = const Color(0xFF2C3E50);
   final Color _primaryLight = const Color(0xFF34495E);
@@ -127,13 +129,14 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
   }
 
   void _initializeControllers() {
+    for (var c in _qtyControllers.values) { c.dispose(); }
+    for (var c in _ketControllers.values) { c.dispose(); }
+    _qtyControllers.clear();
+    _ketControllers.clear();
     for (var item in _selectedItems) {
-      _qtyControllers[item.itemId] = TextEditingController(
-          text: item.qty > 0 ? item.qty.toString() : ''
-      );
-      _ketControllers[item.itemId] = TextEditingController(
-          text: item.keterangan ?? ''
-      );
+      final key = _itemKey(item);
+      _qtyControllers[key] = TextEditingController(text: item.qty > 0 ? item.qty.toString() : '');
+      _ketControllers[key] = TextEditingController(text: item.keterangan ?? '');
     }
   }
 
@@ -142,51 +145,37 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
       if (query.isEmpty) {
         _filteredItems = List.from(_selectedItems);
       } else {
-        final searchLower = query.toLowerCase();
-        _filteredItems = _selectedItems.where((item) {
-          return item.itemNama.toLowerCase().contains(searchLower);
-        }).toList();
+        final q = query.toLowerCase();
+        _filteredItems = _selectedItems.where((item) => item.itemNama.toLowerCase().contains(q)).toList();
       }
     });
   }
 
-  void _updateItemQty(int itemId, int newQty) {
+  void _updateItemQty(MintaItem item, int newQty) {
     setState(() {
-      final index = _selectedItems.indexWhere((item) => item.itemId == itemId);
-      if (index != -1) {
-        final updatedItem = MintaItem(
-          itemId: _selectedItems[index].itemId,
-          itemNama: _selectedItems[index].itemNama,
-          qty: newQty,
-          keterangan: _selectedItems[index].keterangan,
+      final key = _itemKey(item);
+      final idx = _selectedItems.indexWhere((i) => _itemKey(i) == key);
+      if (idx != -1) {
+        _selectedItems[idx] = MintaItem(
+          itemId: item.itemId, itemNama: item.itemNama, tipe: item.tipe,
+          qty: newQty, keterangan: item.keterangan, status: item.status,
         );
-        _selectedItems[index] = updatedItem;
-
-        final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
-        if (filteredIndex != -1) {
-          _filteredItems[filteredIndex] = updatedItem;
-        }
       }
+      _syncFiltered(key);
     });
   }
 
-  void _updateItemKeterangan(int itemId, String keterangan) {
+  void _updateItemKeterangan(MintaItem item, String ket) {
     setState(() {
-      final index = _selectedItems.indexWhere((item) => item.itemId == itemId);
-      if (index != -1) {
-        final updatedItem = MintaItem(
-          itemId: _selectedItems[index].itemId,
-          itemNama: _selectedItems[index].itemNama,
-          qty: _selectedItems[index].qty,
-          keterangan: keterangan,
+      final key = _itemKey(item);
+      final idx = _selectedItems.indexWhere((i) => _itemKey(i) == key);
+      if (idx != -1) {
+        _selectedItems[idx] = MintaItem(
+          itemId: item.itemId, itemNama: item.itemNama, tipe: item.tipe,
+          qty: item.qty, keterangan: ket, status: item.status,
         );
-        _selectedItems[index] = updatedItem;
-
-        final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
-        if (filteredIndex != -1) {
-          _filteredItems[filteredIndex] = updatedItem;
-        }
       }
+      _syncFiltered(key);
     });
   }
 
@@ -205,27 +194,33 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
     );
 
     if (selectedItems != null && selectedItems.isNotEmpty) {
-      // DEBUG: Print items received
       print('Items received from modal:');
       for (var item in selectedItems) {
-        print('  - ID: ${item.itemId}, Tipe: ${item.tipe}, Qty: ${item.qty}');
+        print('  - ID: ${item.itemId}, Status: ${item.status}, Qty: ${item.qty}');
       }
 
       setState(() {
         for (var newItem in selectedItems) {
-          final existingIndex = _selectedItems.indexWhere((item) => item.itemId == newItem.itemId);
+          // ✅ Cek berdasarkan itemId DAN status
+          final existingIndex = _selectedItems.indexWhere(
+                (item) => item.itemId == newItem.itemId && item.status == newItem.status,
+          );
+
           if (existingIndex >= 0) {
+            // Item sama + status sama = jumlahkan qty
             final existingItem = _selectedItems[existingIndex];
             final updatedItem = MintaItem(
               itemId: existingItem.itemId,
               itemNama: existingItem.itemNama,
-              tipe: newItem.tipe, // <-- PASTIKAN TIPE DARI newItem DIPAKAI
+              tipe: newItem.tipe,
               qty: existingItem.qty + newItem.qty,
               keterangan: existingItem.keterangan,
+              status: existingItem.status,
             );
             _selectedItems[existingIndex] = updatedItem;
           } else {
-            _selectedItems.add(newItem); // <-- newItem SUDAH PUNYA TIPE YANG BENAR
+            // Item sama + status beda = tambah baru
+            _selectedItems.add(newItem);
           }
         }
         _filteredItems = List.from(_selectedItems);
@@ -305,19 +300,23 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
   }
 
   void _updateAllQtyFromControllers() {
-    for (var entry in _qtyControllers.entries) {
-      final itemId = entry.key;
-      final controller = entry.value;
-      final intValue = int.tryParse(controller.text) ?? 0;
-      _updateItemQty(itemId, intValue);
+    for (var item in _selectedItems) {
+      final key = _itemKey(item);
+      final ctrl = _qtyControllers[key];
+      if (ctrl != null) {
+        final qty = int.tryParse(ctrl.text) ?? 0;
+        _updateItemQty(item, qty);
+      }
     }
   }
 
   void _updateAllKeteranganFromControllers() {
-    for (var entry in _ketControllers.entries) {
-      final itemId = entry.key;
-      final controller = entry.value;
-      _updateItemKeterangan(itemId, controller.text);
+    for (var item in _selectedItems) {
+      final key = _itemKey(item);
+      final ctrl = _ketControllers[key];
+      if (ctrl != null) {
+        _updateItemKeterangan(item, ctrl.text);
+      }
     }
   }
 
@@ -377,26 +376,43 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
     return _selectedItems.fold(0, (sum, item) => sum + item.qty);
   }
 
-  void _updateItemStatus(int itemId, String newStatus) {
-    setState(() {
-      final index = _selectedItems.indexWhere((item) => item.itemId == itemId);
-      if (index != -1) {
-        final updatedItem = MintaItem(
-          itemId: _selectedItems[index].itemId,
-          itemNama: _selectedItems[index].itemNama,
-          tipe: _selectedItems[index].tipe,
-          qty: _selectedItems[index].qty,
-          keterangan: _selectedItems[index].keterangan,
-          status: newStatus,
-        );
-        _selectedItems[index] = updatedItem;
+  void _updateItemStatus(MintaItem item, String newStatus) {
+    final oldKey = _itemKey(item);
+    final newItem = MintaItem(
+      itemId: item.itemId, itemNama: item.itemNama, tipe: item.tipe,
+      qty: item.qty, keterangan: item.keterangan, status: newStatus,
+    );
+    final newKey = _itemKey(newItem);
 
-        final filteredIndex = _filteredItems.indexWhere((item) => item.itemId == itemId);
-        if (filteredIndex != -1) {
-          _filteredItems[filteredIndex] = updatedItem;
-        }
+    // Cek bentrok
+    if (oldKey != newKey && _selectedItems.any((i) => _itemKey(i) == newKey)) {
+      _showToast('Item dengan status $newStatus sudah ada', type: ToastType.error);
+      return;
+    }
+
+    setState(() {
+      // Pindahkan controller
+      if (_qtyControllers.containsKey(oldKey)) {
+        _qtyControllers[newKey] = _qtyControllers[oldKey]!;
+        _qtyControllers.remove(oldKey);
       }
+      if (_ketControllers.containsKey(oldKey)) {
+        _ketControllers[newKey] = _ketControllers[oldKey]!;
+        _ketControllers.remove(oldKey);
+      }
+
+      final idx = _selectedItems.indexWhere((i) => _itemKey(i) == oldKey);
+      if (idx != -1) _selectedItems[idx] = newItem;
+      _syncFiltered(newKey);
     });
+  }
+
+  void _syncFiltered(String key) {
+    final match = _selectedItems.firstWhere((i) => _itemKey(i) == key, orElse: () => null as dynamic);
+    if (match != null) {
+      final fIdx = _filteredItems.indexWhere((i) => _itemKey(i) == key);
+      if (fIdx != -1) _filteredItems[fIdx] = match;
+    }
   }
 
   @override
@@ -802,19 +818,17 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
   }
 
   Widget _buildModernItemCard(MintaItem item) {
-    if (!_qtyControllers.containsKey(item.itemId)) {
-      _qtyControllers[item.itemId] = TextEditingController(
-          text: item.qty > 0 ? item.qty.toString() : ''
-      );
+    final key = _itemKey(item);
+
+    if (!_qtyControllers.containsKey(key)) {
+      _qtyControllers[key] = TextEditingController(text: item.qty > 0 ? item.qty.toString() : '');
     }
-    if (!_ketControllers.containsKey(item.itemId)) {
-      _ketControllers[item.itemId] = TextEditingController(
-          text: item.keterangan ?? ''
-      );
+    if (!_ketControllers.containsKey(key)) {
+      _ketControllers[key] = TextEditingController(text: item.keterangan ?? '');
     }
 
-    final qtyController = _qtyControllers[item.itemId]!;
-    final ketController = _ketControllers[item.itemId]!;
+    final qtyController = _qtyControllers[key]!;
+    final ketController = _ketControllers[key]!;
     final hasQty = item.qty > 0;
 
     return Container(
@@ -879,10 +893,10 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
                             height: 24,
                             padding: EdgeInsets.symmetric(horizontal: 6),
                             decoration: BoxDecoration(
-                              color: item.status == 'Display' ? _accentMintSoft : _accentGoldSoft,
+                              color: item.status == 'DISPLAY' ? _accentMintSoft : _accentGoldSoft,
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                color: item.status == 'Display'
+                                color: item.status == 'DISPLAY'
                                     ? _accentMint.withOpacity(0.3)
                                     : _accentGold.withOpacity(0.3),
                               ),
@@ -894,9 +908,9 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
                                 style: GoogleFonts.montserrat(
                                   fontSize: 8,
                                   fontWeight: FontWeight.w600,
-                                  color: item.status == 'Display' ? _accentMint : _accentGold,
+                                  color: item.status == 'DISPLAY' ? _accentMint : _accentGold,
                                 ),
-                                items: ['Display', 'Pesanan Jadi'].map((status) {
+                                items: ['DISPLAY', 'PESANAN'].map((status) {
                                   return DropdownMenuItem(
                                     value: status,
                                     child: Text(status, style: GoogleFonts.montserrat(fontSize: 8, fontWeight: FontWeight.w600)),
@@ -904,10 +918,10 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
                                 }).toList(),
                                 onChanged: (value) {
                                   if (value != null) {
-                                    _updateItemStatus(item.itemId, value);
+                                    _updateItemStatus(item, value);
                                   }
                                 },
-                                icon: Icon(Icons.arrow_drop_down, size: 14, color: item.status == 'Display' ? _accentMint : _accentGold),
+                                icon: Icon(Icons.arrow_drop_down, size: 14, color: item.status == 'DISPLAY' ? _accentMint : _accentGold),
                               ),
                             ),
                           ),
@@ -974,7 +988,7 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
                     ),
                     onChanged: (value) {
                       final intValue = int.tryParse(value) ?? 0;
-                      _updateItemQty(item.itemId, intValue);
+                      _updateItemQty(item, intValue);
                     },
                     onTap: () {
                       qtyController.selection = TextSelection(
@@ -1013,7 +1027,7 @@ class _MintaFormScreenState extends State<MintaFormScreen> with SingleTickerProv
                   isDense: true,
                 ),
                 onChanged: (value) {
-                  _updateItemKeterangan(item.itemId, value);
+                  _updateItemKeterangan(item, value);
                 },
               ),
             ),

@@ -24,6 +24,7 @@ class DashboardService {
     required String groupBy,
     String? cabangKode,
     String? jenis,
+    List<String>? customerTypes,  // ✅ TAMBAH
   }) async {
     try {
       final headers = await _getHeaders();
@@ -37,6 +38,10 @@ class DashboardService {
       }
       if (jenis != null && jenis.isNotEmpty && jenis != 'all') {
         url += '&jenis=$jenis';
+      }
+
+      if (customerTypes != null && customerTypes.isNotEmpty) {
+        url += '&customer_types=${customerTypes.join(',')}';
       }
 
       final response = await http.get(Uri.parse(url), headers: headers);
@@ -106,6 +111,26 @@ class DashboardService {
     } catch (e) {
       print('Error in getProduksiData: $e');
       rethrow;
+    }
+  }
+
+  static Future<List<String>> getCustomerTypes() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/dashboard/customer-types'),
+        headers: headers,
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return List<String>.from(data['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Error getCustomerTypes: $e');
+      return [];
     }
   }
 }
