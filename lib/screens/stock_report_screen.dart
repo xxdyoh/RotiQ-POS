@@ -5,8 +5,11 @@ import 'package:pivot_table/pivot_table.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import '../services/stock_report_service.dart';
+import '../services/api_service.dart';
 import '../models/stock_report.dart';
+import '../models/cabang_model.dart';
 import '../widgets/base_layout.dart';
+import '../services/session_manager.dart';
 
 class StockReportScreen extends StatefulWidget {
   const StockReportScreen({super.key});
@@ -15,7 +18,8 @@ class StockReportScreen extends StatefulWidget {
   State<StockReportScreen> createState() => _StockReportScreenState();
 }
 
-class _StockReportScreenState extends State<StockReportScreen> with SingleTickerProviderStateMixin {
+class _StockReportScreenState extends State<StockReportScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   DateTime? _startDate;
   DateTime? _endDate;
@@ -26,15 +30,21 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
   String? _error;
   late StockDataSource _dataSource;
 
+  List<Cabang> _cabangList = [];
+  String? _selectedCabangKode;
+  bool _isPusat = false;
+
   final DateFormat _dateFormat = DateFormat('yyyy-MM-dd');
   final DateFormat _displayDateFormat = DateFormat('dd/MM/yy');
-  final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+  final NumberFormat _currencyFormat =
+  NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
   final NumberFormat _numberFormat = NumberFormat('#,##0');
 
   StockSummary _stockSummary = StockSummary(
     totalAwal: 0,
     totalSTBJ: 0,
     totalMutasiIn: 0,
+    totalMinta: 0,
     totalMutasiOut: 0,
     totalKoreksi: 0,
     totalRetur: 0,
@@ -43,7 +53,6 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
     totalItems: 0,
   );
 
-  // Color Palette
   static const Color _primaryDark = Color(0xFF2C3E50);
   static const Color _surfaceWhite = Color(0xFFFFFFFF);
   static const Color _bgLight = Color(0xFFF7F9FC);
@@ -58,9 +67,14 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _endDate = DateTime.now();
-    _startDate = _endDate!.subtract(const Duration(days: 30));
+    _startDate = DateTime(_endDate!.year, _endDate!.month, 1);
     _dataSource = StockDataSource(stockData: [], numberFormat: _numberFormat);
+
+    final cabang = SessionManager.getCurrentCabang();
+    _isPusat = cabang?.kode == '00';
+
     _loadCategories();
+    if (_isPusat) _loadCabangList();
     _loadData();
   }
 
@@ -68,6 +82,15 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadCabangList() async {
+    try {
+      final cabangs = await ApiService.getCabangList();
+      setState(() => _cabangList = cabangs);
+    } catch (e) {
+      debugPrint('Gagal load cabang: $e');
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -95,6 +118,7 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
         startDate: _startDate!,
         endDate: _endDate!,
         selectedCategories: _selectedCategories,
+        selectedCabang: _selectedCabangKode,
       );
 
       final data = List<Map<String, dynamic>>.from(response['data']);
@@ -107,13 +131,11 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
           stockData: items,
           numberFormat: _numberFormat,
         );
+        _isLoading = false;
       });
     } catch (e) {
       setState(() {
         _error = e.toString();
-      });
-    } finally {
-      setState(() {
         _isLoading = false;
       });
     }
@@ -127,7 +149,8 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
       lastDate: DateTime(2100),
       builder: (context, child) => Theme(
         data: ThemeData.light().copyWith(
-          colorScheme: ColorScheme.light(primary: _accentGold, onPrimary: Colors.white),
+          colorScheme:
+          ColorScheme.light(primary: _accentGold, onPrimary: Colors.white),
           dialogBackgroundColor: _surfaceWhite,
         ),
         child: child!,
@@ -147,7 +170,8 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
       lastDate: DateTime(2100),
       builder: (context, child) => Theme(
         data: ThemeData.light().copyWith(
-          colorScheme: ColorScheme.light(primary: _accentGold, onPrimary: Colors.white),
+          colorScheme:
+          ColorScheme.light(primary: _accentGold, onPrimary: Colors.white),
           dialogBackgroundColor: _surfaceWhite,
         ),
         child: child!,
@@ -175,6 +199,7 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
         'Awal': item.Awal,
         'STBJ': item.STBJ,
         'Mutasi_in': item.Mutasi_in,
+        'Minta': item.Minta,
         'Mutasi_out': item.Mutasi_out,
         'Koreksi': item.Koreksi,
         'Retur': item.Retur,
@@ -202,10 +227,10 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
           children: [
             // Filter Section
             Container(
-              padding: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 12, vertical: 12),
+              padding: EdgeInsets.symmetric(
+                  horizontal: isTablet ? 16 : 12, vertical: 12),
               child: Row(
                 children: [
-                  // Tanggal Mulai
                   Expanded(
                     flex: 2,
                     child: InkWell(
@@ -221,12 +246,16 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.calendar_today, size: 14, color: _primaryDark),
+                            Icon(Icons.calendar_today,
+                                size: 14, color: _primaryDark),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                _startDate != null ? _displayDateFormat.format(_startDate!) : 'Dari',
-                                style: GoogleFonts.montserrat(fontSize: 11, color: _textPrimary),
+                                _startDate != null
+                                    ? _displayDateFormat.format(_startDate!)
+                                    : 'Dari',
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 11, color: _textPrimary),
                               ),
                             ),
                           ],
@@ -235,7 +264,6 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Tanggal Selesai
                   Expanded(
                     flex: 2,
                     child: InkWell(
@@ -251,12 +279,16 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.calendar_today, size: 14, color: _primaryDark),
+                            Icon(Icons.calendar_today,
+                                size: 14, color: _primaryDark),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                _endDate != null ? _displayDateFormat.format(_endDate!) : 'Sampai',
-                                style: GoogleFonts.montserrat(fontSize: 11, color: _textPrimary),
+                                _endDate != null
+                                    ? _displayDateFormat.format(_endDate!)
+                                    : 'Sampai',
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 11, color: _textPrimary),
                               ),
                             ),
                           ],
@@ -265,7 +297,46 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Kategori Dropdown
+                  if (_isPusat) ...[
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: _surfaceWhite,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: _borderColor),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: _selectedCabangKode,
+                            hint: Text('Pusat',
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 11, color: _textSecondary)),
+                            icon: Icon(Icons.arrow_drop_down,
+                                size: 18, color: _textSecondary),
+                            style: GoogleFonts.montserrat(
+                                fontSize: 11, color: _textPrimary),
+                            items: _cabangList
+                                .map((c) => DropdownMenuItem(
+                              value: c.kode,
+                              child: Text('${c.kode} - ${c.nama}',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.montserrat(
+                                      fontSize: 10)),
+                            ))
+                                .toList(),
+                            onChanged: (v) {
+                              setState(() => _selectedCabangKode = v);
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     flex: 3,
                     child: Container(
@@ -279,20 +350,37 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           isExpanded: true,
-                          value: _selectedCategories.length == 1 ? _selectedCategories.first : null,
+                          value: _selectedCategories.length == 1
+                              ? _selectedCategories.first
+                              : null,
                           hint: Text(
-                            _selectedCategories.length > 1 ? '${_selectedCategories.length} kategori' : 'Semua',
-                            style: GoogleFonts.montserrat(fontSize: 11, color: _textSecondary),
+                            _selectedCategories.length > 1
+                                ? '${_selectedCategories.length} kategori'
+                                : 'Semua',
+                            style: GoogleFonts.montserrat(
+                                fontSize: 11, color: _textSecondary),
                           ),
-                          icon: Icon(Icons.arrow_drop_down, size: 18, color: _textSecondary),
-                          style: GoogleFonts.montserrat(fontSize: 11, color: _textPrimary),
+                          icon: Icon(Icons.arrow_drop_down,
+                              size: 18, color: _textSecondary),
+                          style: GoogleFonts.montserrat(
+                              fontSize: 11, color: _textPrimary),
                           items: [
-                            DropdownMenuItem(value: 'all', child: Text('Semua Kategori', style: GoogleFonts.montserrat(fontSize: 11))),
-                            ..._allCategories.map((category) => DropdownMenuItem(value: category, child: Text(category, style: GoogleFonts.montserrat(fontSize: 11)))),
+                            DropdownMenuItem(
+                                value: 'all',
+                                child: Text('Semua Kategori',
+                                    style: GoogleFonts.montserrat(
+                                        fontSize: 11))),
+                            ..._allCategories.map((category) =>
+                                DropdownMenuItem(
+                                    value: category,
+                                    child: Text(category,
+                                        style: GoogleFonts.montserrat(
+                                            fontSize: 11)))),
                           ],
                           onChanged: (value) {
                             if (value == 'all') {
-                              setState(() => _selectedCategories = List.from(_allCategories));
+                              setState(() =>
+                              _selectedCategories = List.from(_allCategories));
                             } else if (value != null) {
                               setState(() => _selectedCategories = [value]);
                             }
@@ -302,7 +390,6 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Load Button
                   _buildActionButton(
                     icon: Icons.refresh_rounded,
                     label: 'Load',
@@ -323,11 +410,26 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
                 indicatorWeight: 2,
                 labelColor: _accentGold,
                 unselectedLabelColor: _textSecondary,
-                labelStyle: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w600),
+                labelStyle: GoogleFonts.montserrat(
+                    fontSize: 10, fontWeight: FontWeight.w600),
                 unselectedLabelStyle: GoogleFonts.montserrat(fontSize: 10),
                 tabs: const [
-                  Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.grid_on, size: 14), SizedBox(width: 4), Text('DATA GRID')])),
-                  Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.pivot_table_chart, size: 14), SizedBox(width: 4), Text('PIVOT')])),
+                  Tab(
+                      child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.grid_on, size: 14),
+                            SizedBox(width: 4),
+                            Text('DATA GRID')
+                          ])),
+                  Tab(
+                      child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.pivot_table_chart, size: 14),
+                            SizedBox(width: 4),
+                            Text('PIVOT')
+                          ])),
                 ],
               ),
             ),
@@ -335,7 +437,8 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
             // Content
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2))
                   : _error != null
                   ? _buildErrorState()
                   : _stockData.isEmpty
@@ -370,7 +473,8 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
         onTap: onPressed,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: 8),
+          padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 10 : 14, vertical: 8),
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(8),
@@ -381,7 +485,11 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
               Icon(icon, size: 16, color: Colors.white),
               if (!isMobile) ...[
                 const SizedBox(width: 6),
-                Text(label, style: GoogleFonts.montserrat(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white)),
+                Text(label,
+                    style: GoogleFonts.montserrat(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white)),
               ],
             ],
           ),
@@ -395,23 +503,19 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
       padding: EdgeInsets.only(
         left: isTablet ? 16 : 12,
         right: isTablet ? 16 : 12,
-        bottom: isTablet ? 0 : 0,
+        bottom: 0,
         top: 12,
       ),
       child: Container(
         decoration: BoxDecoration(
           color: _surfaceWhite,
           borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(12),
-            topRight: Radius.circular(12),
-          ),
+              topLeft: Radius.circular(12), topRight: Radius.circular(12)),
           border: Border.all(color: _borderColor),
         ),
         child: ClipRRect(
           borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(12),
-            topRight: Radius.circular(12),
-          ),
+              topLeft: Radius.circular(12), topRight: Radius.circular(12)),
           child: SfDataGrid(
             source: _dataSource,
             allowColumnsResizing: true,
@@ -430,33 +534,79 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
                 title: 'TOTAL',
                 titleColumnSpan: 3,
                 columns: [
-                  GridSummaryColumn(name: 'TotalAwal', columnName: 'Awal', summaryType: GridSummaryType.sum),
-                  GridSummaryColumn(name: 'TotalSTBJ', columnName: 'STBJ', summaryType: GridSummaryType.sum),
-                  GridSummaryColumn(name: 'TotalMutasiIn', columnName: 'Mutasi_in', summaryType: GridSummaryType.sum),
-                  GridSummaryColumn(name: 'TotalMutasiOut', columnName: 'Mutasi_out', summaryType: GridSummaryType.sum),
-                  GridSummaryColumn(name: 'TotalKoreksi', columnName: 'Koreksi', summaryType: GridSummaryType.sum),
-                  GridSummaryColumn(name: 'TotalRetur', columnName: 'Retur', summaryType: GridSummaryType.sum),
-                  GridSummaryColumn(name: 'TotalSales', columnName: 'Sales', summaryType: GridSummaryType.sum),
-                  GridSummaryColumn(name: 'TotalAkhir', columnName: 'Akhir', summaryType: GridSummaryType.sum),
-                  GridSummaryColumn(name: 'TotalChange', columnName: 'Change', summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(
+                      name: 'TotalAwal',
+                      columnName: 'Awal',
+                      summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(
+                      name: 'TotalSTBJ',
+                      columnName: 'STBJ',
+                      summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(
+                      name: 'TotalMutasiIn',
+                      columnName: 'Mutasi_in',
+                      summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(
+                      name: 'TotalMinta',
+                      columnName: 'Minta',
+                      summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(
+                      name: 'TotalMutasiOut',
+                      columnName: 'Mutasi_out',
+                      summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(
+                      name: 'TotalKoreksi',
+                      columnName: 'Koreksi',
+                      summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(
+                      name: 'TotalRetur',
+                      columnName: 'Retur',
+                      summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(
+                      name: 'TotalSales',
+                      columnName: 'Sales',
+                      summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(
+                      name: 'TotalAkhir',
+                      columnName: 'Akhir',
+                      summaryType: GridSummaryType.sum),
+                  GridSummaryColumn(
+                      name: 'TotalChange',
+                      columnName: 'Change',
+                      summaryType: GridSummaryType.sum),
                 ],
                 position: GridTableSummaryRowPosition.bottom,
               ),
             ],
             columns: [
-              _buildGridColumn('no', 'No', width: 100, alignment: Alignment.center),
-              _buildGridColumn('ID', 'ID', width: 100, alignment: Alignment.centerLeft),
-              _buildGridColumn('NAMA', 'Nama Item', width: 200, alignment: Alignment.centerLeft),
-              _buildGridColumn('CATEGORY', 'Kategori', width: 140, alignment: Alignment.centerLeft),
-              _buildGridColumn('Awal', 'Awal', width: 120, alignment: Alignment.centerRight),
-              _buildGridColumn('STBJ', 'STBJ', width: 120, alignment: Alignment.centerRight),
-              _buildGridColumn('Mutasi_in', 'Mutasi In', width: 170, alignment: Alignment.centerRight),
-              _buildGridColumn('Mutasi_out', 'Mutasi Out', width: 170, alignment: Alignment.centerRight),
-              _buildGridColumn('Koreksi', 'Koreksi', width: 120, alignment: Alignment.centerRight),
-              _buildGridColumn('Retur', 'Retur', width: 120, alignment: Alignment.centerRight),
-              _buildGridColumn('Sales', 'Sales', width: 120, alignment: Alignment.centerRight),
-              _buildGridColumn('Akhir', 'Akhir', width: 120, alignment: Alignment.centerRight),
-              _buildGridColumn('Change', 'Change', width: 120, alignment: Alignment.centerRight),
+              _buildGridColumn('no', 'No',
+                  width: 60, alignment: Alignment.center),
+              _buildGridColumn('ID', 'Kode Barang',
+                  width: 150, alignment: Alignment.centerLeft),
+              _buildGridColumn('NAMA', 'Nama Item',
+                  width: 160, alignment: Alignment.centerLeft),
+              _buildGridColumn('CATEGORY', 'Kategori',
+                  width: 100, alignment: Alignment.centerLeft),
+              _buildGridColumn('Awal', 'Stock Awal',
+                  width: 150, alignment: Alignment.centerRight),
+              _buildGridColumn('STBJ', 'STBJ',
+                  width: 150, alignment: Alignment.centerRight),
+              _buildGridColumn('Mutasi_in', 'Mutasi In',
+                  width: 150, alignment: Alignment.centerRight),
+              _buildGridColumn('Minta', 'Permintaan',
+                  width: 150, alignment: Alignment.centerRight),
+              _buildGridColumn('Mutasi_out', 'Mutasi Out',
+                  width: 150, alignment: Alignment.centerRight),
+              _buildGridColumn('Koreksi', 'Koreksi',
+                  width: 150, alignment: Alignment.centerRight),
+              _buildGridColumn('Retur', 'Retur',
+                  width: 150, alignment: Alignment.centerRight),
+              _buildGridColumn('Sales', 'Sales',
+                  width: 150, alignment: Alignment.centerRight),
+              _buildGridColumn('Akhir', 'Akhir',
+                  width: 150, alignment: Alignment.centerRight),
+              _buildGridColumn('Change', 'Change',
+                  width: 150, alignment: Alignment.centerRight),
             ],
           ),
         ),
@@ -464,14 +614,19 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
     );
   }
 
-  GridColumn _buildGridColumn(String name, String label, {double? width, Alignment alignment = Alignment.centerLeft}) {
+  GridColumn _buildGridColumn(String name, String label,
+      {double? width, Alignment alignment = Alignment.centerLeft}) {
     return GridColumn(
       columnName: name,
       width: width ?? double.nan,
       label: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         alignment: alignment,
-        child: Text(label, style: GoogleFonts.montserrat(fontWeight: FontWeight.w600, fontSize: 10, color: _textSecondary)),
+        child: Text(label,
+            style: GoogleFonts.montserrat(
+                fontWeight: FontWeight.w600,
+                fontSize: 10,
+                color: _textSecondary)),
       ),
     );
   }
@@ -498,7 +653,9 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
               decoration: BoxDecoration(
                 color: _bgLight,
                 border: Border(bottom: BorderSide(color: _borderColor)),
-                borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+                borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12)),
               ),
               child: Row(
                 children: [
@@ -506,8 +663,9 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      'Rows: Kategori | Values: Awal, STBJ, Mutasi In, Mutasi Out, Koreksi, Retur, Sales, Akhir, Change',
-                      style: GoogleFonts.montserrat(fontSize: 9, color: _textSecondary),
+                      'Rows: Kategori | Values: semua kolom',
+                      style: GoogleFonts.montserrat(
+                          fontSize: 9, color: _textSecondary),
                     ),
                   ),
                 ],
@@ -524,7 +682,18 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
                     cols: const [],
                     rows: const ['CATEGORY'],
                     aggregatorName: AggregatorName.sum,
-                    vals: const ['Awal', 'STBJ', 'Mutasi_in', 'Mutasi_out', 'Koreksi', 'Retur', 'Sales', 'Akhir', 'Change'],
+                    vals: const [
+                      'Awal',
+                      'STBJ',
+                      'Mutasi_in',
+                      'Minta',
+                      'Mutasi_out',
+                      'Koreksi',
+                      'Retur',
+                      'Sales',
+                      'Akhir',
+                      'Change'
+                    ],
                     marginLabel: 'Total',
                     rendererName: RendererName.table,
                   ),
@@ -539,8 +708,11 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
         child: Container(
           margin: const EdgeInsets.all(20),
           padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12)),
-          child: Text('Error: ${e.toString()}', style: GoogleFonts.montserrat(fontSize: 11, color: Colors.red)),
+          decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(12)),
+          child: Text('Error: ${e.toString()}',
+              style: GoogleFonts.montserrat(fontSize: 11, color: Colors.red)),
         ),
       );
     }
@@ -558,9 +730,15 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
             child: Icon(Icons.inbox_outlined, size: 28, color: _textSecondary),
           ),
           const SizedBox(height: 16),
-          Text('Tidak ada data stok', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w500, color: _textPrimary)),
+          Text('Tidak ada data stok',
+              style: GoogleFonts.montserrat(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: _textPrimary)),
           const SizedBox(height: 4),
-          Text('Pilih filter dan klik Load', style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
+          Text('Pilih filter dan klik Load',
+              style: GoogleFonts.montserrat(
+                  fontSize: 13, color: _textSecondary)),
         ],
       ),
     );
@@ -574,13 +752,20 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
           Container(
             width: 64,
             height: 64,
-            decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+                color: Colors.red.shade50, shape: BoxShape.circle),
             child: Icon(Icons.error_outline, size: 28, color: Colors.red),
           ),
           const SizedBox(height: 16),
-          Text('Terjadi Kesalahan', style: GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w500, color: _textPrimary)),
+          Text('Terjadi Kesalahan',
+              style: GoogleFonts.montserrat(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: _textPrimary)),
           const SizedBox(height: 4),
-          Text(_error!, style: GoogleFonts.montserrat(fontSize: 13, color: _textSecondary)),
+          Text(_error!,
+              style: GoogleFonts.montserrat(
+                  fontSize: 13, color: _textSecondary)),
           const SizedBox(height: 16),
           _buildActionButton(
             icon: Icons.refresh_rounded,
@@ -609,7 +794,11 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('${_stockData.length} items', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500, color: _textPrimary)),
+              Text('${_stockData.length} items',
+                  style: GoogleFonts.montserrat(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: _textPrimary)),
             ],
           ),
           Column(
@@ -617,16 +806,24 @@ class _StockReportScreenState extends State<StockReportScreen> with SingleTicker
             children: [
               Row(
                 children: [
-                  Text('Stok Akhir: ', style: GoogleFonts.montserrat(fontSize: 11, color: _textSecondary)),
+                  Text('Stok Akhir: ',
+                      style: GoogleFonts.montserrat(
+                          fontSize: 11, color: _textSecondary)),
                   Text(
                     _numberFormat.format(_stockSummary.totalAkhir),
-                    style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w600, color: _getStockColor(_stockSummary.totalAkhir)),
+                    style: GoogleFonts.montserrat(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: _getStockColor(_stockSummary.totalAkhir)),
                   ),
                 ],
               ),
               Text(
                 'Perubahan: ${totalChange >= 0 ? '+' : ''}${_numberFormat.format(totalChange)}',
-                style: GoogleFonts.montserrat(fontSize: 9, fontWeight: FontWeight.w500, color: totalChange >= 0 ? Colors.green : Colors.red),
+                style: GoogleFonts.montserrat(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w500,
+                    color: totalChange >= 0 ? Colors.green : Colors.red),
               ),
             ],
           ),
@@ -646,6 +843,7 @@ class StockDataSource extends DataGridSource {
     _totalAwal = stockData.fold<int>(0, (sum, item) => sum + item.Awal);
     _totalSTBJ = stockData.fold<int>(0, (sum, item) => sum + item.STBJ);
     _totalMutasiIn = stockData.fold<int>(0, (sum, item) => sum + item.Mutasi_in);
+    _totalMinta = stockData.fold<int>(0, (sum, item) => sum + item.Minta);
     _totalMutasiOut = stockData.fold<int>(0, (sum, item) => sum + item.Mutasi_out);
     _totalKoreksi = stockData.fold<int>(0, (sum, item) => sum + item.Koreksi);
     _totalRetur = stockData.fold<int>(0, (sum, item) => sum + item.Retur);
@@ -665,6 +863,7 @@ class StockDataSource extends DataGridSource {
         DataGridCell<int>(columnName: 'Awal', value: item.Awal),
         DataGridCell<int>(columnName: 'STBJ', value: item.STBJ),
         DataGridCell<int>(columnName: 'Mutasi_in', value: item.Mutasi_in),
+        DataGridCell<int>(columnName: 'Minta', value: item.Minta),
         DataGridCell<int>(columnName: 'Mutasi_out', value: item.Mutasi_out),
         DataGridCell<int>(columnName: 'Koreksi', value: item.Koreksi),
         DataGridCell<int>(columnName: 'Retur', value: item.Retur),
@@ -677,7 +876,9 @@ class StockDataSource extends DataGridSource {
 
   List<DataGridRow> _data = [];
   late NumberFormat _numberFormat;
-  late int _totalAwal, _totalSTBJ, _totalMutasiIn, _totalMutasiOut, _totalKoreksi, _totalRetur, _totalSales, _totalAkhir, _totalChange;
+  late int _totalAwal, _totalSTBJ, _totalMutasiIn, _totalMinta,
+      _totalMutasiOut, _totalKoreksi, _totalRetur, _totalSales, _totalAkhir,
+      _totalChange;
 
   @override
   List<DataGridRow> get rows => _data;
@@ -689,13 +890,21 @@ class StockDataSource extends DataGridSource {
   }
 
   @override
-  Widget? buildTableSummaryCellWidget(GridTableSummaryRow summaryRow, GridSummaryColumn? summaryColumn, RowColumnIndex rowColumnIndex, String summaryValue) {
+  Widget? buildTableSummaryCellWidget(
+      GridTableSummaryRow summaryRow,
+      GridSummaryColumn? summaryColumn,
+      RowColumnIndex rowColumnIndex,
+      String summaryValue) {
     if (summaryColumn == null) {
       if (summaryRow.title != null && summaryRow.title!.isNotEmpty) {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           alignment: Alignment.centerLeft,
-          child: Text(summaryRow.title!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Color(0xFFF6A918))),
+          child: Text(summaryRow.title!,
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                  color: Color(0xFFF6A918))),
         );
       }
       return Container();
@@ -705,22 +914,48 @@ class StockDataSource extends DataGridSource {
     Color textColor = const Color(0xFFF6A918);
 
     switch (summaryColumn.name) {
-      case 'TotalAwal': value = _totalAwal; break;
-      case 'TotalSTBJ': value = _totalSTBJ; break;
-      case 'TotalMutasiIn': value = _totalMutasiIn; break;
-      case 'TotalMutasiOut': value = _totalMutasiOut; break;
-      case 'TotalKoreksi': value = _totalKoreksi; break;
-      case 'TotalRetur': value = _totalRetur; break;
-      case 'TotalSales': value = _totalSales; break;
-      case 'TotalAkhir': value = _totalAkhir; textColor = _getStockColor(value); break;
-      case 'TotalChange': value = _totalChange; textColor = value >= 0 ? Colors.green : Colors.red; break;
-      default: return Container();
+      case 'TotalAwal':
+        value = _totalAwal;
+        break;
+      case 'TotalSTBJ':
+        value = _totalSTBJ;
+        break;
+      case 'TotalMutasiIn':
+        value = _totalMutasiIn;
+        break;
+      case 'TotalMinta':
+        value = _totalMinta;
+        break;
+      case 'TotalMutasiOut':
+        value = _totalMutasiOut;
+        break;
+      case 'TotalKoreksi':
+        value = _totalKoreksi;
+        break;
+      case 'TotalRetur':
+        value = _totalRetur;
+        break;
+      case 'TotalSales':
+        value = _totalSales;
+        break;
+      case 'TotalAkhir':
+        value = _totalAkhir;
+        textColor = _getStockColor(value);
+        break;
+      case 'TotalChange':
+        value = _totalChange;
+        textColor = value >= 0 ? Colors.green : Colors.red;
+        break;
+      default:
+        return Container();
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       alignment: Alignment.centerRight,
-      child: Text(_numberFormat.format(value), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: textColor)),
+      child: Text(_numberFormat.format(value),
+          style: TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 10, color: textColor)),
     );
   }
 
@@ -728,7 +963,10 @@ class StockDataSource extends DataGridSource {
   DataGridRowAdapter buildRow(DataGridRow row) {
     return DataGridRowAdapter(
       cells: row.getCells().map<Widget>((cell) {
-        final isNumber = cell.columnName != 'no' && cell.columnName != 'ID' && cell.columnName != 'NAMA' && cell.columnName != 'CATEGORY';
+        final isNumber = cell.columnName != 'no' &&
+            cell.columnName != 'ID' &&
+            cell.columnName != 'NAMA' &&
+            cell.columnName != 'CATEGORY';
 
         Color? textColor;
         if (cell.columnName == 'Akhir') {
@@ -736,8 +974,12 @@ class StockDataSource extends DataGridSource {
         } else if (cell.columnName == 'Change') {
           final value = cell.value as int;
           textColor = value >= 0 ? Colors.green : Colors.red;
-        } else if (cell.columnName == 'Koreksi') {
-          textColor = const Color(0xFF3B82F6);
+        }
+        // else if (cell.columnName == 'Koreksi') {
+        //   textColor = const Color(0xFF3B82F6);
+        // }
+        else if (cell.columnName == 'Minta') {
+          textColor = const Color(0xFF8B5CF6);
         }
 
         return Container(
@@ -746,7 +988,11 @@ class StockDataSource extends DataGridSource {
           child: Text(
             isNumber ? _numberFormat.format(cell.value) : cell.value.toString(),
             textAlign: _getTextAlign(cell.columnName),
-            style: GoogleFonts.montserrat(fontSize: 10, fontWeight: isNumber ? FontWeight.w600 : FontWeight.normal, color: textColor ?? (isNumber ? const Color(0xFFF6A918) : Colors.black87)),
+            style: GoogleFonts.montserrat(
+                fontSize: 10,
+                fontWeight: isNumber ? FontWeight.w600 : FontWeight.normal,
+                color: textColor ??
+                    (isNumber ? const Color(0xFFF6A918) : Colors.black87)),
           ),
         );
       }).toList(),
@@ -755,13 +1001,17 @@ class StockDataSource extends DataGridSource {
 
   Alignment _getAlignment(String columnName) {
     if (columnName == 'no') return Alignment.center;
-    if (columnName == 'ID' || columnName == 'NAMA' || columnName == 'CATEGORY') return Alignment.centerLeft;
+    if (columnName == 'ID' || columnName == 'NAMA' || columnName == 'CATEGORY') {
+      return Alignment.centerLeft;
+    }
     return Alignment.centerRight;
   }
 
   TextAlign _getTextAlign(String columnName) {
     if (columnName == 'no') return TextAlign.center;
-    if (columnName == 'ID' || columnName == 'NAMA' || columnName == 'CATEGORY') return TextAlign.left;
+    if (columnName == 'ID' || columnName == 'NAMA' || columnName == 'CATEGORY') {
+      return TextAlign.left;
+    }
     return TextAlign.right;
   }
 }

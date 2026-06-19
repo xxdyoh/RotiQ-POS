@@ -6,10 +6,11 @@ class StockReport {
   final int STBJ;
   final int Mutasi_in;
   final int Mutasi_out;
-  final int Koreksi;      // <-- TAMBAHKAN
+  final int Koreksi;
   final int Retur;
   final int Sales;
   final int Akhir;
+  final int Minta;
 
   StockReport({
     required this.ID,
@@ -19,10 +20,11 @@ class StockReport {
     required this.STBJ,
     required this.Mutasi_in,
     required this.Mutasi_out,
-    required this.Koreksi, // <-- TAMBAHKAN
+    required this.Koreksi,
     required this.Retur,
     required this.Sales,
     required this.Akhir,
+    required this.Minta,
   });
 
   factory StockReport.fromJson(Map<String, dynamic> json) {
@@ -38,6 +40,7 @@ class StockReport {
       Retur: _safeToInt(json['Retur']),
       Sales: _safeToInt(json['Sales']),
       Akhir: _safeToInt(json['Akhir']),
+      Minta: _safeToInt(json['Minta']),
     );
   }
 
@@ -60,22 +63,24 @@ class StockSummary {
   final int totalSTBJ;
   final int totalMutasiIn;
   final int totalMutasiOut;
-  final int totalKoreksi;   // <-- TAMBAHKAN
+  final int totalKoreksi;
   final int totalRetur;
   final int totalSales;
   final int totalAkhir;
   final int totalItems;
+  final int totalMinta;
 
   StockSummary({
     required this.totalAwal,
     required this.totalSTBJ,
     required this.totalMutasiIn,
     required this.totalMutasiOut,
-    required this.totalKoreksi, // <-- TAMBAHKAN
+    required this.totalKoreksi,
     required this.totalRetur,
     required this.totalSales,
     required this.totalAkhir,
     required this.totalItems,
+    required this.totalMinta,
   });
 
   factory StockSummary.fromJson(Map<String, dynamic> json) {
@@ -89,6 +94,7 @@ class StockSummary {
       totalSales: _safeToInt(json['total_sales']),
       totalAkhir: _safeToInt(json['total_akhir']),
       totalItems: _safeToInt(json['total_items']),
+      totalMinta: _safeToInt(json['total_minta'] ?? 0),
     );
   }
 

@@ -27,6 +27,7 @@ class StockReportService {
     required DateTime startDate,
     required DateTime endDate,
     List<String>? selectedCategories,
+    String? selectedCabang,
   }) async {
     try {
       final startStr = _formatDate(startDate);
@@ -37,6 +38,10 @@ class StockReportService {
       if (selectedCategories != null && selectedCategories.isNotEmpty) {
         final categoriesParam = selectedCategories.join(',');
         url += '&categories=$categoriesParam';
+      }
+
+      if (selectedCabang != null && selectedCabang.isNotEmpty) {
+        url += '&selected_cabang=$selectedCabang';
       }
 
       final response = await http.get(
