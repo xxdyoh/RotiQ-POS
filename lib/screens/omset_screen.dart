@@ -132,12 +132,13 @@ class _OmsetScreenState extends State<OmsetScreen> {
       sheet.name = 'Laporan Omset';
 
       final isDaily = _selectedTipe == 'daily';
-      final colCount = isDaily ? 4 : 3;
+      final isWeekly = _selectedTipe == 'weekly';
+      final colCount = isDaily ? 4 : (isWeekly ? 4 : 3);
 
       // Judul
       sheet.getRangeByIndex(1, 1, 1, colCount).merge();
-      sheet.getRangeByIndex(1, 1).setText(
-          'Laporan Omset - ${_selectedCabang?.nama ?? ''}');
+      sheet.getRangeByIndex(1, 1)
+          .setText('Laporan Omset - ${_selectedCabang?.nama ?? ''}');
       sheet.getRangeByIndex(1, 1).cellStyle.fontSize = 14;
       sheet.getRangeByIndex(1, 1).cellStyle.bold = true;
       sheet.getRangeByIndex(1, 1).cellStyle.hAlign = HAlignType.center;
@@ -153,6 +154,11 @@ class _OmsetScreenState extends State<OmsetScreen> {
       if (isDaily) {
         sheet.getRangeByIndex(1, 1).columnWidth = 16;
         sheet.getRangeByIndex(1, 2).columnWidth = 14;
+        sheet.getRangeByIndex(1, 3).columnWidth = 20;
+        sheet.getRangeByIndex(1, 4).columnWidth = 12;
+      } else if (isWeekly) {
+        sheet.getRangeByIndex(1, 1).columnWidth = 12;
+        sheet.getRangeByIndex(1, 2).columnWidth = 22;
         sheet.getRangeByIndex(1, 3).columnWidth = 20;
         sheet.getRangeByIndex(1, 4).columnWidth = 12;
       } else {
@@ -175,9 +181,14 @@ class _OmsetScreenState extends State<OmsetScreen> {
         sheet.getRangeByIndex(headerRow, 2).setText('Hari');
         sheet.getRangeByIndex(headerRow, 3).setText('Nilai');
         sheet.getRangeByIndex(headerRow, 4).setText('Growth');
+      } else if (isWeekly) {
+        sheet.getRangeByIndex(headerRow, 1).setText('Week');
+        sheet.getRangeByIndex(headerRow, 2).setText('Range Tanggal');
+        sheet.getRangeByIndex(headerRow, 3).setText('Nilai');
+        sheet.getRangeByIndex(headerRow, 4).setText('Growth');
       } else {
-        sheet.getRangeByIndex(headerRow, 1).setText(
-            _selectedTipe == 'weekly' ? 'Week' : 'Bulan');
+        sheet.getRangeByIndex(headerRow, 1)
+            .setText('Bulan');
         sheet.getRangeByIndex(headerRow, 2).setText('Nilai');
         sheet.getRangeByIndex(headerRow, 3).setText('Growth');
       }
@@ -192,20 +203,26 @@ class _OmsetScreenState extends State<OmsetScreen> {
           sheet.getRangeByIndex(row, 2).setText(item.hari);
           sheet.getRangeByIndex(row, 3).setNumber(item.nilai);
           sheet.getRangeByIndex(row, 4).setText(item.growth);
+        } else if (isWeekly) {
+          sheet.getRangeByIndex(row, 1).setText(item.week);
+          sheet.getRangeByIndex(row, 2).setText(item.dateRange);
+          sheet.getRangeByIndex(row, 3).setNumber(item.nilai);
+          sheet.getRangeByIndex(row, 4).setText(item.growth);
         } else {
-          sheet.getRangeByIndex(row, 1)
-              .setText(_selectedTipe == 'weekly' ? item.week : item.bulan);
+          sheet.getRangeByIndex(row, 1).setText(item.bulan);
           sheet.getRangeByIndex(row, 2).setNumber(item.nilai);
           sheet.getRangeByIndex(row, 3).setText(item.growth);
         }
 
-        sheet.getRangeByIndex(row, colCount).cellStyle.hAlign =
-            HAlignType.right;
+        sheet.getRangeByIndex(row, isDaily || isWeekly ? 3 : 2)
+            .cellStyle.hAlign = HAlignType.right;
         totalNilai += item.nilai;
 
         if (row % 2 == 0) {
-          sheet.getRangeByIndex(row, 1, row, colCount).cellStyle.backColor =
-          '#F8F9FA';
+          sheet
+              .getRangeByIndex(row, 1, row, colCount)
+              .cellStyle
+              .backColor = '#F8F9FA';
         }
         row++;
       }
@@ -214,12 +231,21 @@ class _OmsetScreenState extends State<OmsetScreen> {
       sheet.getRangeByIndex(row, 1).setText('TOTAL');
       sheet.getRangeByIndex(row, 1).cellStyle.bold = true;
       sheet.getRangeByIndex(row, 1).cellStyle.backColor = '#E9ECEF';
-      sheet.getRangeByIndex(row, isDaily ? 3 : 2).setNumber(totalNilai);
-      sheet.getRangeByIndex(row, isDaily ? 3 : 2).cellStyle.bold = true;
-      sheet.getRangeByIndex(row, isDaily ? 3 : 2).cellStyle.backColor =
-      '#E9ECEF';
-      sheet.getRangeByIndex(row, isDaily ? 3 : 2).cellStyle.hAlign =
-          HAlignType.right;
+      sheet
+          .getRangeByIndex(row, isDaily || isWeekly ? 3 : 2)
+          .setNumber(totalNilai);
+      sheet
+          .getRangeByIndex(row, isDaily || isWeekly ? 3 : 2)
+          .cellStyle
+          .bold = true;
+      sheet
+          .getRangeByIndex(row, isDaily || isWeekly ? 3 : 2)
+          .cellStyle
+          .backColor = '#E9ECEF';
+      sheet
+          .getRangeByIndex(row, isDaily || isWeekly ? 3 : 2)
+          .cellStyle
+          .hAlign = HAlignType.right;
 
       final List<int> bytes = workbook.saveAsStream();
       workbook.dispose();
@@ -297,6 +323,7 @@ class _OmsetScreenState extends State<OmsetScreen> {
   Widget build(BuildContext context) {
     final isMobile = ResponsiveHelper.isMobile(context);
     final isDaily = _selectedTipe == 'daily';
+    final isWeekly = _selectedTipe == 'weekly';
     final totalNilai = _data.fold<double>(0, (sum, d) => sum + d.nilai);
 
     return BaseLayout(
@@ -516,7 +543,7 @@ class _OmsetScreenState extends State<OmsetScreen> {
                         child: SfDataGrid(
                           source: _OmsetDataSource(
                             data: _data,
-                            isDaily: isDaily,
+                            tipe: _selectedTipe,
                             currencyFormat: _currencyFormat,
                             totalNilai: totalNilai,
                             growthBuilder: _buildGrowthCell,
@@ -557,9 +584,25 @@ class _OmsetScreenState extends State<OmsetScreen> {
                                           color: _textDark)),
                                 ),
                               ),
+                            if (isWeekly)
+                              GridColumn(
+                                columnName: 'range',
+                                width: 180,
+                                label: Container(
+                                  alignment: Alignment.centerLeft,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
+                                  child: Text('Range Tanggal',
+                                      style: GoogleFonts.montserrat(
+                                          fontWeight:
+                                          FontWeight.w600,
+                                          fontSize: 11,
+                                          color: _textDark)),
+                                ),
+                              ),
                             GridColumn(
                               columnName: 'nilai',
-                              width: isDaily ? 150 : 180,
+                              width: isDaily || isWeekly ? 150 : 180,
                               label: Container(
                                 alignment: Alignment.centerRight,
                                 padding: const EdgeInsets.symmetric(
@@ -645,7 +688,7 @@ class _OmsetScreenState extends State<OmsetScreen> {
 // ========== DATASOURCE ==========
 class _OmsetDataSource extends DataGridSource {
   final List<OmsetData> data;
-  final bool isDaily;
+  final String tipe;
   final NumberFormat currencyFormat;
   final double totalNilai;
   final Widget Function(String) growthBuilder;
@@ -653,7 +696,7 @@ class _OmsetDataSource extends DataGridSource {
 
   _OmsetDataSource({
     required this.data,
-    required this.isDaily,
+    required this.tipe,
     required this.currencyFormat,
     required this.totalNilai,
     required this.growthBuilder,
@@ -666,14 +709,22 @@ class _OmsetDataSource extends DataGridSource {
 
   void _buildRows() {
     _rows = [];
+    final isDaily = tipe == 'daily';
+    final isWeekly = tipe == 'weekly';
 
-    // Data rows
     for (int i = 0; i < data.length; i++) {
       final item = data[i];
       if (isDaily) {
         _rows.add(DataGridRow(cells: [
           DataGridCell<String>(columnName: 'label', value: getLabel(item)),
           DataGridCell<String>(columnName: 'sub', value: item.hari),
+          DataGridCell<double>(columnName: 'nilai', value: item.nilai),
+          DataGridCell<String>(columnName: 'growth', value: item.growth),
+        ]));
+      } else if (isWeekly) {
+        _rows.add(DataGridRow(cells: [
+          DataGridCell<String>(columnName: 'label', value: getLabel(item)),
+          DataGridCell<String>(columnName: 'range', value: item.dateRange),
           DataGridCell<double>(columnName: 'nilai', value: item.nilai),
           DataGridCell<String>(columnName: 'growth', value: item.growth),
         ]));
@@ -691,6 +742,13 @@ class _OmsetDataSource extends DataGridSource {
       _rows.add(DataGridRow(cells: [
         const DataGridCell<String>(columnName: 'label', value: 'TOTAL'),
         const DataGridCell<String>(columnName: 'sub', value: ''),
+        DataGridCell<double>(columnName: 'nilai', value: totalNilai),
+        const DataGridCell<String>(columnName: 'growth', value: ''),
+      ]));
+    } else if (isWeekly) {
+      _rows.add(DataGridRow(cells: [
+        const DataGridCell<String>(columnName: 'label', value: 'TOTAL'),
+        const DataGridCell<String>(columnName: 'range', value: ''),
         DataGridCell<double>(columnName: 'nilai', value: totalNilai),
         const DataGridCell<String>(columnName: 'growth', value: ''),
       ]));
@@ -735,6 +793,17 @@ class _OmsetDataSource extends DataGridSource {
           return Container(
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(cell.value.toString(),
+                style: GoogleFonts.montserrat(
+                    fontSize: 11, color: const Color(0xFF718096))),
+          );
+        }
+
+        // Range (weekly)
+        if (cell.columnName == 'range') {
+          return Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(cell.value.toString(),
                 style: GoogleFonts.montserrat(
                     fontSize: 11, color: const Color(0xFF718096))),

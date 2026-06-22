@@ -337,58 +337,58 @@ class _StockReportScreenState extends State<StockReportScreen>
                     ),
                     const SizedBox(width: 8),
                   ],
-                  Expanded(
-                    flex: 3,
-                    child: Container(
-                      height: 36,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: _surfaceWhite,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _borderColor),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          isExpanded: true,
-                          value: _selectedCategories.length == 1
-                              ? _selectedCategories.first
-                              : null,
-                          hint: Text(
-                            _selectedCategories.length > 1
-                                ? '${_selectedCategories.length} kategori'
-                                : 'Semua',
-                            style: GoogleFonts.montserrat(
-                                fontSize: 11, color: _textSecondary),
-                          ),
-                          icon: Icon(Icons.arrow_drop_down,
-                              size: 18, color: _textSecondary),
-                          style: GoogleFonts.montserrat(
-                              fontSize: 11, color: _textPrimary),
-                          items: [
-                            DropdownMenuItem(
-                                value: 'all',
-                                child: Text('Semua Kategori',
-                                    style: GoogleFonts.montserrat(
-                                        fontSize: 11))),
-                            ..._allCategories.map((category) =>
-                                DropdownMenuItem(
-                                    value: category,
-                                    child: Text(category,
-                                        style: GoogleFonts.montserrat(
-                                            fontSize: 11)))),
-                          ],
-                          onChanged: (value) {
-                            if (value == 'all') {
-                              setState(() =>
-                              _selectedCategories = List.from(_allCategories));
-                            } else if (value != null) {
-                              setState(() => _selectedCategories = [value]);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
+                  // Expanded(
+                  //   flex: 3,
+                  //   child: Container(
+                  //     height: 36,
+                  //     padding: const EdgeInsets.symmetric(horizontal: 8),
+                  //     decoration: BoxDecoration(
+                  //       color: _surfaceWhite,
+                  //       borderRadius: BorderRadius.circular(8),
+                  //       border: Border.all(color: _borderColor),
+                  //     ),
+                  //     child: DropdownButtonHideUnderline(
+                  //       child: DropdownButton<String>(
+                  //         isExpanded: true,
+                  //         value: _selectedCategories.length == 1
+                  //             ? _selectedCategories.first
+                  //             : null,
+                  //         hint: Text(
+                  //           _selectedCategories.length > 1
+                  //               ? '${_selectedCategories.length} kategori'
+                  //               : 'Semua',
+                  //           style: GoogleFonts.montserrat(
+                  //               fontSize: 11, color: _textSecondary),
+                  //         ),
+                  //         icon: Icon(Icons.arrow_drop_down,
+                  //             size: 18, color: _textSecondary),
+                  //         style: GoogleFonts.montserrat(
+                  //             fontSize: 11, color: _textPrimary),
+                  //         items: [
+                  //           DropdownMenuItem(
+                  //               value: 'all',
+                  //               child: Text('Semua Kategori',
+                  //                   style: GoogleFonts.montserrat(
+                  //                       fontSize: 11))),
+                  //           ..._allCategories.map((category) =>
+                  //               DropdownMenuItem(
+                  //                   value: category,
+                  //                   child: Text(category,
+                  //                       style: GoogleFonts.montserrat(
+                  //                           fontSize: 11)))),
+                  //         ],
+                  //         onChanged: (value) {
+                  //           if (value == 'all') {
+                  //             setState(() =>
+                  //             _selectedCategories = List.from(_allCategories));
+                  //           } else if (value != null) {
+                  //             setState(() => _selectedCategories = [value]);
+                  //           }
+                  //         },
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                   const SizedBox(width: 8),
                   _buildActionButton(
                     icon: Icons.refresh_rounded,

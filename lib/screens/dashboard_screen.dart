@@ -45,7 +45,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   bool _isProduksiLoading = true;
   ProduksiResponse? _produksiData;
-  int _selectedTabIndex = 0; // 0 = Sales, 1 = Produksi
+  int _selectedTabIndex = 0;
 
   List<String> _customerTypes = [];
   List<String> _selectedCustomerTypes = [];
@@ -59,11 +59,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
   );
   final NumberFormat _numberFormat = NumberFormat('#,##0');
 
+  // ✅ COLOR MAPPER - Warna konsisten berdasarkan nama cabang
+  static const List<Color> _allColors = [
+    Color(0xFF1A237E), // Indigo Dark
+    Color(0xFFE65100), // Orange Deep
+    Color(0xFF00695C), // Teal Dark
+    Color(0xFFC62828), // Red Dark
+    Color(0xFF4A148C), // Purple Deep
+    Color(0xFF004D40), // Green Dark
+    Color(0xFFBF360C), // Deep Red
+    Color(0xFF0D47A1), // Blue Dark
+    Color(0xFFF57F17), // Yellow Dark
+    Color(0xFF311B92), // Deep Purple
+    Color(0xFFB71C1C), // Dark Red
+    Color(0xFF01579B), // Light Blue Dark
+    Color(0xFF33691E), // Light Green Dark
+    Color(0xFF880E4F), // Pink Dark
+    Color(0xFF3E2723), // Brown Dark
+  ];
+
+  Color _getCabangColor(String cabangNama) {
+    final hash = cabangNama.hashCode.abs();
+    return _allColors[hash % _allColors.length];
+  }
+
   @override
   void initState() {
     super.initState();
     _endDate = DateTime.now();
-    _startDate = _endDate!.subtract(const Duration(days: 30));
+    _startDate = DateTime(_endDate!.year, _endDate!.month, 1);
     _tempStartDate = _startDate;
     _tempEndDate = _endDate;
     _tempGroupBy = _groupBy;
@@ -74,7 +98,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadCustomerTypes();
   }
 
-  // Load di initState
   Future<void> _loadCustomerTypes() async {
     setState(() => _isCustomerTypesLoading = true);
     final types = await DashboardService.getCustomerTypes();
@@ -127,53 +150,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
         endDate: _tempEndDate!,
         groupBy: _tempGroupBy,
         jenis: jenisParam,
-        customerTypes: _selectedCustomerTypes.isEmpty ? null : _selectedCustomerTypes, // ✅
+        customerTypes: _selectedCustomerTypes.isEmpty ? null : _selectedCustomerTypes,
       );
 
       if (_tempGroupBy == 'year' && data.sales.isNotEmpty) {
         final Map<String, double> yearMap = {};
-
         for (var sale in data.sales) {
           String dateStr = sale.label;
           String year = dateStr.substring(0, 4);
           yearMap[year] = (yearMap[year] ?? 0) + sale.totalSales;
         }
-
         final sortedYears = yearMap.keys.toList()..sort((a, b) => int.parse(a).compareTo(int.parse(b)));
         final newSales = sortedYears.map((year) => DashboardSalesData(
           label: year,
           totalSales: yearMap[year] ?? 0,
         )).toList();
-
         data.sales = newSales;
       }
 
       if (data.multiSeriesSales != null && data.multiSeriesSales!.dates.isNotEmpty && _tempGroupBy == 'year') {
         final originalDates = data.multiSeriesSales!.dates;
         final originalSeries = data.multiSeriesSales!.series;
-
         final Map<String, Map<String, double>> yearDataMap = {};
-
         for (var cabangData in originalSeries) {
           final cabangNama = cabangData['cabang_nama'] as String;
           final oldData = List<double>.from(cabangData['data']);
-
           for (int i = 0; i < originalDates.length; i++) {
             final dateStr = originalDates[i];
             final year = dateStr.substring(0, 4);
             final sales = oldData[i];
-
             yearDataMap.putIfAbsent(cabangNama, () => {});
             yearDataMap[cabangNama]![year] = (yearDataMap[cabangNama]![year] ?? 0) + sales;
           }
         }
-
         final allYears = <String>{};
         for (var cabangData in yearDataMap.values) {
           allYears.addAll(cabangData.keys);
         }
         final sortedYears = allYears.toList()..sort((a, b) => int.parse(a).compareTo(int.parse(b)));
-
         final newSeries = <Map<String, dynamic>>[];
         for (var entry in yearDataMap.entries) {
           final dataByYear = entry.value;
@@ -183,21 +197,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             'data': dataList,
           });
         }
-
-        newSeries.sort((a, b) {
-          final totalA = (a['data'] as List<double>).reduce((sum, val) => sum + val);
-          final totalB = (b['data'] as List<double>).reduce((sum, val) => sum + val);
-          return totalB.compareTo(totalA);
-        });
-
-        data.multiSeriesSales = MultiSeriesSalesData(
-          dates: sortedYears,
-          series: newSeries,
-        );
+        newSeries.sort((a, b) => (a['cabang_nama'] as String).compareTo(b['cabang_nama'] as String));
+        data.multiSeriesSales = MultiSeriesSalesData(dates: sortedYears, series: newSeries);
       } else if (data.multiSeriesSales != null && data.multiSeriesSales!.dates.isNotEmpty) {
         final originalDates = data.multiSeriesSales!.dates;
         final originalSeries = data.multiSeriesSales!.series;
-
         final indices = List.generate(originalDates.length, (i) => i);
         indices.sort((a, b) {
           final dateA = DateTime.tryParse(originalDates[a]);
@@ -205,9 +209,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (dateA == null || dateB == null) return 0;
           return dateA.compareTo(dateB);
         });
-
         final sortedDates = indices.map((i) => originalDates[i]).toList();
-
         final sortedSeries = originalSeries.map((cabangData) {
           final oldData = List<double>.from(cabangData['data']);
           final newData = indices.map((i) => oldData[i]).toList();
@@ -216,14 +218,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             'data': newData,
           };
         }).toList();
-
-        data.multiSeriesSales = MultiSeriesSalesData(
-          dates: sortedDates,
-          series: sortedSeries,
-        );
+        data.multiSeriesSales = MultiSeriesSalesData(dates: sortedDates, series: sortedSeries);
       }
-      print('disini top item');
-      print(data.topItems.length);
+
       setState(() {
         _dashboardData = data;
         _isLoading = false;
@@ -237,7 +234,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadProduksiData() async {
     if (!_isPusat) return;
-
     if (_tempStartDate == null || _tempEndDate == null) return;
 
     setState(() => _isProduksiLoading = true);
@@ -403,21 +399,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: ColorScheme.light(
-              primary: _theme.primary,
-              onPrimary: Colors.white,
-            ),
+            colorScheme: ColorScheme.light(primary: _theme.primary, onPrimary: Colors.white),
             dialogBackgroundColor: Colors.white,
           ),
           child: child!,
         );
       },
     );
-
     if (picked != null && picked != _startDate) {
-      setState(() {
-        _startDate = picked;
-      });
+      setState(() => _startDate = picked);
     }
   }
 
@@ -430,21 +420,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: ColorScheme.light(
-              primary: _theme.primary,
-              onPrimary: Colors.white,
-            ),
+            colorScheme: ColorScheme.light(primary: _theme.primary, onPrimary: Colors.white),
             dialogBackgroundColor: Colors.white,
           ),
           child: child!,
         );
       },
     );
-
     if (picked != null && picked != _endDate) {
-      setState(() {
-        _endDate = picked;
-      });
+      setState(() => _endDate = picked);
     }
   }
 
@@ -471,7 +455,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: _theme.background,
         child: Column(
           children: [
-            // Filter Bar (tetap sama)
             _FilterBar(
               startDate: _startDate,
               endDate: _endDate,
@@ -495,8 +478,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 setState(() => _selectedCustomerTypes = types);
               },
             ),
-
-            // TAB BAR (hanya untuk pusat)
             if (_isPusat)
               Container(
                 color: _theme.surface,
@@ -509,8 +490,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-
-            // CONTENT
             Expanded(
               child: _isPusat
                   ? (_selectedTabIndex == 0
@@ -567,26 +546,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
       currencyFormat: _currencyFormat,
       numberFormat: _numberFormat,
       theme: _theme,
+      getCabangColor: _getCabangColor,
       onCabangVisibilityChanged: (index, selected) {
         setState(() {
           if (index < _selectedCabangVisibility.length) {
             _selectedCabangVisibility[index] = selected;
-            if (_dashboardData?.multiSeriesSales != null &&
-                index < _dashboardData!.multiSeriesSales!.series.length) {
-              final kode = _cabangList.firstWhere(
-                    (c) => c['nama'] == _dashboardData!.multiSeriesSales!.series[index]['cabang_nama'],
-                orElse: () => {'kode': ''},
-              )['kode'] as String;
+            // Update selectedKodes sesuai visibility
+            if (index < _cabangList.length) {
+              final kode = _cabangList[index]['kode'] as String;
               if (selected) {
-                if (!_selectedCabangKodes.contains(kode)) {
-                  _selectedCabangKodes.add(kode);
-                }
+                if (!_selectedCabangKodes.contains(kode)) _selectedCabangKodes.add(kode);
               } else {
                 _selectedCabangKodes.remove(kode);
               }
             }
           }
         });
+        // ✅ Reload secondary data (categories, kasir, top items) sesuai filter
         _loadSecondaryData();
       },
       onLoadSecondaryData: _loadSecondaryData,
@@ -609,7 +585,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Chart Batang Pemakaian Gram
           _ProduksiGramChart(
             chartData: data.chart,
             totalGram: data.totalGram,
@@ -618,37 +593,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             theme: _theme,
           ),
           SizedBox(height: 24),
-
-          // Bawah: Tabel (kiri) + Pie Chart (kanan)
           if (isMobile) ...[
-            _ProduksiItemTable(
-              items: data.items,
-              theme: _theme,
-            ),
+            _ProduksiItemTable(items: data.items, theme: _theme),
             SizedBox(height: 20),
-            _ProduksiDivisiPieChart(
-              divisiData: data.divisi,
-              theme: _theme,
-            ),
+            _ProduksiDivisiPieChart(divisiData: data.divisi, theme: _theme),
           ] else
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  flex: 6,
-                  child: _ProduksiItemTable(
-                    items: data.items,
-                    theme: _theme,
-                  ),
-                ),
+                Expanded(flex: 6, child: _ProduksiItemTable(items: data.items, theme: _theme)),
                 SizedBox(width: 20),
-                Expanded(
-                  flex: 4,
-                  child: _ProduksiDivisiPieChart(
-                    divisiData: data.divisi,
-                    theme: _theme,
-                  ),
-                ),
+                Expanded(flex: 4, child: _ProduksiDivisiPieChart(divisiData: data.divisi, theme: _theme)),
               ],
             ),
         ],
@@ -657,6 +612,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
+// ============================================================
+// APP THEME
+// ============================================================
 class AppTheme {
   final Color primary = const Color(0xFF0F3B5C);
   final Color primaryDark = const Color(0xFF0A2A42);
@@ -666,84 +624,30 @@ class AppTheme {
   final Color success = const Color(0xFF27AE60);
   final Color error = const Color(0xFFE74C3C);
   final Color warning = const Color(0xFFF39C12);
-
   final Color background = const Color(0xFFF5F7FA);
   final Color surface = const Color(0xFFFFFFFF);
   final Color surfaceAlt = const Color(0xFFF8FAFD);
-
   final Color textPrimary = const Color(0xFF2C3E50);
   final Color textSecondary = const Color(0xFF5D6E7F);
   final Color textTertiary = const Color(0xFF8A99AA);
-
   final Color border = const Color(0xFFE4E9F0);
   final Color borderLight = const Color(0xFFF0F3F8);
 
   List<BoxShadow> get cardShadow => [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.03),
-      blurRadius: 12,
-      offset: const Offset(0, 2),
-    ),
-    BoxShadow(
-      color: Colors.black.withOpacity(0.02),
-      blurRadius: 4,
-      offset: const Offset(0, 1),
-    ),
+    BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 12, offset: const Offset(0, 2)),
+    BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 1)),
   ];
 
-  TextStyle get headlineLarge => GoogleFonts.plusJakartaSans(
-    fontSize: 28,
-    fontWeight: FontWeight.w700,
-    color: textPrimary,
-    letterSpacing: -0.5,
-  );
-  TextStyle get headlineMedium => GoogleFonts.plusJakartaSans(
-    fontSize: 24,
-    fontWeight: FontWeight.w700,
-    color: textPrimary,
-    letterSpacing: -0.3,
-  );
-  TextStyle get titleLarge => GoogleFonts.plusJakartaSans(
-    fontSize: 18,
-    fontWeight: FontWeight.w600,
-    color: textPrimary,
-    letterSpacing: -0.2,
-  );
-  TextStyle get titleMedium => GoogleFonts.plusJakartaSans(
-    fontSize: 16,
-    fontWeight: FontWeight.w600,
-    color: textPrimary,
-  );
-  TextStyle get titleSmall => GoogleFonts.plusJakartaSans(
-    fontSize: 14,
-    fontWeight: FontWeight.w600,
-    color: textPrimary,
-  );
-  TextStyle get bodyLarge => GoogleFonts.plusJakartaSans(
-    fontSize: 14,
-    fontWeight: FontWeight.w500,
-    color: textPrimary,
-  );
-  TextStyle get bodyMedium => GoogleFonts.plusJakartaSans(
-    fontSize: 13,
-    fontWeight: FontWeight.w500,
-    color: textPrimary,
-  );
-  TextStyle get bodySmall => GoogleFonts.plusJakartaSans(
-    fontSize: 12,
-    fontWeight: FontWeight.w500,
-    color: textSecondary,
-  );
-  TextStyle get caption => GoogleFonts.plusJakartaSans(
-    fontSize: 11,
-    fontWeight: FontWeight.w400,
-    color: textTertiary,
-  );
-  TextStyle get labelLarge => GoogleFonts.plusJakartaSans(
-    fontSize: 12,
-    fontWeight: FontWeight.w600,
-    color: secondary,
-  );
+  TextStyle get headlineLarge => GoogleFonts.plusJakartaSans(fontSize: 28, fontWeight: FontWeight.w700, color: textPrimary, letterSpacing: -0.5);
+  TextStyle get headlineMedium => GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w700, color: textPrimary, letterSpacing: -0.3);
+  TextStyle get titleLarge => GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w600, color: textPrimary, letterSpacing: -0.2);
+  TextStyle get titleMedium => GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w600, color: textPrimary);
+  TextStyle get titleSmall => GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimary);
+  TextStyle get bodyLarge => GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w500, color: textPrimary);
+  TextStyle get bodyMedium => GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w500, color: textPrimary);
+  TextStyle get bodySmall => GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w500, color: textSecondary);
+  TextStyle get caption => GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w400, color: textTertiary);
+  TextStyle get labelLarge => GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: secondary);
 
   BorderRadius get cardRadius => BorderRadius.circular(20);
   BorderRadius get buttonRadius => BorderRadius.circular(10);
@@ -756,6 +660,9 @@ class AppTheme {
   );
 }
 
+// ============================================================
+// FILTER BAR
+// ============================================================
 class _FilterBar extends StatelessWidget {
   final DateTime? startDate;
   final DateTime? endDate;
@@ -794,7 +701,6 @@ class _FilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 600;
-
     return Container(
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 12),
       color: theme.surface,
@@ -802,19 +708,9 @@ class _FilterBar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _DateField(
-              label: 'Dari',
-              date: startDate,
-              onTap: onStartDateTap,
-              theme: theme,
-            ),
+            _DateField(label: 'Dari', date: startDate, onTap: onStartDateTap, theme: theme),
             const SizedBox(width: 8),
-            _DateField(
-              label: 'Sampai',
-              date: endDate,
-              onTap: onEndDateTap,
-              theme: theme,
-            ),
+            _DateField(label: 'Sampai', date: endDate, onTap: onEndDateTap, theme: theme),
             const SizedBox(width: 8),
             _CompactDropdown(
               value: groupBy,
@@ -838,15 +734,13 @@ class _FilterBar extends StatelessWidget {
                 theme: theme,
               ),
             ],
-            if (isPusat || true) ...[ // Selalu tampil
-              const SizedBox(width: 8),
-              _CustomerMultiSelect(
-                selectedTypes: selectedCustomerTypes,
-                allTypes: customerTypes,
-                onChanged: onCustomerTypesChanged,
-                theme: theme,
-              ),
-            ],
+            const SizedBox(width: 8),
+            _CustomerMultiSelect(
+              selectedTypes: selectedCustomerTypes,
+              allTypes: customerTypes,
+              onChanged: onCustomerTypesChanged,
+              theme: theme,
+            ),
             const SizedBox(width: 8),
             _RefreshButton(onPressed: onRefresh, theme: theme),
           ],
@@ -861,13 +755,7 @@ class _DateField extends StatelessWidget {
   final DateTime? date;
   final VoidCallback onTap;
   final AppTheme theme;
-
-  const _DateField({
-    required this.label,
-    required this.date,
-    required this.onTap,
-    required this.theme,
-  });
+  const _DateField({required this.label, required this.date, required this.onTap, required this.theme});
 
   @override
   Widget build(BuildContext context) {
@@ -888,10 +776,7 @@ class _DateField extends StatelessWidget {
           children: [
             Icon(Icons.calendar_today, size: 14, color: theme.secondary),
             const SizedBox(width: 6),
-            Text(
-              '$label: ${date != null ? DateFormat('dd/MM/yy').format(date!) : 'Pilih'}',
-              style: theme.bodySmall,
-            ),
+            Text('$label: ${date != null ? DateFormat('dd/MM/yy').format(date!) : 'Pilih'}', style: theme.bodySmall),
           ],
         ),
       ),
@@ -904,7 +789,6 @@ class _CompactDropdown extends StatelessWidget {
   final List<DropdownMenuItem<String>> items;
   final ValueChanged<String?> onChanged;
   final AppTheme theme;
-
   const _CompactDropdown({required this.value, required this.items, required this.onChanged, required this.theme});
 
   @override
@@ -934,7 +818,6 @@ class _CompactDropdown extends StatelessWidget {
 class _RefreshButton extends StatelessWidget {
   final VoidCallback onPressed;
   final AppTheme theme;
-
   const _RefreshButton({required this.onPressed, required this.theme});
 
   @override
@@ -948,13 +831,7 @@ class _RefreshButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: theme.secondary,
           borderRadius: theme.buttonRadius,
-          boxShadow: [
-            BoxShadow(
-              color: theme.secondary.withOpacity(0.2),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: theme.secondary.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 2))],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -979,23 +856,8 @@ class _LoadingState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: theme.primaryLight,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
-                  valueColor: AlwaysStoppedAnimation(theme.primary),
-                ),
-              ),
-            ),
+          Container(width: 56, height: 56, decoration: BoxDecoration(color: theme.primaryLight, shape: BoxShape.circle),
+            child: Center(child: SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3, valueColor: AlwaysStoppedAnimation(theme.primary)))),
           ),
           const SizedBox(height: 20),
           Text('Memuat data dashboard...', style: theme.caption),
@@ -1015,15 +877,8 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(
-              color: theme.surfaceAlt,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.dashboard_outlined, size: 48, color: theme.textTertiary),
-          ),
+          Container(width: 96, height: 96, decoration: BoxDecoration(color: theme.surfaceAlt, shape: BoxShape.circle),
+              child: Icon(Icons.dashboard_outlined, size: 48, color: theme.textTertiary)),
           const SizedBox(height: 24),
           Text('Belum Ada Data', style: theme.titleMedium),
           const SizedBox(height: 8),
@@ -1034,6 +889,9 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+// ============================================================
+// DASHBOARD CONTENT (MAIN)
+// ============================================================
 class _DashboardContent extends StatelessWidget {
   final DashboardResponse data;
   final bool isPusat;
@@ -1044,6 +902,7 @@ class _DashboardContent extends StatelessWidget {
   final NumberFormat currencyFormat;
   final NumberFormat numberFormat;
   final AppTheme theme;
+  final Color Function(String cabangNama) getCabangColor;
   final Function(int, bool) onCabangVisibilityChanged;
   final VoidCallback onLoadSecondaryData;
 
@@ -1057,54 +916,114 @@ class _DashboardContent extends StatelessWidget {
     required this.currencyFormat,
     required this.numberFormat,
     required this.theme,
+    required this.getCabangColor,
     required this.onCabangVisibilityChanged,
     required this.onLoadSecondaryData,
   });
+
+  // ✅ FILTER RETUR SESUAI VISIBILITY SALES
+  List<Map<String, dynamic>> _getFilteredReturSeries() {
+    if (data.multiSeriesRetur == null) return [];
+
+    final visibleNames = <String>{};
+    final salesSeries = data.multiSeriesSales?.series ?? [];
+    for (int i = 0; i < salesSeries.length; i++) {
+      if (i < selectedVisibility.length && selectedVisibility[i]) {
+        visibleNames.add(salesSeries[i]['cabang_nama'] as String);
+      }
+    }
+
+    if (visibleNames.isEmpty || visibleNames.length == salesSeries.length) {
+      return data.multiSeriesRetur!.series;
+    }
+
+    return data.multiSeriesRetur!.series
+        .where((s) => visibleNames.contains(s['cabang_nama']))
+        .toList();
+  }
+
+  List<ReturItemSummaryData> _getFilteredSummary() {
+    if (data.returItems.isEmpty) return data.returItemsSummary;
+
+    final visibleNames = <String>{};
+    final salesSeries = data.multiSeriesSales?.series ?? [];
+    for (int i = 0; i < salesSeries.length; i++) {
+      if (i < selectedVisibility.length && selectedVisibility[i]) {
+        visibleNames.add(salesSeries[i]['cabang_nama'] as String);
+      }
+    }
+
+    final filteredItems = data.returItems
+        .where((item) => visibleNames.isEmpty || visibleNames.contains(item.cabang))
+        .toList();
+
+    final grouped = <String, ReturItemSummaryData>{};
+    for (var item in filteredItems) {
+      if (!grouped.containsKey(item.itemName)) {
+        grouped[item.itemName] = ReturItemSummaryData(itemName: item.itemName, totalQty: 0, totalNilai: 0);
+      }
+      final old = grouped[item.itemName]!;
+      grouped[item.itemName] = ReturItemSummaryData(
+        itemName: item.itemName,
+        totalQty: old.totalQty + item.totalQty,
+        totalNilai: old.totalNilai + item.totalNilai,
+      );
+    }
+
+    return grouped.values.toList()..sort((a, b) => b.totalQty.compareTo(a.totalQty));
+  }
 
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 600;
     final isMultiCabang = data.isAllCabang && data.multiSeriesSales != null && data.multiSeriesSales!.series.isNotEmpty;
 
+    final filteredReturSeries = _getFilteredReturSeries();
+    final hasMultiRetur = data.multiSeriesRetur != null && data.multiSeriesRetur!.series.isNotEmpty;
+    final filteredSummary = _getFilteredSummary();
+
     return SingleChildScrollView(
       padding: EdgeInsets.all(isMobile ? 16 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // CHART SALES
           if (isMultiCabang)
             _MultiCabangChart(
               data: data.multiSeriesSales!,
-              cabangList: cabangList,
               selectedVisibility: selectedVisibility,
               currencyFormat: currencyFormat,
               groupBy: groupBy,
               theme: theme,
+              getCabangColor: getCabangColor,
               onVisibilityChanged: onCabangVisibilityChanged,
             )
           else
-            _SalesChart(
-              sales: data.sales,
-              groupBy: groupBy,
-              currencyFormat: currencyFormat,
-              theme: theme,
-            ),
+            _SalesChart(sales: data.sales, groupBy: groupBy, currencyFormat: currencyFormat, theme: theme),
+
           const SizedBox(height: 24),
-          if (isMultiCabang && data.multiSeriesRetur != null)
-            _MultiCabangReturChart(
-              data: data.multiSeriesRetur!,
-              selectedVisibility: selectedVisibility,
+
+          // CHART RETUR - SELALU TAMPIL (meskipun kosong)
+          if (isMultiCabang && hasMultiRetur)
+            filteredReturSeries.isNotEmpty
+                ? _MultiCabangReturChart(
+              data: MultiSeriesReturData(
+                dates: data.multiSeriesRetur!.dates,
+                series: filteredReturSeries,
+              ),
               currencyFormat: currencyFormat,
               groupBy: groupBy,
               theme: theme,
+              getCabangColor: getCabangColor,
             )
-          else
-            _ReturChart(
-              retur: data.retur,
-              groupBy: groupBy,
-              currencyFormat: currencyFormat,
-              theme: theme,
-            ),
+                : _EmptyCard(message: 'Tidak ada data retur untuk cabang terpilih', theme: theme)
+          else if (!isMultiCabang && data.retur.isNotEmpty)
+            _ReturChart(retur: data.retur, groupBy: groupBy, currencyFormat: currencyFormat, theme: theme)
+          else if (isMultiCabang && !hasMultiRetur && data.retur.isEmpty)
+              _EmptyCard(message: 'Tidak ada data retur', theme: theme),
+
           const SizedBox(height: 24),
+
           _SecondaryCharts(
             categories: data.categories,
             kasir: data.kasir,
@@ -1113,13 +1032,9 @@ class _DashboardContent extends StatelessWidget {
             numberFormat: numberFormat,
             theme: theme,
           ),
-          if (data.returItemsSummary.isNotEmpty) ...[
+          if (filteredSummary.isNotEmpty) ...[
             const SizedBox(height: 24),
-            _ReturItemsSummaryTable(
-              items: data.returItemsSummary,
-              currencyFormat: currencyFormat,
-              theme: theme,
-            ),
+            _ReturItemsSummaryTable(items: filteredSummary, currencyFormat: currencyFormat, theme: theme),
           ],
         ],
       ),
@@ -1132,93 +1047,33 @@ class _SalesChart extends StatelessWidget {
   final String groupBy;
   final NumberFormat currencyFormat;
   final AppTheme theme;
-
-  const _SalesChart({
-    required this.sales,
-    required this.groupBy,
-    required this.currencyFormat,
-    required this.theme,
-  });
-
-  String get _title {
-    switch(groupBy) {
-      case 'day': return 'Tren Penjualan Harian';
-      case 'month': return 'Tren Penjualan Bulanan';
-      default: return 'Tren Penjualan Tahunan';
-    }
-  }
+  const _SalesChart({required this.sales, required this.groupBy, required this.currencyFormat, required this.theme});
 
   @override
   Widget build(BuildContext context) {
     if (sales.isEmpty) return _EmptyCard(message: 'Data penjualan tidak tersedia', theme: theme);
-
-    final processedSales = sales.map((item) {
-      String labelStr;
-      if (item.label is int) {
-        labelStr = item.label.toString();
-      } else {
-        labelStr = item.label;
-      }
-      return DashboardSalesData(
-        label: labelStr,
-        totalSales: item.totalSales,
-      );
-    }).toList();
-
-    final dataCount = processedSales.length;
     final isMobile = MediaQuery.of(context).size.width < 600;
-    final bool isDayView = groupBy == 'day';
+    final dataCount = sales.length;
     final bool isYearView = groupBy == 'year';
 
-    // =====================================================
-    // MODIFIKASI UTAMA: Chart Harian FULL TANPA SCROLL
-    // =====================================================
     double seriesWidth;
     int labelRotation;
     double labelFontSize;
     bool needScroll = false;
-    double chartWidth = 0;
-    double barWidth = 0;
 
-    if (isDayView) {
-      // HARIAN: TIDAK PERNAH SCROLL - TAMPIL FULL SESUAI LEBAR KONTAINER
-      needScroll = false;
-      labelRotation = dataCount > 20 ? 90 : (dataCount > 15 ? 60 : 45);
-      labelFontSize = isMobile
-          ? (dataCount > 20 ? 7 : (dataCount > 15 ? 8 : 9))
-          : (dataCount > 20 ? 8 : (dataCount > 15 ? 9 : 10));
-      seriesWidth = 0.85;
-    } else if (groupBy == 'month') {
-      // BULANAN: Scroll hanya jika > 12 bulan
-      if (dataCount <= 6) {
-        labelRotation = 0;
-        labelFontSize = isMobile ? 12 : 13;
-        seriesWidth = 0.85;
-        needScroll = false;
-      } else if (dataCount <= 12) {
-        labelRotation = 45;
-        labelFontSize = isMobile ? 11 : 12;
-        seriesWidth = 0.8;
-        needScroll = false;
-      } else {
-        labelRotation = 45;
-        labelFontSize = isMobile ? 10 : 11;
-        seriesWidth = 0.75;
-        needScroll = true;
-        barWidth = isMobile ? 70 : 85;
-        chartWidth = barWidth * dataCount;
-      }
+    if (dataCount <= 6) {
+      labelRotation = 0; labelFontSize = isMobile ? 12 : 13; seriesWidth = 0.85;
+    } else if (dataCount <= 12) {
+      labelRotation = 45; labelFontSize = isMobile ? 11 : 12; seriesWidth = 0.8;
+    } else if (dataCount <= 20) {
+      labelRotation = 45; labelFontSize = isMobile ? 10 : 11; seriesWidth = 0.75;
     } else {
-      // TAHUNAN: Scroll hanya jika > 8 tahun
-      labelRotation = 0;
-      labelFontSize = isMobile ? 14 : 16;
-      seriesWidth = 0.85;
-      needScroll = dataCount > 8;
-      if (needScroll) {
-        barWidth = isMobile ? 100 : 120;
-        chartWidth = barWidth * dataCount;
-      }
+      labelRotation = 90; labelFontSize = isMobile ? 7 : 8; seriesWidth = 0.7;
     }
+    if (isYearView) { labelRotation = 0; labelFontSize = isMobile ? 14 : 16; needScroll = dataCount > 8; }
+    if (!isYearView && dataCount > 7) needScroll = true;
+
+    final total = sales.fold<double>(0, (sum, d) => sum + d.totalSales);
 
     return Container(
       width: double.infinity,
@@ -1227,155 +1082,84 @@ class _SalesChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: theme.secondary,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(_title, style: theme.titleLarge),
-            ],
-          ),
+          Row(children: [
+            Container(width: 4, height: 24, decoration: BoxDecoration(color: theme.secondary, borderRadius: BorderRadius.circular(4))),
+            const SizedBox(width: 12),
+            Text(isYearView ? 'Tren Penjualan Tahunan' : 'Tren Penjualan', style: theme.titleLarge),
+          ]),
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            decoration: BoxDecoration(
-              color: theme.primaryLight,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              'Total: ${currencyFormat.format(processedSales.fold<double>(0, (sum, item) => sum + item.totalSales))}',
-              style: theme.labelLarge,
-            ),
-          ),
+          Container(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16), decoration: BoxDecoration(color: theme.primaryLight, borderRadius: BorderRadius.circular(12)),
+              child: Text('Total: ${currencyFormat.format(total)}', style: theme.labelLarge)),
           const SizedBox(height: 20),
-          SizedBox(
-            height: 400,
-            width: double.infinity,
-            child: needScroll
-                ? SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: chartWidth,
-                child: _buildChart(
-                    processedSales,
-                    dataCount,
-                    labelFontSize,
-                    labelRotation,
-                    seriesWidth,
-                    true,
-                    isYearView
-                ),
+          SizedBox(height: 400, width: double.infinity,
+            child: SfCartesianChart(
+              plotAreaBorderWidth: 0,
+              margin: EdgeInsets.fromLTRB(10, 20, needScroll ? 20 : 10, 20),
+              primaryXAxis: CategoryAxis(
+                labelRotation: isYearView ? 0 : labelRotation,
+                labelStyle: theme.caption.copyWith(fontSize: labelFontSize, fontWeight: isYearView ? FontWeight.w600 : FontWeight.w400),
+                majorGridLines: const MajorGridLines(width: 0),
+                axisLine: const AxisLine(width: 0),
+                labelPlacement: LabelPlacement.betweenTicks,
+                interval: dataCount > 15 ? 2 : 1,
               ),
-            )
-                : _buildChart(
-                processedSales,
-                dataCount,
-                labelFontSize,
-                labelRotation,
-                seriesWidth,
-                false,
-                isYearView
+              primaryYAxis: NumericAxis(
+                title: AxisTitle(text: 'Total Penjualan'),
+                numberFormat: currencyFormat,
+                labelStyle: theme.caption,
+                axisLine: const AxisLine(width: 0),
+                majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
+              ),
+              series: [
+                ColumnSeries<DashboardSalesData, String>(
+                  dataSource: sales,
+                  xValueMapper: (d, _) => d.label,
+                  yValueMapper: (d, _) => d.totalSales,
+                  color: theme.primary,
+                  enableTooltip: true,
+                  width: seriesWidth,
+                  spacing: isYearView ? 0.2 : 0.1,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                ),
+              ],
+              tooltipBehavior: TooltipBehavior(enable: true, canShowMarker: false, textStyle: theme.bodySmall, color: theme.surface, borderColor: theme.border, borderWidth: 1),
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildChart(
-      List<DashboardSalesData> salesData,
-      int dataCount,
-      double labelFontSize,
-      int labelRotation,
-      double seriesWidth,
-      bool isScrollable,
-      bool isYearView) {
-    return SfCartesianChart(
-      plotAreaBorderWidth: 0,
-      margin: EdgeInsets.fromLTRB(10, 20, isScrollable ? 20 : 10, 20),
-      primaryXAxis: CategoryAxis(
-        labelRotation: isYearView ? 0 : labelRotation,
-        labelStyle: theme.caption.copyWith(
-          fontSize: labelFontSize,
-          fontWeight: isYearView ? FontWeight.w600 : FontWeight.w400,
-        ),
-        majorGridLines: const MajorGridLines(width: 0),
-        axisLine: const AxisLine(width: 0),
-        labelPlacement: LabelPlacement.betweenTicks,
-        // Interval auto-adjust untuk mencegah label bertumpuk
-        interval: dataCount > 15 ? 2 : 1,
-      ),
-      primaryYAxis: NumericAxis(
-        title: AxisTitle(text: 'Total Penjualan'),
-        numberFormat: currencyFormat,
-        labelStyle: theme.caption,
-        axisLine: const AxisLine(width: 0),
-        majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
-      ),
-      series: [
-        ColumnSeries<DashboardSalesData, String>(
-          dataSource: salesData,
-          xValueMapper: (d, _) => d.label,
-          yValueMapper: (d, _) => d.totalSales,
-          color: theme.primary,
-          enableTooltip: true,
-          width: seriesWidth,
-          spacing: isYearView ? 0.2 : 0.1,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-        ),
-      ],
-      tooltipBehavior: TooltipBehavior(
-        enable: true,
-        canShowMarker: false,
-        textStyle: theme.bodySmall,
-        color: theme.surface,
-        borderColor: theme.border,
-        borderWidth: 1,
-      ),
-    );
-  }
 }
 
+// ============================================================
+// MULTI CABANG CHART (SALES)
+// ============================================================
 class _MultiCabangChart extends StatelessWidget {
   final MultiSeriesSalesData data;
-  final List<Map<String, dynamic>> cabangList;
   final List<bool> selectedVisibility;
   final NumberFormat currencyFormat;
   final String groupBy;
   final AppTheme theme;
+  final Color Function(String cabangNama) getCabangColor;
   final Function(int, bool) onVisibilityChanged;
 
   const _MultiCabangChart({
     required this.data,
-    required this.cabangList,
     required this.selectedVisibility,
     required this.currencyFormat,
     required this.groupBy,
     required this.theme,
+    required this.getCabangColor,
     required this.onVisibilityChanged,
   });
-
-  List<Color> get _colors => [
-    const Color(0xFF0F3B5C), const Color(0xFFE67E22), const Color(0xFF3498DB),
-    const Color(0xFF27AE60), const Color(0xFF9B59B6), const Color(0xFFE74C3C),
-    const Color(0xFF1ABC9C), const Color(0xFFF39C12), const Color(0xFF34495E),
-  ];
 
   double _getTotalPenjualan() {
     final visibleSeries = data.series.asMap().entries
         .where((e) => e.key < selectedVisibility.length && selectedVisibility[e.key])
         .toList();
-
     double total = 0;
     for (var entry in visibleSeries) {
-      final cabangData = entry.value;
-      final dataList = List<double>.from(cabangData['data']);
+      final dataList = List<double>.from(entry.value['data']);
       total += dataList.reduce((sum, val) => sum + val);
     }
     return total;
@@ -1385,58 +1169,25 @@ class _MultiCabangChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final dates = data.dates;
     final series = data.series;
-
     final dataCount = dates.length;
     final isMobile = MediaQuery.of(context).size.width < 600;
     final bool isYearView = groupBy == 'year';
-    final bool isDayView = groupBy == 'day';
     final double totalPenjualan = _getTotalPenjualan();
 
     bool needScroll = false;
-    double barWidth = 0;
-    double chartWidth = 0;
     int labelRotation;
     double labelFontSize;
     double seriesWidth;
 
-    if (isDayView) {
-      // MULTI CABANG HARIAN: TIDAK PERNAH SCROLL - TAMPIL FULL
-      needScroll = false;
-      labelRotation = dataCount > 20 ? 90 : (dataCount > 15 ? 60 : 45);
-      labelFontSize = isMobile
-          ? (dataCount > 20 ? 7 : (dataCount > 15 ? 8 : 9))
-          : (dataCount > 20 ? 8 : (dataCount > 15 ? 9 : 10));
-      seriesWidth = 0.85;
-    } else if (isYearView) {
-      labelRotation = 0;
-      labelFontSize = isMobile ? 14 : 16;
-      seriesWidth = 0.85;
-      needScroll = dataCount > 8;
-      if (needScroll) {
-        barWidth = isMobile ? 100 : 120;
-        chartWidth = barWidth * dataCount;
-      }
+    if (dataCount <= 6) {
+      labelRotation = 0; labelFontSize = isMobile ? 12 : 13; seriesWidth = 0.85;
+    } else if (dataCount <= 12) {
+      labelRotation = 45; labelFontSize = isMobile ? 11 : 12; seriesWidth = 0.8;
     } else {
-      // BULANAN
-      if (dataCount <= 6) {
-        labelRotation = 0;
-        labelFontSize = isMobile ? 12 : 13;
-        seriesWidth = 0.85;
-      } else if (dataCount <= 12) {
-        labelRotation = 45;
-        labelFontSize = isMobile ? 11 : 12;
-        seriesWidth = 0.8;
-      } else {
-        labelRotation = 45;
-        labelFontSize = isMobile ? 10 : 11;
-        seriesWidth = 0.75;
-      }
-      needScroll = dataCount > 7;
-      if (needScroll) {
-        barWidth = isMobile ? 70 : 85;
-        chartWidth = barWidth * dataCount;
-      }
+      labelRotation = 45; labelFontSize = isMobile ? 10 : 11; seriesWidth = 0.75;
     }
+    if (isYearView) { labelRotation = 0; labelFontSize = isMobile ? 14 : 16; needScroll = dataCount > 8; }
+    if (!isYearView && dataCount > 7) needScroll = true;
 
     final visibleSeries = series.asMap().entries
         .where((e) => e.key < selectedVisibility.length && selectedVisibility[e.key])
@@ -1449,170 +1200,87 @@ class _MultiCabangChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: theme.secondary,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text('Penjualan by Cabang', style: theme.titleLarge),
-            ],
-          ),
+          Row(children: [
+            Container(width: 4, height: 24, decoration: BoxDecoration(color: theme.secondary, borderRadius: BorderRadius.circular(4))),
+            const SizedBox(width: 12),
+            Text('Penjualan by Cabang', style: theme.titleLarge),
+          ]),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                decoration: BoxDecoration(
-                  color: theme.primaryLight,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${selectedVisibility.where((e) => e).length} dari ${series.length} cabang ditampilkan',
-                  style: theme.caption,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                decoration: BoxDecoration(
-                  color: theme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
-                ),
-                child: Text(
-                  'Total: ${currencyFormat.format(totalPenjualan)}',
-                  style: theme.labelLarge.copyWith(
-                    fontSize: 12,
-                    color: theme.secondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          Row(children: [
+            Container(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12), decoration: BoxDecoration(color: theme.primaryLight, borderRadius: BorderRadius.circular(20)),
+                child: Text('${selectedVisibility.where((e) => e).length} dari ${series.length} cabang', style: theme.caption)),
+            const Spacer(),
+            Container(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12), decoration: BoxDecoration(color: theme.secondary.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: theme.secondary.withOpacity(0.3))),
+                child: Text('Total: ${currencyFormat.format(totalPenjualan)}', style: theme.labelLarge.copyWith(fontSize: 12, color: theme.secondary))),
+          ]),
           const SizedBox(height: 20),
           _CabangFilterChips(
             series: series,
             selectedVisibility: selectedVisibility,
-            colors: _colors,
             theme: theme,
+            getCabangColor: getCabangColor,
             onVisibilityChanged: onVisibilityChanged,
           ),
           const SizedBox(height: 20),
-          SizedBox(
-            height: 430,
-            width: double.infinity,
-            child: needScroll
-                ? SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: chartWidth,
-                child: _buildChart(
-                    dates,
-                    visibleSeries,
-                    dataCount,
-                    labelRotation,
-                    labelFontSize,
-                    seriesWidth,
-                    true,
-                    isYearView
-                ),
+          SizedBox(height: 430, width: double.infinity,
+            child: SfCartesianChart(
+              plotAreaBorderWidth: 0,
+              margin: EdgeInsets.fromLTRB(10, 20, needScroll ? 20 : 10, 20),
+              primaryXAxis: CategoryAxis(
+                labelRotation: isYearView ? 0 : labelRotation,
+                labelStyle: theme.caption.copyWith(fontSize: labelFontSize, fontWeight: isYearView ? FontWeight.w600 : FontWeight.w400),
+                majorGridLines: const MajorGridLines(width: 0),
+                axisLine: const AxisLine(width: 0),
+                labelPlacement: LabelPlacement.betweenTicks,
+                interval: dataCount > 15 ? 2 : 1,
               ),
-            )
-                : _buildChart(
-                dates,
-                visibleSeries,
-                dataCount,
-                labelRotation,
-                labelFontSize,
-                seriesWidth,
-                false,
-                isYearView
+              primaryYAxis: NumericAxis(
+                title: AxisTitle(text: 'Total Penjualan'),
+                numberFormat: currencyFormat,
+                labelStyle: theme.caption,
+                axisLine: const AxisLine(width: 0),
+                majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
+              ),
+              series: visibleSeries.map((entry) {
+                final cabangData = entry.value;
+                final cabangNama = cabangData['cabang_nama'] as String;
+                final points = List.generate(dates.length, (i) => ChartData(x: dates[i], y: (cabangData['data'][i] ?? 0.0).toDouble()));
+                return ColumnSeries<ChartData, String>(
+                  dataSource: points,
+                  xValueMapper: (d, _) => d.x,
+                  yValueMapper: (d, _) => d.y,
+                  name: cabangNama,
+                  color: getCabangColor(cabangNama), // ✅ WARNA KONSISTEN
+                  enableTooltip: true,
+                  width: seriesWidth,
+                  spacing: isYearView ? 0.2 : 0.08,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                );
+              }).toList(),
+              tooltipBehavior: TooltipBehavior(enable: true, canShowMarker: false, textStyle: theme.bodySmall, color: theme.surface, borderColor: theme.border, borderWidth: 1),
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildChart(
-      List<String> dates,
-      List<MapEntry<int, Map<String, dynamic>>> visibleSeries,
-      int dataCount,
-      int labelRotation,
-      double labelFontSize,
-      double seriesWidth,
-      bool isScrollable,
-      bool isYearView,
-      ) {
-    return SfCartesianChart(
-      plotAreaBorderWidth: 0,
-      margin: EdgeInsets.fromLTRB(10, 20, isScrollable ? 20 : 10, 20),
-      primaryXAxis: CategoryAxis(
-        labelRotation: isYearView ? 0 : labelRotation,
-        labelStyle: theme.caption.copyWith(
-            fontSize: labelFontSize,
-            fontWeight: isYearView ? FontWeight.w600 : FontWeight.w400
-        ),
-        majorGridLines: const MajorGridLines(width: 0),
-        axisLine: const AxisLine(width: 0),
-        labelPlacement: LabelPlacement.betweenTicks,
-        interval: dataCount > 15 ? 2 : 1,
-      ),
-      primaryYAxis: NumericAxis(
-        title: AxisTitle(text: 'Total Penjualan'),
-        numberFormat: currencyFormat,
-        labelStyle: theme.caption,
-        axisLine: const AxisLine(width: 0),
-        majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
-      ),
-      series: visibleSeries.map((entry) {
-        final index = entry.key;
-        final cabangData = entry.value;
-        final points = List.generate(dates.length, (i) =>
-            ChartData(x: dates[i], y: cabangData['data'][i] ?? 0.0));
-
-        return ColumnSeries<ChartData, String>(
-          dataSource: points,
-          xValueMapper: (d, _) => d.x,
-          yValueMapper: (d, _) => d.y,
-          name: cabangData['cabang_nama'],
-          color: _colors[index % _colors.length],
-          enableTooltip: true,
-          width: seriesWidth,
-          spacing: isYearView ? 0.2 : 0.08,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-        );
-      }).toList(),
-      tooltipBehavior: TooltipBehavior(
-        enable: true,
-        canShowMarker: false,
-        textStyle: theme.bodySmall,
-        color: theme.surface,
-        borderColor: theme.border,
-        borderWidth: 1,
-      ),
-    );
-  }
 }
 
+// ============================================================
+// CABANG FILTER CHIPS
+// ============================================================
 class _CabangFilterChips extends StatelessWidget {
   final List<Map<String, dynamic>> series;
   final List<bool> selectedVisibility;
-  final List<Color> colors;
   final AppTheme theme;
+  final Color Function(String cabangNama) getCabangColor;
   final Function(int, bool) onVisibilityChanged;
 
   const _CabangFilterChips({
     required this.series,
     required this.selectedVisibility,
-    required this.colors,
     required this.theme,
+    required this.getCabangColor,
     required this.onVisibilityChanged,
   });
 
@@ -1624,20 +1292,16 @@ class _CabangFilterChips extends StatelessWidget {
       children: series.asMap().entries.map((entry) {
         final index = entry.key;
         final cabang = entry.value;
+        final cabangNama = cabang['cabang_nama'] as String;
         final isSelected = index < selectedVisibility.length && selectedVisibility[index];
+        final color = getCabangColor(cabangNama);
         return FilterChip(
           selected: isSelected,
-          label: Text(
-            cabang['cabang_nama'],
-            style: theme.bodySmall.copyWith(fontWeight: FontWeight.w500),
-          ),
+          label: Text(cabangNama, style: theme.bodySmall.copyWith(fontWeight: FontWeight.w500)),
           backgroundColor: Colors.transparent,
-          selectedColor: colors[index % colors.length].withOpacity(0.1),
-          checkmarkColor: colors[index % colors.length],
-          side: BorderSide(
-            color: isSelected ? colors[index % colors.length] : theme.border,
-            width: 1,
-          ),
+          selectedColor: color.withOpacity(0.1),
+          checkmarkColor: color,
+          side: BorderSide(color: isSelected ? color : theme.border, width: 1),
           onSelected: (selected) => onVisibilityChanged(index, selected),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
@@ -1647,6 +1311,9 @@ class _CabangFilterChips extends StatelessWidget {
   }
 }
 
+// ============================================================
+// SECONDARY CHARTS
+// ============================================================
 class _SecondaryCharts extends StatelessWidget {
   final List<DashboardCategoryData> categories;
   final List<DashboardKasirData> kasir;
@@ -1654,1126 +1321,179 @@ class _SecondaryCharts extends StatelessWidget {
   final NumberFormat currencyFormat;
   final NumberFormat numberFormat;
   final AppTheme theme;
-
-  const _SecondaryCharts({
-    required this.categories,
-    required this.kasir,
-    required this.topItems,
-    required this.currencyFormat,
-    required this.numberFormat,
-    required this.theme,
-  });
-
-  double _getTotalCategories() {
-    return categories.fold<double>(0, (sum, item) => sum + item.totalAmount);
-  }
-
-  double _getTotalKasir() {
-    return kasir.fold<double>(0, (sum, item) => sum + item.totalAmount);
-  }
-
-  double _getTotalTopItems() {
-    return topItems.fold<double>(0, (sum, item) => sum + item.totalAmount);
-  }
+  const _SecondaryCharts({required this.categories, required this.kasir, required this.topItems, required this.currencyFormat, required this.numberFormat, required this.theme});
 
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 900;
+    final totalCategories = categories.fold<double>(0, (sum, item) => sum + item.totalAmount);
+    final totalKasir = kasir.fold<double>(0, (sum, item) => sum + item.totalAmount);
+    final totalTopItems = topItems.fold<double>(0, (sum, item) => sum + item.totalAmount);
 
     if (isMobile) {
-      return Column(
-        children: [
-          _PieChartCard(
-            title: 'Penjualan by Kategori',
-            data: categories.map((e) => (e.category, e.totalAmount)).toList(),
-            total: _getTotalCategories(),
-            theme: theme,
-            currencyFormat: currencyFormat,
-          ),
-          const SizedBox(height: 20),
-          _PieChartCard(
-            title: 'Penjualan by Kasir',
-            data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(),
-            total: _getTotalKasir(),
-            theme: theme,
-            currencyFormat: currencyFormat,
-          ),
-          const SizedBox(height: 20),
-          _TopItemsTable(
-            items: topItems,
-            total: _getTotalTopItems(),
-            currencyFormat: currencyFormat,
-            numberFormat: numberFormat,
-            theme: theme,
-          ),
-        ],
-      );
+      return Column(children: [
+        _PieChartCard(title: 'Penjualan by Kategori', data: categories.map((e) => (e.category, e.totalAmount)).toList(), total: totalCategories, theme: theme, currencyFormat: currencyFormat),
+        const SizedBox(height: 20),
+        _PieChartCard(title: 'Penjualan by Kasir', data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(), total: totalKasir, theme: theme, currencyFormat: currencyFormat),
+        const SizedBox(height: 20),
+        _TopItemsTable(items: topItems, total: totalTopItems, currencyFormat: currencyFormat, numberFormat: numberFormat, theme: theme),
+      ]);
     }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          flex: 1,
-          child: Column(
-            children: [
-              _PieChartCard(
-                title: 'Penjualan by Kategori',
-                data: categories.map((e) => (e.category, e.totalAmount)).toList(),
-                total: _getTotalCategories(),
-                theme: theme,
-                currencyFormat: currencyFormat,
-              ),
-              const SizedBox(height: 20),
-              _PieChartCard(
-                title: 'Penjualan by Kasir',
-                data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(),
-                total: _getTotalKasir(),
-                theme: theme,
-                currencyFormat: currencyFormat,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 20),
-        Expanded(
-          flex: 1,
-          child: _TopItemsTable(
-            items: topItems,
-            total: _getTotalTopItems(),
-            currencyFormat: currencyFormat,
-            numberFormat: numberFormat,
-            theme: theme,
-          ),
-        ),
-      ],
-    );
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(flex: 1, child: Column(children: [
+        _PieChartCard(title: 'Penjualan by Kategori', data: categories.map((e) => (e.category, e.totalAmount)).toList(), total: totalCategories, theme: theme, currencyFormat: currencyFormat),
+        const SizedBox(height: 20),
+        _PieChartCard(title: 'Penjualan by Kasir', data: kasir.map((e) => (e.kasir, e.totalAmount)).toList(), total: totalKasir, theme: theme, currencyFormat: currencyFormat),
+      ])),
+      const SizedBox(width: 20),
+      Expanded(flex: 1, child: _TopItemsTable(items: topItems, total: totalTopItems, currencyFormat: currencyFormat, numberFormat: numberFormat, theme: theme)),
+    ]);
   }
 }
 
+// ============================================================
+// PIE CHART CARD
+// ============================================================
 class _PieChartCard extends StatelessWidget {
   final String title;
   final List<(String, double)> data;
   final double total;
   final AppTheme theme;
   final NumberFormat currencyFormat;
+  const _PieChartCard({required this.title, required this.data, required this.total, required this.theme, required this.currencyFormat});
 
-  const _PieChartCard({
-    required this.title,
-    required this.data,
-    required this.total,
-    required this.theme,
-    required this.currencyFormat,
-  });
+  static const _colors = [Color(0xFF0F3B5C), Color(0xFFE67E22), Color(0xFF3498DB), Color(0xFF27AE60), Color(0xFF9B59B6), Color(0xFFE74C3C)];
 
   @override
   Widget build(BuildContext context) {
-    if (data.isEmpty || data.every((e) => e.$2 == 0)) {
-      return _EmptyCard(message: 'Data $title tidak tersedia', theme: theme);
-    }
-
-    final colors = [
-      const Color(0xFF0F3B5C), const Color(0xFFE67E22), const Color(0xFF3498DB),
-      const Color(0xFF27AE60), const Color(0xFF9B59B6), const Color(0xFFE74C3C),
-    ];
+    if (data.isEmpty || data.every((e) => e.$2 == 0)) return _EmptyCard(message: 'Data $title tidak tersedia', theme: theme);
 
     return Container(
       width: double.infinity,
       decoration: theme.cardDecoration,
       padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: theme.secondary,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(title, style: theme.titleMedium),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
-                ),
-                child: Text(
-                  'Total: ${currencyFormat.format(total)}',
-                  style: theme.caption.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.secondary,
-                  ),
-                ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 3, height: 18, decoration: BoxDecoration(color: theme.secondary, borderRadius: BorderRadius.circular(3))),
+          const SizedBox(width: 10),
+          Text(title, style: theme.titleMedium),
+          const Spacer(),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: theme.secondary.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.secondary.withOpacity(0.3))),
+              child: Text('Total: ${currencyFormat.format(total)}', style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.secondary))),
+        ]),
+        const SizedBox(height: 20),
+        SizedBox(height: 280, width: double.infinity,
+          child: SfCircularChart(
+            legend: Legend(isVisible: true, position: LegendPosition.right, overflowMode: LegendItemOverflowMode.wrap, textStyle: theme.caption),
+            series: [
+              PieSeries<(String, double), String>(
+                dataSource: data,
+                xValueMapper: (d, _) => d.$1,
+                yValueMapper: (d, _) => d.$2,
+                enableTooltip: true,
+                dataLabelSettings: const DataLabelSettings(isVisible: false),
+                explode: true, explodeIndex: 0, explodeOffset: '8%',
+                pointColorMapper: (d, _) => _colors[data.indexOf(d) % _colors.length],
               ),
             ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 280,
-            width: double.infinity,
-            child: SfCircularChart(
-              legend: Legend(
-                isVisible: true,
-                position: LegendPosition.right,
-                overflowMode: LegendItemOverflowMode.wrap,
-                textStyle: theme.caption,
-              ),
-              series: [
-                PieSeries<(String, double), String>(
-                  dataSource: data,
-                  xValueMapper: (d, _) => d.$1,
-                  yValueMapper: (d, _) => d.$2,
-                  enableTooltip: true,
-                  dataLabelSettings: const DataLabelSettings(isVisible: false),
-                  explode: true,
-                  explodeIndex: 0,
-                  explodeOffset: '8%',
-                  pointColorMapper: (d, _) => colors[data.indexOf(d) % colors.length],
-                ),
-              ],
-              tooltipBehavior: TooltipBehavior(
-                enable: true,
-                builder: (dynamic data, dynamic point, dynamic series,
-                    int pointIndex, int seriesIndex) {
-                  try {
-                    final category = data[pointIndex].$1;
-                    final value = data[pointIndex].$2;
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: theme.surface,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                        border: Border.all(color: theme.border),
-                      ),
-                      child: Text(
-                        '$category: ${currencyFormat.format(value)}',
-                        style: theme.bodySmall.copyWith(
-                          fontWeight: FontWeight.w500,
-                          color: theme.textPrimary,
-                        ),
-                      ),
-                    );
-                  } catch (e) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: theme.surface,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: theme.border),
-                      ),
-                      child: Text(
-                        '${point.x}: ${currencyFormat.format(point.y)}',
-                        style: theme.bodySmall,
-                      ),
-                    );
-                  }
-                },
-              ),
+            tooltipBehavior: TooltipBehavior(enable: true,
+              builder: (dynamic data, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
+                return Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(8), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 2))], border: Border.all(color: theme.border)),
+                    child: Text('${data[pointIndex].$1}: ${currencyFormat.format(data[pointIndex].$2)}', style: theme.bodySmall.copyWith(fontWeight: FontWeight.w500, color: theme.textPrimary)));
+              },
             ),
           ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 }
 
+// ============================================================
+// TOP ITEMS TABLE
+// ============================================================
 class _TopItemsTable extends StatelessWidget {
   final List<DashboardTopItem> items;
   final double total;
   final NumberFormat currencyFormat;
   final NumberFormat numberFormat;
   final AppTheme theme;
-
-  const _TopItemsTable({
-    required this.items,
-    required this.total,
-    required this.currencyFormat,
-    required this.numberFormat,
-    required this.theme,
-  });
+  const _TopItemsTable({required this.items, required this.total, required this.currencyFormat, required this.numberFormat, required this.theme});
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return _EmptyCard(message: 'Data item terlaris tidak tersedia', theme: theme);
-    }
-
+    if (items.isEmpty) return _EmptyCard(message: 'Data item terlaris tidak tersedia', theme: theme);
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Container(
       width: double.infinity,
       decoration: theme.cardDecoration,
       padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: theme.secondary,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text('10 Item Terlaris', style: theme.titleMedium),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
-                ),
-                child: Text(
-                  'Total: ${currencyFormat.format(total)}',
-                  style: theme.caption.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.secondary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Icon(Icons.emoji_events, size: 20, color: theme.warning),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 680,
-            width: double.infinity,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                border: TableBorder.all(
-                  color: theme.border,
-                  borderRadius: BorderRadius.circular(16),
-                  width: 1,
-                ),
-                columnSpacing: isMobile ? 16 : 24,
-                headingRowColor: WidgetStateProperty.all(theme.surfaceAlt),
-                headingTextStyle: theme.titleSmall.copyWith(fontSize: 12),
-                dataTextStyle: theme.bodySmall,
-                columns: const [
-                  DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Nama Item', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.w600))),
-                ],
-                rows: List.generate(items.length, (index) {
-                  final item = items[index];
-                  return DataRow(
-                    cells: [
-                      DataCell(Container(
-                        width: 40,
-                        child: Text(
-                          '${index + 1}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: index < 3 ? theme.warning : theme.textSecondary,
-                          ),
-                        ),
-                      )),
-                      DataCell(SizedBox(
-                        width: isMobile ? 120 : 180,
-                        child: Text(
-                          item.itemName,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      )),
-                      DataCell(Text(numberFormat.format(item.totalQty))),
-                      DataCell(Text(currencyFormat.format(item.totalAmount))),
-                    ],
-                  );
-                }),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProduksiGramChart extends StatelessWidget {
-  final List<ProduksiChartData> chartData;
-  final double totalGram;
-  final double averageGram;
-  final int totalDays;
-  final AppTheme theme;
-
-  const _ProduksiGramChart({
-    required this.chartData,
-    required this.totalGram,
-    required this.averageGram,
-    required this.totalDays,
-    required this.theme,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (chartData.isEmpty) {
-      return _EmptyCard(message: 'Data produksi tidak tersedia', theme: theme);
-    }
-
-    final isMobile = MediaQuery.of(context).size.width < 600;
-    final dataCount = chartData.length;
-
-    // ⬇️ COPY PERSIS DARI _SalesChart
-    double seriesWidth;
-    int labelRotation;
-    double labelFontSize;
-    bool needScroll = false;
-    double chartWidth = 0;
-    double barWidth = 0;
-
-    if (dataCount <= 6) {
-      labelRotation = 0;
-      labelFontSize = isMobile ? 12 : 13;
-      seriesWidth = 0.85;
-      needScroll = false;
-    } else if (dataCount <= 12) {
-      labelRotation = 45;
-      labelFontSize = isMobile ? 11 : 12;
-      seriesWidth = 0.8;
-      needScroll = false;
-    } else if (dataCount <= 20) {
-      labelRotation = 45;
-      labelFontSize = isMobile ? 10 : 11;
-      seriesWidth = 0.75;
-      needScroll = false;
-    } else {
-      labelRotation = 90;
-      labelFontSize = isMobile ? 7 : 8;
-      seriesWidth = 0.7;
-      needScroll = false;
-    }
-
-    final formattedData = chartData.map((d) {
-      String label;
-      try {
-        final date = DateTime.parse(d.tanggal);
-        label = DateFormat('dd/MM').format(date);
-      } catch (e) {
-        label = d.tanggal;
-      }
-      return ChartData(x: label, y: d.totalGram);
-    }).toList();
-
-    return Container(
-      width: double.infinity,
-      decoration: theme.cardDecoration,
-      padding: EdgeInsets.all(isMobile ? 20 : 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: theme.secondary,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text('Pemakaian Gram per Hari', style: theme.titleLarge),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                decoration: BoxDecoration(
-                  color: theme.primaryLight,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.scale_rounded, size: 14, color: theme.primary),
-                    SizedBox(width: 6),
-                    Text(
-                      'Total: ${NumberFormat('#,##0.##').format(totalGram)} gram',
-                      style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.primary),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                decoration: BoxDecoration(
-                  color: theme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.trending_up_rounded, size: 14, color: theme.secondary),
-                    SizedBox(width: 6),
-                    Text(
-                      'Rata-rata: ${NumberFormat('#,##0.##').format(averageGram)} gr/hari',
-                      style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.secondary),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                decoration: BoxDecoration(
-                  color: theme.surfaceAlt,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: theme.border),
-                ),
-                child: Text('$totalDays hari', style: theme.caption),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 400,
-            width: double.infinity,
-            child: SfCartesianChart(
-              plotAreaBorderWidth: 0,
-              margin: EdgeInsets.fromLTRB(10, 20, 10, 20),
-              primaryXAxis: CategoryAxis(
-                labelRotation: labelRotation,
-                labelStyle: theme.caption.copyWith(
-                  fontSize: labelFontSize,
-                  fontWeight: FontWeight.w400,
-                ),
-                majorGridLines: const MajorGridLines(width: 0),
-                axisLine: const AxisLine(width: 0),
-                labelPlacement: LabelPlacement.betweenTicks,
-                interval: dataCount > 15 ? 2 : 1,
-              ),
-              primaryYAxis: NumericAxis(
-                title: AxisTitle(text: 'Gram'),
-                numberFormat: NumberFormat('#,##0'),
-                labelStyle: theme.caption,
-                axisLine: const AxisLine(width: 0),
-                majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
-              ),
-              series: [
-                ColumnSeries<ChartData, String>(
-                  dataSource: formattedData,
-                  xValueMapper: (d, _) => d.x,
-                  yValueMapper: (d, _) => d.y,
-                  color: theme.primary,
-                  enableTooltip: true,
-                  width: seriesWidth,
-                  spacing: 0.1,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 3, height: 18, decoration: BoxDecoration(color: theme.secondary, borderRadius: BorderRadius.circular(3))),
+          const SizedBox(width: 10),
+          Text('10 Item Terlaris', style: theme.titleMedium),
+          const Spacer(),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: theme.secondary.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.secondary.withOpacity(0.3))),
+              child: Text('Total: ${currencyFormat.format(total)}', style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.secondary))),
+          const SizedBox(width: 8),
+          Icon(Icons.emoji_events, size: 20, color: theme.warning),
+        ]),
+        const SizedBox(height: 20),
+        SizedBox(height: 680, width: double.infinity,
+          child: SingleChildScrollView(scrollDirection: Axis.horizontal,
+            child: DataTable(
+              border: TableBorder.all(color: theme.border, borderRadius: BorderRadius.circular(16), width: 1),
+              columnSpacing: isMobile ? 16 : 24,
+              headingRowColor: WidgetStateProperty.all(theme.surfaceAlt),
+              headingTextStyle: theme.titleSmall.copyWith(fontSize: 12),
+              dataTextStyle: theme.bodySmall,
+              columns: const [
+                DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Nama Item', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.w600))),
               ],
-              tooltipBehavior: TooltipBehavior(
-                enable: true,
-                canShowMarker: false,
-                textStyle: theme.bodySmall,
-                color: theme.surface,
-                borderColor: theme.border,
-                borderWidth: 1,
-              ),
+              rows: List.generate(items.length, (index) {
+                final item = items[index];
+                return DataRow(cells: [
+                  DataCell(Container(width: 40, child: Text('${index + 1}', style: TextStyle(fontWeight: FontWeight.w700, color: index < 3 ? theme.warning : theme.textSecondary)))),
+                  DataCell(SizedBox(width: isMobile ? 120 : 180, child: Text(item.itemName, maxLines: 2, overflow: TextOverflow.ellipsis))),
+                  DataCell(Text(numberFormat.format(item.totalQty))),
+                  DataCell(Text(currencyFormat.format(item.totalAmount))),
+                ]);
+              }),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProduksiItemTable extends StatelessWidget {
-  final List<ProduksiItemData> items;
-  final AppTheme theme;
-
-  const _ProduksiItemTable({
-    required this.items,
-    required this.theme,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return _EmptyCard(message: 'Data item tidak tersedia', theme: theme);
-    }
-
-    final isMobile = MediaQuery.of(context).size.width < 600;
-    final totalQty = items.fold<double>(0, (sum, i) => sum + i.totalQty);
-    final totalGram = items.fold<double>(0, (sum, i) => sum + i.totalGram);
-
-    return Container(
-      width: double.infinity,
-      decoration: theme.cardDecoration,
-      padding: EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header + Total di atas sejajar
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: theme.secondary,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              SizedBox(width: 10),
-              Text('Pemakaian per Item', style: theme.titleMedium),
-              Spacer(),
-              // Total Qty
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.primaryLight,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  'Qty: ${NumberFormat('#,##0.##').format(totalQty)}',
-                  style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.primary),
-                ),
-              ),
-              SizedBox(width: 8),
-              // Total Gram
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
-                ),
-                child: Text(
-                  'Gram: ${NumberFormat('#,##0.##').format(totalGram)}',
-                  style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.secondary),
-                ),
-              ),
-              SizedBox(width: 8),
-              // Jumlah item
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.surfaceAlt,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: theme.border),
-                ),
-                child: Text(
-                  '${items.length} item',
-                  style: theme.caption,
-                ),
-              ),
-            ],
-          ),
-
-          SizedBox(height: 16),
-
-          // Table — scroll vertical & horizontal, SEMUA ITEM langsung
-          SizedBox(
-            height: 420,
-            width: double.infinity,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.vertical,
-                child: DataTable(
-                  border: TableBorder.all(
-                    color: theme.border,
-                    borderRadius: BorderRadius.circular(16),
-                    width: 1,
-                  ),
-                  columnSpacing: isMobile ? 16 : 24,
-                  headingRowColor: WidgetStateProperty.all(theme.surfaceAlt),
-                  headingTextStyle: theme.titleSmall.copyWith(fontSize: 12),
-                  dataTextStyle: theme.bodySmall.copyWith(fontSize: 11),
-                  columns: [
-                    DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
-                    DataColumn(label: Text('Nama Item', style: TextStyle(fontWeight: FontWeight.w600))),
-                    DataColumn(label: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600))),
-                    DataColumn(label: Text('Gram', style: TextStyle(fontWeight: FontWeight.w600))),
-                  ],
-                  rows: items.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final item = entry.value;
-                    return DataRow(
-                      cells: [
-                        DataCell(Text('${index + 1}', style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: index < 3 ? theme.secondary : theme.textSecondary,
-                        ))),
-                        DataCell(SizedBox(
-                          width: isMobile ? 120 : 160,
-                          child: Text(
-                            item.itemName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        )),
-                        DataCell(Text(NumberFormat('#,##0.##').format(item.totalQty))),
-                        DataCell(Text(NumberFormat('#,##0.##').format(item.totalGram))),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProduksiDivisiPieChart extends StatelessWidget {
-  final List<ProduksiDivisiData> divisiData;
-  final AppTheme theme;
-
-  const _ProduksiDivisiPieChart({
-    required this.divisiData,
-    required this.theme,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (divisiData.isEmpty || divisiData.every((d) => d.totalGram == 0)) {
-      return _EmptyCard(message: 'Data divisi tidak tersedia', theme: theme);
-    }
-
-    final totalGram = divisiData.fold<double>(0, (sum, d) => sum + d.totalGram);
-
-    final colors = [
-      Color(0xFF0F3B5C), Color(0xFFE67E22), Color(0xFF3498DB),
-      Color(0xFF27AE60), Color(0xFF9B59B6), Color(0xFFE74C3C),
-      Color(0xFF1ABC9C), Color(0xFFF39C12), Color(0xFF34495E),
-      Color(0xFFE91E63), Color(0xFF00BCD4), Color(0xFF795548),
-    ];
-
-    return Container(
-      width: double.infinity,
-      decoration: theme.cardDecoration,
-      padding: EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: theme.secondary,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              SizedBox(width: 10),
-              Text('Pemakaian by Divisi', style: theme.titleMedium),
-            ],
-          ),
-          SizedBox(height: 4),
-
-          // Total
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: theme.secondary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: theme.secondary.withOpacity(0.3)),
-            ),
-            child: Text(
-              'Total: ${NumberFormat('#,##0.##').format(totalGram)} gram',
-              style: theme.caption.copyWith(
-                fontWeight: FontWeight.w600,
-                color: theme.secondary,
-              ),
-            ),
-          ),
-
-          SizedBox(height: 16),
-
-          // Pie Chart
-          SizedBox(
-            height: 320,
-            width: double.infinity,
-            child: SfCircularChart(
-              legend: Legend(
-                isVisible: true,
-                position: LegendPosition.bottom,
-                overflowMode: LegendItemOverflowMode.wrap,
-                textStyle: theme.caption.copyWith(fontSize: 10),
-              ),
-              series: [
-                PieSeries<ProduksiDivisiData, String>(
-                  dataSource: divisiData,
-                  xValueMapper: (d, _) => d.divisi,
-                  yValueMapper: (d, _) => d.totalGram,
-                  enableTooltip: true,
-                  dataLabelSettings: DataLabelSettings(
-                    isVisible: true,
-                    labelPosition: ChartDataLabelPosition.outside,
-                    textStyle: theme.caption.copyWith(fontSize: 9),
-                    builder: (dynamic data, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
-                      final percentage = totalGram > 0
-                          ? (data.totalGram / totalGram * 100).toStringAsFixed(1)
-                          : '0';
-                      return Text(
-                        '$percentage%',
-                        style: theme.caption.copyWith(fontSize: 9, fontWeight: FontWeight.w600),
-                      );
-                    },
-                  ),
-                  explode: true,
-                  explodeIndex: 0,
-                  explodeOffset: '6%',
-                  pointColorMapper: (d, _) => colors[divisiData.indexOf(d) % colors.length],
-                ),
-              ],
-              tooltipBehavior: TooltipBehavior(
-                enable: true,
-                builder: (dynamic data, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
-                  final percentage = totalGram > 0
-                      ? (data.totalGram / totalGram * 100).toStringAsFixed(1)
-                      : '0';
-                  return Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: theme.surface,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: Offset(0, 2)),
-                      ],
-                      border: Border.all(color: theme.border),
-                    ),
-                    child: Text(
-                      '${data.divisi}\n${NumberFormat('#,##0.##').format(data.totalGram)} gram ($percentage%)',
-                      style: theme.bodySmall.copyWith(fontWeight: FontWeight.w500, color: theme.textPrimary),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyCard extends StatelessWidget {
-  final String message;
-  final AppTheme theme;
-
-  const _EmptyCard({required this.message, required this.theme});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: theme.cardDecoration,
-      padding: const EdgeInsets.all(40),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inbox_outlined, size: 48, color: theme.textTertiary),
-          const SizedBox(height: 16),
-          Text(message, style: theme.caption),
-        ],
-      ),
-    );
-  }
-}
-
-class _CustomerMultiSelect extends StatefulWidget {
-  final List<String> selectedTypes;
-  final List<String> allTypes;
-  final ValueChanged<List<String>> onChanged;
-  final AppTheme theme;
-
-  const _CustomerMultiSelect({
-    required this.selectedTypes,
-    required this.allTypes,
-    required this.onChanged,
-    required this.theme,
-  });
-
-  @override
-  State<_CustomerMultiSelect> createState() => _CustomerMultiSelectState();
-}
-
-class _CustomerMultiSelectState extends State<_CustomerMultiSelect> {
-  void _showDropdown() async {
-    final result = await showDialog<List<String>>(
-      context: context,
-      builder: (context) => _CustomerDialog(
-        allTypes: widget.allTypes,
-        initialSelected: widget.selectedTypes,
-        theme: widget.theme,
-      ),
-    );
-    if (result != null) {
-      widget.onChanged(result);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hasSelection = widget.selectedTypes.isNotEmpty;
-
-    return InkWell(
-      onTap: _showDropdown,
-      borderRadius: widget.theme.buttonRadius,
-      child: Container(
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: hasSelection ? widget.theme.secondary.withOpacity(0.1) : widget.theme.surface,
-          borderRadius: widget.theme.buttonRadius,
-          border: Border.all(
-            color: hasSelection ? widget.theme.secondary : widget.theme.border,
-            width: 1,
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.people_outline, size: 14, color: hasSelection ? widget.theme.secondary : widget.theme.textTertiary),
-            const SizedBox(width: 6),
-            Text(
-              hasSelection ? '${widget.selectedTypes.length} Customer' : 'Customer',
-              style: widget.theme.bodySmall.copyWith(
-                color: hasSelection ? widget.theme.secondary : widget.theme.textSecondary,
-                fontWeight: hasSelection ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(Icons.arrow_drop_down, size: 16, color: hasSelection ? widget.theme.secondary : widget.theme.textTertiary),
-            if (hasSelection)
-              GestureDetector(
-                onTap: () => widget.onChanged([]),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: Icon(Icons.clear, size: 14, color: widget.theme.error),
-                ),
-              ),
-          ],
-        ),
-      ),
+      ]),
     );
   }
 }
 
-// Dialog terpisah (bisa langsung setState)
-class _CustomerDialog extends StatefulWidget {
-  final List<String> allTypes;
-  final List<String> initialSelected;
-  final AppTheme theme;
-
-  const _CustomerDialog({
-    required this.allTypes,
-    required this.initialSelected,
-    required this.theme,
-  });
-
-  @override
-  State<_CustomerDialog> createState() => _CustomerDialogState();
-}
-
-class _CustomerDialogState extends State<_CustomerDialog> {
-  late List<String> _selected;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = List.from(widget.initialSelected);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        width: 300,
-        constraints: BoxConstraints(maxHeight: 400),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: widget.theme.border)),
-              ),
-              child: Row(
-                children: [
-                  Text('Customer', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: widget.theme.textPrimary)),
-                  const Spacer(),
-                  IconButton(
-                    icon: Icon(Icons.close, size: 18, color: widget.theme.textSecondary),
-                    onPressed: () => Navigator.pop(context),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                  ),
-                ],
-              ),
-            ),
-            // Select All / Clear
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: widget.theme.border)),
-              ),
-              child: Row(
-                children: [
-                  TextButton(
-                    onPressed: () => setState(() => _selected = List.from(widget.allTypes)),
-                    child: Text('Pilih Semua', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: widget.theme.accent)),
-                  ),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () => setState(() => _selected.clear()),
-                    child: Text('Clear', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: widget.theme.error)),
-                  ),
-                ],
-              ),
-            ),
-            // List
-            Flexible(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                children: widget.allTypes.map((type) {
-                  final isSelected = _selected.contains(type);
-                  return InkWell(
-                    onTap: () {
-                      setState(() {
-                        if (isSelected) {
-                          _selected.remove(type);
-                        } else {
-                          _selected.add(type);
-                        }
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 20,
-                            height: 20,
-                            decoration: BoxDecoration(
-                              color: isSelected ? widget.theme.secondary : Colors.transparent,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: isSelected ? widget.theme.secondary : widget.theme.border,
-                                width: 2,
-                              ),
-                            ),
-                            child: isSelected
-                                ? Icon(Icons.check, size: 14, color: Colors.white)
-                                : null,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            type,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13,
-                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                              color: widget.theme.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            // Apply
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: widget.theme.border)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  SizedBox(
-                    height: 36,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context, _selected),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: widget.theme.secondary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                      ),
-                      child: Text('Terapkan', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.white)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
+// ============================================================
+// MULTI CABANG RETUR CHART (FILTERED)
+// ============================================================
 class _MultiCabangReturChart extends StatelessWidget {
   final MultiSeriesReturData data;
-  final List<bool> selectedVisibility;
   final NumberFormat currencyFormat;
   final String groupBy;
   final AppTheme theme;
+  final Color Function(String cabangNama) getCabangColor;
 
   const _MultiCabangReturChart({
     required this.data,
-    required this.selectedVisibility,
     required this.currencyFormat,
     required this.groupBy,
     required this.theme,
+    required this.getCabangColor,
   });
 
-  List<Color> get _colors => [
-    const Color(0xFF0F3B5C),
-    const Color(0xFFE67E22),
-    const Color(0xFF3498DB),
-    const Color(0xFF27AE60),
-    const Color(0xFF9B59B6),
-    const Color(0xFFE74C3C),
-    const Color(0xFF1ABC9C),
-    const Color(0xFFF39C12),
-    const Color(0xFF34495E),
-  ];
-
   double _getTotalRetur() {
-    final visibleSeries = data.series.asMap().entries
-        .where((e) => e.key < selectedVisibility.length && selectedVisibility[e.key])
-        .toList();
-
     double total = 0;
-    for (var entry in visibleSeries) {
-      final cabangData = entry.value;
+    for (var cabangData in data.series) {
       final dataList = List<double>.from(cabangData['data']);
       total += dataList.reduce((sum, val) => sum + val);
     }
@@ -2784,206 +1504,101 @@ class _MultiCabangReturChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final dates = data.dates;
     final series = data.series;
-
     final dataCount = dates.length;
     final isMobile = MediaQuery.of(context).size.width < 600;
     final bool isYearView = groupBy == 'year';
-    final bool isDayView = groupBy == 'day';
     final double totalRetur = _getTotalRetur();
 
     bool needScroll = false;
-    double barWidth = 0;
-    double chartWidth = 0;
     int labelRotation;
     double labelFontSize;
     double seriesWidth;
 
-    if (isDayView) {
-      needScroll = false;
-      labelRotation = dataCount > 20 ? 90 : (dataCount > 15 ? 60 : 45);
-      labelFontSize = isMobile
-          ? (dataCount > 20 ? 7 : (dataCount > 15 ? 8 : 9))
-          : (dataCount > 20 ? 8 : (dataCount > 15 ? 9 : 10));
-      seriesWidth = 0.85;
-    } else if (isYearView) {
-      labelRotation = 0;
-      labelFontSize = isMobile ? 14 : 16;
-      seriesWidth = 0.85;
-      needScroll = dataCount > 8;
-      if (needScroll) {
-        barWidth = isMobile ? 100 : 120;
-        chartWidth = barWidth * dataCount;
-      }
+    if (dataCount <= 6) {
+      labelRotation = 0; labelFontSize = isMobile ? 12 : 13; seriesWidth = 0.85;
+    } else if (dataCount <= 12) {
+      labelRotation = 45; labelFontSize = isMobile ? 11 : 12; seriesWidth = 0.8;
     } else {
-      if (dataCount <= 6) {
-        labelRotation = 0;
-        labelFontSize = isMobile ? 12 : 13;
-        seriesWidth = 0.85;
-      } else if (dataCount <= 12) {
-        labelRotation = 45;
-        labelFontSize = isMobile ? 11 : 12;
-        seriesWidth = 0.8;
-      } else {
-        labelRotation = 45;
-        labelFontSize = isMobile ? 10 : 11;
-        seriesWidth = 0.75;
-      }
-      needScroll = dataCount > 7;
-      if (needScroll) {
-        barWidth = isMobile ? 70 : 85;
-        chartWidth = barWidth * dataCount;
-      }
+      labelRotation = 45; labelFontSize = isMobile ? 10 : 11; seriesWidth = 0.75;
     }
-
-    final visibleSeries = series.asMap().entries
-        .where((e) => e.key < selectedVisibility.length && selectedVisibility[e.key])
-        .toList();
+    if (isYearView) { labelRotation = 0; labelFontSize = isMobile ? 14 : 16; needScroll = dataCount > 8; }
+    if (!isYearView && dataCount > 7) needScroll = true;
 
     return Container(
       width: double.infinity,
       decoration: theme.cardDecoration,
       padding: EdgeInsets.all(isMobile ? 20 : 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: theme.primary,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text('Retur Penjualan by Cabang', style: theme.titleLarge),
-            ],
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 4, height: 24, decoration: BoxDecoration(color: theme.primary, borderRadius: BorderRadius.circular(4))),
+          const SizedBox(width: 12),
+          Text('Retur Penjualan by Cabang', style: theme.titleLarge),
+        ]),
+        const SizedBox(height: 16),
+        Row(children: [
+          Container(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12), decoration: BoxDecoration(color: theme.primaryLight, borderRadius: BorderRadius.circular(20)),
+              child: Text('${series.length} cabang', style: theme.caption)),
+          const Spacer(),
+          Container(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12), decoration: BoxDecoration(color: theme.secondary.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: theme.secondary.withOpacity(0.3))),
+              child: Text('Total: ${currencyFormat.format(totalRetur)}', style: theme.labelLarge.copyWith(fontSize: 12, color: theme.secondary))),
+        ]),
+        const SizedBox(height: 20),
+        SizedBox(height: 430, width: double.infinity,
+          child: SfCartesianChart(
+            plotAreaBorderWidth: 0,
+            margin: EdgeInsets.fromLTRB(10, 20, needScroll ? 20 : 10, 20),
+            primaryXAxis: CategoryAxis(
+              labelRotation: isYearView ? 0 : labelRotation,
+              labelStyle: theme.caption.copyWith(fontSize: labelFontSize, fontWeight: isYearView ? FontWeight.w600 : FontWeight.w400),
+              majorGridLines: const MajorGridLines(width: 0),
+              axisLine: const AxisLine(width: 0),
+              labelPlacement: LabelPlacement.betweenTicks,
+              interval: dataCount > 15 ? 2 : 1,
+            ),
+            primaryYAxis: NumericAxis(
+              title: AxisTitle(text: 'Nilai Retur'),
+              numberFormat: currencyFormat,
+              labelStyle: theme.caption,
+              axisLine: const AxisLine(width: 0),
+              majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
+            ),
+            series: series.map((cabangData) {
+              final cabangNama = cabangData['cabang_nama'] as String;
+              final dataList = List<double>.from(cabangData['data']);
+              final points = List.generate(dates.length, (i) => ChartData(x: dates[i], y: dataList[i]));
+              return ColumnSeries<ChartData, String>(
+                dataSource: points,
+                xValueMapper: (d, _) => d.x,
+                yValueMapper: (d, _) => d.y,
+                name: cabangNama,
+                color: getCabangColor(cabangNama), // ✅ WARNA KONSISTEN
+                enableTooltip: true,
+                width: seriesWidth,
+                spacing: isYearView ? 0.2 : 0.08,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              );
+            }).toList(),
+            tooltipBehavior: TooltipBehavior(enable: true, canShowMarker: false, textStyle: theme.bodySmall, color: theme.surface, borderColor: theme.border, borderWidth: 1),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                decoration: BoxDecoration(
-                  color: theme.primaryLight,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${selectedVisibility.where((e) => e).length} dari ${data.series.length} cabang ditampilkan',
-                  style: theme.caption,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                decoration: BoxDecoration(
-                  color: theme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
-                ),
-                child: Text(
-                  'Total: ${currencyFormat.format(totalRetur)}',
-                  style: theme.labelLarge.copyWith(fontSize: 12, color: theme.secondary),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 430,
-            width: double.infinity,
-            child: needScroll
-                ? SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: chartWidth,
-                child: _buildChart(dates, visibleSeries, dataCount, labelRotation, labelFontSize, seriesWidth, true, isYearView),
-              ),
-            )
-                : _buildChart(dates, visibleSeries, dataCount, labelRotation, labelFontSize, seriesWidth, false, isYearView),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChart(
-      List<String> dates,
-      List<MapEntry<int, Map<String, dynamic>>> visibleSeries,
-      int dataCount,
-      int labelRotation,
-      double labelFontSize,
-      double seriesWidth,
-      bool isScrollable,
-      bool isYearView) {
-    return SfCartesianChart(
-      plotAreaBorderWidth: 0,
-      margin: EdgeInsets.fromLTRB(10, 20, isScrollable ? 20 : 10, 20),
-      primaryXAxis: CategoryAxis(
-        labelRotation: isYearView ? 0 : labelRotation,
-        labelStyle: theme.caption.copyWith(
-            fontSize: labelFontSize,
-            fontWeight: isYearView ? FontWeight.w600 : FontWeight.w400),
-        majorGridLines: const MajorGridLines(width: 0),
-        axisLine: const AxisLine(width: 0),
-        labelPlacement: LabelPlacement.betweenTicks,
-        interval: dataCount > 15 ? 2 : 1,
-      ),
-      primaryYAxis: NumericAxis(
-        title: AxisTitle(text: 'Nilai Retur'),
-        numberFormat: currencyFormat,
-        labelStyle: theme.caption,
-        axisLine: const AxisLine(width: 0),
-        majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
-      ),
-      series: visibleSeries.map((entry) {
-        final index = entry.key;
-        final cabangData = entry.value;
-        final points = List.generate(
-            dates.length, (i) => ChartData(x: dates[i], y: (cabangData['data'][i] ?? 0.0).toDouble()));
-
-        return ColumnSeries<ChartData, String>(
-          dataSource: points,
-          xValueMapper: (d, _) => d.x,
-          yValueMapper: (d, _) => d.y,
-          name: cabangData['cabang_nama'],
-          color: _colors[index % _colors.length],
-          enableTooltip: true,
-          width: seriesWidth,
-          spacing: isYearView ? 0.2 : 0.08,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-        );
-      }).toList(),
-      tooltipBehavior: TooltipBehavior(
-        enable: true,
-        canShowMarker: false,
-        textStyle: theme.bodySmall,
-        color: theme.surface,
-        borderColor: theme.border,
-        borderWidth: 1,
-      ),
+        ),
+      ]),
     );
   }
 }
 
+// ============================================================
+// RETUR CHART (SINGLE)
+// ============================================================
 class _ReturChart extends StatelessWidget {
   final List<DashboardReturData> retur;
   final String groupBy;
   final NumberFormat currencyFormat;
   final AppTheme theme;
-
-  const _ReturChart({
-    required this.retur,
-    required this.groupBy,
-    required this.currencyFormat,
-    required this.theme,
-  });
+  const _ReturChart({required this.retur, required this.groupBy, required this.currencyFormat, required this.theme});
 
   @override
   Widget build(BuildContext context) {
     if (retur.isEmpty) return _EmptyCard(message: 'Data retur tidak tersedia', theme: theme);
-
     final isMobile = MediaQuery.of(context).size.width < 600;
     final dataCount = retur.length;
 
@@ -2991,23 +1606,10 @@ class _ReturChart extends StatelessWidget {
     int labelRotation;
     double labelFontSize;
 
-    if (dataCount <= 6) {
-      labelRotation = 0;
-      labelFontSize = isMobile ? 12 : 13;
-      seriesWidth = 0.85;
-    } else if (dataCount <= 12) {
-      labelRotation = 45;
-      labelFontSize = isMobile ? 11 : 12;
-      seriesWidth = 0.8;
-    } else if (dataCount <= 20) {
-      labelRotation = 45;
-      labelFontSize = isMobile ? 10 : 11;
-      seriesWidth = 0.75;
-    } else {
-      labelRotation = 90;
-      labelFontSize = isMobile ? 7 : 8;
-      seriesWidth = 0.7;
-    }
+    if (dataCount <= 6) { labelRotation = 0; labelFontSize = isMobile ? 12 : 13; seriesWidth = 0.85; }
+    else if (dataCount <= 12) { labelRotation = 45; labelFontSize = isMobile ? 11 : 12; seriesWidth = 0.8; }
+    else if (dataCount <= 20) { labelRotation = 45; labelFontSize = isMobile ? 10 : 11; seriesWidth = 0.75; }
+    else { labelRotation = 90; labelFontSize = isMobile ? 7 : 8; seriesWidth = 0.7; }
 
     final total = retur.fold<double>(0, (sum, d) => sum + d.totalRetur);
 
@@ -3015,206 +1617,45 @@ class _ReturChart extends StatelessWidget {
       width: double.infinity,
       decoration: theme.cardDecoration,
       padding: EdgeInsets.all(isMobile ? 20 : 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Container(
-                width: 4, height: 24,
-                decoration: BoxDecoration(color: theme.primary, borderRadius: BorderRadius.circular(4))),
-            const SizedBox(width: 12),
-            Text('Retur Penjualan', style: theme.titleLarge),
-          ]),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            decoration: BoxDecoration(
-                color: theme.primaryLight,
-                borderRadius: BorderRadius.circular(12)),
-            child: Text('Total: ${currencyFormat.format(total)}',
-                style: theme.labelLarge.copyWith(color: theme.primary)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Container(width: 4, height: 24, decoration: BoxDecoration(color: theme.primary, borderRadius: BorderRadius.circular(4))), const SizedBox(width: 12), Text('Retur Penjualan', style: theme.titleLarge)]),
+        const SizedBox(height: 16),
+        Container(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16), decoration: BoxDecoration(color: theme.primaryLight, borderRadius: BorderRadius.circular(12)),
+            child: Text('Total: ${currencyFormat.format(total)}', style: theme.labelLarge.copyWith(color: theme.primary))),
+        const SizedBox(height: 20),
+        SizedBox(height: 350, width: double.infinity,
+          child: SfCartesianChart(
+            plotAreaBorderWidth: 0,
+            margin: EdgeInsets.fromLTRB(10, 20, 10, 20),
+            primaryXAxis: CategoryAxis(labelRotation: labelRotation, labelStyle: theme.caption.copyWith(fontSize: labelFontSize), majorGridLines: const MajorGridLines(width: 0), axisLine: const AxisLine(width: 0), labelPlacement: LabelPlacement.betweenTicks, interval: dataCount > 15 ? 2 : 1),
+            primaryYAxis: NumericAxis(title: AxisTitle(text: 'Nilai Retur'), numberFormat: currencyFormat, labelStyle: theme.caption, axisLine: const AxisLine(width: 0), majorGridLines: MajorGridLines(width: 0.5, color: theme.border)),
+            series: [ColumnSeries<DashboardReturData, String>(dataSource: retur, xValueMapper: (d, _) => d.label, yValueMapper: (d, _) => d.totalRetur, color: theme.primary, enableTooltip: true, width: seriesWidth, spacing: 0.1, borderRadius: const BorderRadius.vertical(top: Radius.circular(8)))],
+            tooltipBehavior: TooltipBehavior(enable: true, canShowMarker: false, builder: (dynamic tooltipData, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
+              if (tooltipData is DashboardReturData) {
+                return Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(6), border: Border.all(color: theme.border)),
+                    child: Text('${tooltipData.label}\n${currencyFormat.format(tooltipData.totalRetur)}', style: theme.bodySmall));
+              }
+              return Container();
+            }),
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 350,
-            width: double.infinity,
-            child: SfCartesianChart(
-              plotAreaBorderWidth: 0,
-              margin: EdgeInsets.fromLTRB(10, 20, 10, 20),
-              primaryXAxis: CategoryAxis(
-                labelRotation: labelRotation,
-                labelStyle: theme.caption.copyWith(fontSize: labelFontSize),
-                majorGridLines: const MajorGridLines(width: 0),
-                axisLine: const AxisLine(width: 0),
-                labelPlacement: LabelPlacement.betweenTicks,
-                interval: dataCount > 15 ? 2 : 1,
-              ),
-              primaryYAxis: NumericAxis(
-                title: AxisTitle(text: 'Nilai Retur'),
-                numberFormat: currencyFormat,
-                labelStyle: theme.caption,
-                axisLine: const AxisLine(width: 0),
-                majorGridLines: MajorGridLines(width: 0.5, color: theme.border),
-              ),
-              series: [
-                ColumnSeries<DashboardReturData, String>(
-                  dataSource: retur,
-                  xValueMapper: (d, _) => d.label,
-                  yValueMapper: (d, _) => d.totalRetur,
-                  color: theme.primary,
-                  enableTooltip: true,
-                  width: seriesWidth,
-                  spacing: 0.1,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                ),
-              ],
-              tooltipBehavior: TooltipBehavior(
-                enable: true,
-                canShowMarker: false,
-                builder: (dynamic tooltipData, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
-                  if (tooltipData is DashboardReturData) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: theme.surface,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: theme.border),
-                      ),
-                      child: Text(
-                        '${tooltipData.label}\n${currencyFormat.format(tooltipData.totalRetur)}',
-                        style: theme.bodySmall,
-                      ),
-                    );
-                  }
-                  return Container();
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 }
 
-class _ReturItemsTable extends StatelessWidget {
-  final List<ReturItemData> items;
-  final AppTheme theme;
-
-  const _ReturItemsTable({
-    required this.items,
-    required this.theme,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return _EmptyCard(message: 'Data item retur tidak tersedia', theme: theme);
-    }
-
-    final isMobile = MediaQuery.of(context).size.width < 600;
-    final totalQty = items.fold<int>(0, (sum, item) => sum + item.totalQty);
-
-    return Container(
-      width: double.infinity,
-      decoration: theme.cardDecoration,
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: theme.primary,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text('Item Retur per Cabang', style: theme.titleMedium),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.primaryLight,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  'Total Qty: ${NumberFormat('#,##0').format(totalQty)}',
-                  style: theme.caption.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.primary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 400,
-            width: double.infinity,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.vertical,
-                child: DataTable(
-                  border: TableBorder.all(
-                    color: theme.border,
-                    borderRadius: BorderRadius.circular(16),
-                    width: 1,
-                  ),
-                  columnSpacing: isMobile ? 16 : 24,
-                  headingRowColor: WidgetStateProperty.all(theme.surfaceAlt),
-                  headingTextStyle: theme.titleSmall.copyWith(fontSize: 12),
-                  dataTextStyle: theme.bodySmall.copyWith(fontSize: 11),
-                  columns: [
-                    DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
-                    DataColumn(label: Text('Cabang', style: TextStyle(fontWeight: FontWeight.w600))),
-                    DataColumn(label: Text('Nama Item', style: TextStyle(fontWeight: FontWeight.w600))),
-                    DataColumn(label: Text('Qty Retur', style: TextStyle(fontWeight: FontWeight.w600))),
-                  ],
-                  rows: items.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final item = entry.value;
-                    return DataRow(cells: [
-                      DataCell(Text('${index + 1}')),
-                      DataCell(Text(item.cabang)),
-                      DataCell(SizedBox(
-                        width: isMobile ? 120 : 200,
-                        child: Text(item.itemName, maxLines: 2, overflow: TextOverflow.ellipsis),
-                      )),
-                      DataCell(Text(NumberFormat('#,##0').format(item.totalQty))),
-                    ]);
-                  }).toList(),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
+// ============================================================
+// RETUR ITEMS SUMMARY TABLE
+// ============================================================
 class _ReturItemsSummaryTable extends StatelessWidget {
   final List<ReturItemSummaryData> items;
   final NumberFormat currencyFormat;
   final AppTheme theme;
-
-  const _ReturItemsSummaryTable({
-    required this.items,
-    required this.currencyFormat,
-    required this.theme,
-  });
+  const _ReturItemsSummaryTable({required this.items, required this.currencyFormat, required this.theme});
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return _EmptyCard(message: 'Data item retur tidak tersedia', theme: theme);
-    }
-
+    if (items.isEmpty) return _EmptyCard(message: 'Data item retur tidak tersedia', theme: theme);
     final isMobile = MediaQuery.of(context).size.width < 600;
     final totalQty = items.fold<int>(0, (sum, item) => sum + item.totalQty);
     final totalNilai = items.fold<double>(0, (sum, item) => sum + item.totalNilai);
@@ -3223,64 +1664,150 @@ class _ReturItemsSummaryTable extends StatelessWidget {
       width: double.infinity,
       decoration: theme.cardDecoration,
       padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3, height: 18,
-                decoration: BoxDecoration(
-                  color: theme.primary,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text('Item Retur', style: theme.titleMedium),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.primaryLight,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  'Total Qty: ${NumberFormat('#,##0').format(totalQty)}',
-                  style: theme.caption.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.primary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: theme.secondary.withOpacity(0.3)),
-                ),
-                child: Text(
-                  'Total: ${currencyFormat.format(totalNilai)}',
-                  style: theme.caption.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.secondary,
-                  ),
-                ),
-              ),
-            ],
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 3, height: 18, decoration: BoxDecoration(color: theme.primary, borderRadius: BorderRadius.circular(3))),
+          const SizedBox(width: 10),
+          Text('Item Retur', style: theme.titleMedium),
+          const Spacer(),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: theme.primaryLight, borderRadius: BorderRadius.circular(16)),
+              child: Text('Total Qty: ${NumberFormat('#,##0').format(totalQty)}', style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.primary))),
+          const SizedBox(width: 8),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: theme.secondary.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.secondary.withOpacity(0.3))),
+              child: Text('Total: ${currencyFormat.format(totalNilai)}', style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.secondary))),
+        ]),
+        const SizedBox(height: 16),
+        SizedBox(height: 400, width: double.infinity,
+          child: SingleChildScrollView(
+            child: DataTable(
+              border: TableBorder.all(color: theme.border, borderRadius: BorderRadius.circular(16), width: 1),
+              columnSpacing: isMobile ? 16 : 24,
+              headingRowColor: WidgetStateProperty.all(theme.surfaceAlt),
+              headingTextStyle: theme.titleSmall.copyWith(fontSize: 12),
+              dataTextStyle: theme.bodySmall.copyWith(fontSize: 11),
+              columns: const [
+                DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Nama Item', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Nilai', style: TextStyle(fontWeight: FontWeight.w600))),
+              ],
+              rows: items.asMap().entries.map((entry) {
+                final index = entry.key;
+                final item = entry.value;
+                return DataRow(cells: [
+                  DataCell(Text('${index + 1}')),
+                  DataCell(SizedBox(width: isMobile ? 120 : 200, child: Text(item.itemName, maxLines: 2, overflow: TextOverflow.ellipsis))),
+                  DataCell(Text(NumberFormat('#,##0').format(item.totalQty))),
+                  DataCell(Text(currencyFormat.format(item.totalNilai))),
+                ]);
+              }).toList(),
+            ),
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 400,
-            width: double.infinity,
-            child: SingleChildScrollView(
+        ),
+      ]),
+    );
+  }
+}
+
+// ============================================================
+// PRODUKSI GRAM CHART
+// ============================================================
+class _ProduksiGramChart extends StatelessWidget {
+  final List<ProduksiChartData> chartData;
+  final double totalGram;
+  final double averageGram;
+  final int totalDays;
+  final AppTheme theme;
+  const _ProduksiGramChart({required this.chartData, required this.totalGram, required this.averageGram, required this.totalDays, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    if (chartData.isEmpty) return _EmptyCard(message: 'Data produksi tidak tersedia', theme: theme);
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final dataCount = chartData.length;
+
+    double seriesWidth;
+    int labelRotation;
+    double labelFontSize;
+
+    if (dataCount <= 6) { labelRotation = 0; labelFontSize = isMobile ? 12 : 13; seriesWidth = 0.85; }
+    else if (dataCount <= 12) { labelRotation = 45; labelFontSize = isMobile ? 11 : 12; seriesWidth = 0.8; }
+    else if (dataCount <= 20) { labelRotation = 45; labelFontSize = isMobile ? 10 : 11; seriesWidth = 0.75; }
+    else { labelRotation = 90; labelFontSize = isMobile ? 7 : 8; seriesWidth = 0.7; }
+
+    final formattedData = chartData.map((d) {
+      String label;
+      try { final date = DateTime.parse(d.tanggal); label = DateFormat('dd/MM').format(date); }
+      catch (e) { label = d.tanggal; }
+      return ChartData(x: label, y: d.totalGram);
+    }).toList();
+
+    return Container(
+      width: double.infinity,
+      decoration: theme.cardDecoration,
+      padding: EdgeInsets.all(isMobile ? 20 : 24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Container(width: 4, height: 24, decoration: BoxDecoration(color: theme.secondary, borderRadius: BorderRadius.circular(4))), const SizedBox(width: 12), Text('Pemakaian Gram per Hari', style: theme.titleLarge)]),
+        const SizedBox(height: 16),
+        Wrap(spacing: 12, runSpacing: 8, children: [
+          Container(padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12), decoration: BoxDecoration(color: theme.primaryLight, borderRadius: BorderRadius.circular(20)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.scale_rounded, size: 14, color: theme.primary), SizedBox(width: 6), Text('Total: ${NumberFormat('#,##0.##').format(totalGram)} gram', style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.primary))])),
+          Container(padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12), decoration: BoxDecoration(color: theme.secondary.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: theme.secondary.withOpacity(0.3))),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.trending_up_rounded, size: 14, color: theme.secondary), SizedBox(width: 6), Text('Rata-rata: ${NumberFormat('#,##0.##').format(averageGram)} gr/hari', style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.secondary))])),
+          Container(padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12), decoration: BoxDecoration(color: theme.surfaceAlt, borderRadius: BorderRadius.circular(20), border: Border.all(color: theme.border)),
+              child: Text('$totalDays hari', style: theme.caption)),
+        ]),
+        const SizedBox(height: 20),
+        SizedBox(height: 400, width: double.infinity,
+          child: SfCartesianChart(
+            plotAreaBorderWidth: 0, margin: EdgeInsets.fromLTRB(10, 20, 10, 20),
+            primaryXAxis: CategoryAxis(labelRotation: labelRotation, labelStyle: theme.caption.copyWith(fontSize: labelFontSize, fontWeight: FontWeight.w400), majorGridLines: const MajorGridLines(width: 0), axisLine: const AxisLine(width: 0), labelPlacement: LabelPlacement.betweenTicks, interval: dataCount > 15 ? 2 : 1),
+            primaryYAxis: NumericAxis(title: AxisTitle(text: 'Gram'), numberFormat: NumberFormat('#,##0'), labelStyle: theme.caption, axisLine: const AxisLine(width: 0), majorGridLines: MajorGridLines(width: 0.5, color: theme.border)),
+            series: [ColumnSeries<ChartData, String>(dataSource: formattedData, xValueMapper: (d, _) => d.x, yValueMapper: (d, _) => d.y, color: theme.primary, enableTooltip: true, width: seriesWidth, spacing: 0.1, borderRadius: const BorderRadius.vertical(top: Radius.circular(8)))],
+            tooltipBehavior: TooltipBehavior(enable: true, canShowMarker: false, textStyle: theme.bodySmall, color: theme.surface, borderColor: theme.border, borderWidth: 1),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ============================================================
+// PRODUKSI ITEM TABLE
+// ============================================================
+class _ProduksiItemTable extends StatelessWidget {
+  final List<ProduksiItemData> items;
+  final AppTheme theme;
+  const _ProduksiItemTable({required this.items, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return _EmptyCard(message: 'Data item tidak tersedia', theme: theme);
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final totalQty = items.fold<double>(0, (sum, i) => sum + i.totalQty);
+    final totalGram = items.fold<double>(0, (sum, i) => sum + i.totalGram);
+
+    return Container(
+      width: double.infinity, decoration: theme.cardDecoration, padding: EdgeInsets.all(20),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 3, height: 18, decoration: BoxDecoration(color: theme.secondary, borderRadius: BorderRadius.circular(3))), SizedBox(width: 10),
+          Text('Pemakaian per Item', style: theme.titleMedium), Spacer(),
+          Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: theme.primaryLight, borderRadius: BorderRadius.circular(16)),
+              child: Text('Qty: ${NumberFormat('#,##0.##').format(totalQty)}', style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.primary))),
+          SizedBox(width: 8),
+          Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: theme.secondary.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.secondary.withOpacity(0.3))),
+              child: Text('Gram: ${NumberFormat('#,##0.##').format(totalGram)}', style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.secondary))),
+          SizedBox(width: 8),
+          Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: theme.surfaceAlt, borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.border)),
+              child: Text('${items.length} item', style: theme.caption)),
+        ]),
+        SizedBox(height: 16),
+        SizedBox(height: 420, width: double.infinity,
+          child: SingleChildScrollView(scrollDirection: Axis.horizontal,
+            child: SingleChildScrollView(scrollDirection: Axis.vertical,
               child: DataTable(
-                border: TableBorder.all(
-                  color: theme.border,
-                  borderRadius: BorderRadius.circular(16),
-                  width: 1,
-                ),
+                border: TableBorder.all(color: theme.border, borderRadius: BorderRadius.circular(16), width: 1),
                 columnSpacing: isMobile ? 16 : 24,
                 headingRowColor: WidgetStateProperty.all(theme.surfaceAlt),
                 headingTextStyle: theme.titleSmall.copyWith(fontSize: 12),
@@ -3289,26 +1816,188 @@ class _ReturItemsSummaryTable extends StatelessWidget {
                   DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
                   DataColumn(label: Text('Nama Item', style: TextStyle(fontWeight: FontWeight.w600))),
                   DataColumn(label: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Nilai', style: TextStyle(fontWeight: FontWeight.w600))),
+                  DataColumn(label: Text('Gram', style: TextStyle(fontWeight: FontWeight.w600))),
                 ],
                 rows: items.asMap().entries.map((entry) {
                   final index = entry.key;
                   final item = entry.value;
                   return DataRow(cells: [
-                    DataCell(Text('${index + 1}')),
-                    DataCell(SizedBox(
-                      width: isMobile ? 120 : 200,
-                      child: Text(item.itemName, maxLines: 2, overflow: TextOverflow.ellipsis),
-                    )),
-                    DataCell(Text(NumberFormat('#,##0').format(item.totalQty))),
-                    DataCell(Text(currencyFormat.format(item.totalNilai))),
+                    DataCell(Text('${index + 1}', style: TextStyle(fontWeight: FontWeight.w600, color: index < 3 ? theme.secondary : theme.textSecondary))),
+                    DataCell(SizedBox(width: isMobile ? 120 : 160, child: Text(item.itemName, maxLines: 2, overflow: TextOverflow.ellipsis))),
+                    DataCell(Text(NumberFormat('#,##0.##').format(item.totalQty))),
+                    DataCell(Text(NumberFormat('#,##0.##').format(item.totalGram))),
                   ]);
                 }).toList(),
               ),
             ),
           ),
-        ],
+        ),
+      ]),
+    );
+  }
+}
+
+// ============================================================
+// PRODUKSI DIVISI PIE CHART
+// ============================================================
+class _ProduksiDivisiPieChart extends StatelessWidget {
+  final List<ProduksiDivisiData> divisiData;
+  final AppTheme theme;
+  const _ProduksiDivisiPieChart({required this.divisiData, required this.theme});
+
+  static const _colors = [Color(0xFF0F3B5C), Color(0xFFE67E22), Color(0xFF3498DB), Color(0xFF27AE60), Color(0xFF9B59B6), Color(0xFFE74C3C), Color(0xFF1ABC9C), Color(0xFFF39C12), Color(0xFF34495E), Color(0xFFE91E63), Color(0xFF00BCD4), Color(0xFF795548)];
+
+  @override
+  Widget build(BuildContext context) {
+    if (divisiData.isEmpty || divisiData.every((d) => d.totalGram == 0)) return _EmptyCard(message: 'Data divisi tidak tersedia', theme: theme);
+    final totalGram = divisiData.fold<double>(0, (sum, d) => sum + d.totalGram);
+
+    return Container(
+      width: double.infinity, decoration: theme.cardDecoration, padding: EdgeInsets.all(20),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Container(width: 3, height: 18, decoration: BoxDecoration(color: theme.secondary, borderRadius: BorderRadius.circular(3))), SizedBox(width: 10), Text('Pemakaian by Divisi', style: theme.titleMedium)]),
+        SizedBox(height: 4),
+        Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: theme.secondary.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.secondary.withOpacity(0.3))),
+            child: Text('Total: ${NumberFormat('#,##0.##').format(totalGram)} gram', style: theme.caption.copyWith(fontWeight: FontWeight.w600, color: theme.secondary))),
+        SizedBox(height: 16),
+        SizedBox(height: 320, width: double.infinity,
+          child: SfCircularChart(
+            legend: Legend(isVisible: true, position: LegendPosition.bottom, overflowMode: LegendItemOverflowMode.wrap, textStyle: theme.caption.copyWith(fontSize: 10)),
+            series: [PieSeries<ProduksiDivisiData, String>(
+              dataSource: divisiData, xValueMapper: (d, _) => d.divisi, yValueMapper: (d, _) => d.totalGram, enableTooltip: true,
+              dataLabelSettings: DataLabelSettings(isVisible: true, labelPosition: ChartDataLabelPosition.outside, textStyle: theme.caption.copyWith(fontSize: 9),
+                  builder: (dynamic data, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
+                    final percentage = totalGram > 0 ? (data.totalGram / totalGram * 100).toStringAsFixed(1) : '0';
+                    return Text('$percentage%', style: theme.caption.copyWith(fontSize: 9, fontWeight: FontWeight.w600));
+                  }),
+              explode: true, explodeIndex: 0, explodeOffset: '6%',
+              pointColorMapper: (d, _) => _colors[divisiData.indexOf(d) % _colors.length],
+            )],
+            tooltipBehavior: TooltipBehavior(enable: true,
+                builder: (dynamic data, dynamic point, dynamic series, int pointIndex, int seriesIndex) {
+                  final percentage = totalGram > 0 ? (data.totalGram / totalGram * 100).toStringAsFixed(1) : '0';
+                  return Container(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(8), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: Offset(0, 2))], border: Border.all(color: theme.border)),
+                      child: Text('${data.divisi}\n${NumberFormat('#,##0.##').format(data.totalGram)} gram ($percentage%)', style: theme.bodySmall.copyWith(fontWeight: FontWeight.w500, color: theme.textPrimary)));
+                }),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _EmptyCard extends StatelessWidget {
+  final String message;
+  final AppTheme theme;
+  const _EmptyCard({required this.message, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(width: double.infinity, decoration: theme.cardDecoration, padding: const EdgeInsets.all(40),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.inbox_outlined, size: 48, color: theme.textTertiary),
+          const SizedBox(height: 16),
+          Text(message, style: theme.caption),
+        ]));
+  }
+}
+
+// ============================================================
+// CUSTOMER MULTI SELECT
+// ============================================================
+class _CustomerMultiSelect extends StatefulWidget {
+  final List<String> selectedTypes;
+  final List<String> allTypes;
+  final ValueChanged<List<String>> onChanged;
+  final AppTheme theme;
+  const _CustomerMultiSelect({required this.selectedTypes, required this.allTypes, required this.onChanged, required this.theme});
+  @override State<_CustomerMultiSelect> createState() => _CustomerMultiSelectState();
+}
+
+class _CustomerMultiSelectState extends State<_CustomerMultiSelect> {
+  void _showDropdown() async {
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (context) => _CustomerDialog(allTypes: widget.allTypes, initialSelected: widget.selectedTypes, theme: widget.theme),
+    );
+    if (result != null) widget.onChanged(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSelection = widget.selectedTypes.isNotEmpty;
+    return InkWell(
+      onTap: _showDropdown,
+      borderRadius: widget.theme.buttonRadius,
+      child: Container(
+        height: 40, padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(color: hasSelection ? widget.theme.secondary.withOpacity(0.1) : widget.theme.surface, borderRadius: widget.theme.buttonRadius, border: Border.all(color: hasSelection ? widget.theme.secondary : widget.theme.border, width: 1)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.people_outline, size: 14, color: hasSelection ? widget.theme.secondary : widget.theme.textTertiary),
+          const SizedBox(width: 6),
+          Text(hasSelection ? '${widget.selectedTypes.length} Customer' : 'Customer', style: widget.theme.bodySmall.copyWith(color: hasSelection ? widget.theme.secondary : widget.theme.textSecondary, fontWeight: hasSelection ? FontWeight.w600 : FontWeight.w400)),
+          const SizedBox(width: 4),
+          Icon(Icons.arrow_drop_down, size: 16, color: hasSelection ? widget.theme.secondary : widget.theme.textTertiary),
+          if (hasSelection) GestureDetector(onTap: () => widget.onChanged([]), child: Padding(padding: const EdgeInsets.only(left: 4), child: Icon(Icons.clear, size: 14, color: widget.theme.error))),
+        ]),
       ),
+    );
+  }
+}
+
+class _CustomerDialog extends StatefulWidget {
+  final List<String> allTypes;
+  final List<String> initialSelected;
+  final AppTheme theme;
+  const _CustomerDialog({required this.allTypes, required this.initialSelected, required this.theme});
+  @override State<_CustomerDialog> createState() => _CustomerDialogState();
+}
+
+class _CustomerDialogState extends State<_CustomerDialog> {
+  late List<String> _selected;
+
+  @override
+  void initState() { super.initState(); _selected = List.from(widget.initialSelected); }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Container(width: 300, constraints: BoxConstraints(maxHeight: 400),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), decoration: BoxDecoration(border: Border(bottom: BorderSide(color: widget.theme.border))),
+                child: Row(children: [
+                  Text('Customer', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: widget.theme.textPrimary)),
+                  const Spacer(),
+                  IconButton(icon: Icon(Icons.close, size: 18, color: widget.theme.textSecondary), onPressed: () => Navigator.pop(context), padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 28, minHeight: 28)),
+                ])),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(border: Border(bottom: BorderSide(color: widget.theme.border))),
+                child: Row(children: [
+                  TextButton(onPressed: () => setState(() => _selected = List.from(widget.allTypes)), child: Text('Pilih Semua', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: widget.theme.accent))),
+                  const Spacer(),
+                  TextButton(onPressed: () => setState(() => _selected.clear()), child: Text('Clear', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: widget.theme.error))),
+                ])),
+            Flexible(
+              child: ListView(padding: EdgeInsets.zero, shrinkWrap: true,
+                  children: widget.allTypes.map((type) {
+                    final isSelected = _selected.contains(type);
+                    return InkWell(
+                      onTap: () { setState(() { if (isSelected) { _selected.remove(type); } else { _selected.add(type); } }); },
+                      child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: Row(children: [
+                            Container(width: 20, height: 20, decoration: BoxDecoration(color: isSelected ? widget.theme.secondary : Colors.transparent, borderRadius: BorderRadius.circular(4), border: Border.all(color: isSelected ? widget.theme.secondary : widget.theme.border, width: 2)),
+                                child: isSelected ? Icon(Icons.check, size: 14, color: Colors.white) : null),
+                            const SizedBox(width: 10),
+                            Text(type, style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400, color: widget.theme.textPrimary)),
+                          ])),
+                    );
+                  }).toList()),
+            ),
+            Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(border: Border(top: BorderSide(color: widget.theme.border))),
+                child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  SizedBox(height: 36, child: ElevatedButton(onPressed: () => Navigator.pop(context, _selected), style: ElevatedButton.styleFrom(backgroundColor: widget.theme.secondary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)), padding: const EdgeInsets.symmetric(horizontal: 20)), child: Text('Terapkan', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.white)))),
+                ])),
+          ])),
     );
   }
 }

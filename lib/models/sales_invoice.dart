@@ -18,6 +18,7 @@ class SalesInvoice {
   final String promo;
   final String kasir;
   final List<InvoiceDetail> details;
+  final String cabang;
 
   SalesInvoice({
     required this.nomor,
@@ -39,6 +40,7 @@ class SalesInvoice {
     required this.promo,
     required this.kasir,
     required this.details,
+    this.cabang = '',
   });
 
   factory SalesInvoice.fromJson(Map<String, dynamic> json) {
@@ -64,6 +66,7 @@ class SalesInvoice {
       promo: json['Promo'] ?? json['promo'] ?? '',
       kasir: json['Kasir'] ?? json['kasir'] ?? '',
       details: details.map((detail) => InvoiceDetail.fromJson(detail)).toList(),
+      cabang: json['Cabang']?.toString() ?? '',
     );
   }
 

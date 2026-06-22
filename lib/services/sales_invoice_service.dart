@@ -27,12 +27,13 @@ class SalesInvoiceService {
     required DateTime startDate,
     required DateTime endDate,
     List<String>? selectedPromos,
+    bool isPusat = false,
   }) async {
     try {
       final startStr = _formatDate(startDate);
       final endStr = _formatDate(endDate);
 
-      String url = '$baseUrl/report/sales-by-invoice?start_date=$startStr&end_date=$endStr';
+      String url = '$baseUrl/report/sales-by-invoice?start_date=$startStr&end_date=$endStr&is_pusat=${isPusat ? '1' : '0'}';
 
       if (selectedPromos != null && selectedPromos.isNotEmpty) {
         final promosParam = selectedPromos.join(',');

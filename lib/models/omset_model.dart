@@ -6,6 +6,7 @@ class OmsetData {
   final String bulan;
   final double nilai;
   final String growth;
+  final String dateRange;
 
   OmsetData({
     required this.label,
@@ -15,6 +16,7 @@ class OmsetData {
     this.bulan = '',
     required this.nilai,
     this.growth = '-',
+    this.dateRange = '',
   });
 
   factory OmsetData.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,7 @@ class OmsetData {
       bulan: json['bulan']?.toString() ?? '',
       nilai: (json['nilai'] ?? 0).toDouble(),
       growth: json['growth']?.toString() ?? '-',
+      dateRange: json['date_range']?.toString() ?? '',
     );
   }
 }

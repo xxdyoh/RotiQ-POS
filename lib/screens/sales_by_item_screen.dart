@@ -1455,7 +1455,7 @@ class _SalesByItemScreenState extends State<SalesByItemScreen> with TickerProvid
                     ),
                     if(_isPusat)
                       GridColumn(
-                        columnName: 'Cabang',
+                        columnName: 'cabang',
                         width: _columnWidths['cabang'] ?? 120,
                         minimumWidth: 110,
                         maximumWidth: 150,

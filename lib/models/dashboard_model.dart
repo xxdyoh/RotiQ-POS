@@ -354,11 +354,13 @@ class ReturItemData {
   final String cabang;
   final String itemName;
   final int totalQty;
+  final double totalNilai;
 
   ReturItemData({
     required this.cabang,
     required this.itemName,
     required this.totalQty,
+    this.totalNilai = 0,
   });
 
   factory ReturItemData.fromJson(Map<String, dynamic> json) {
@@ -366,6 +368,7 @@ class ReturItemData {
       cabang: json['cabang_nama']?.toString() ?? '-',
       itemName: json['item_name']?.toString() ?? '-',
       totalQty: (json['total_qty'] ?? 0).toInt(),
+      totalNilai: (json['total_nilai'] ?? 0).toDouble(),
     );
   }
 }
